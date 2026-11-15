@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { SEO_BANKS } from "@/lib/seoCatalog";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://vaultsheet.app";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://vaultsheet.tech";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();

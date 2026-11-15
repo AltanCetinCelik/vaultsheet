@@ -58,10 +58,10 @@ export default function TermsPage() {
               If your PDF statement format fails to parse accurately, produces reconciliation errors
               we cannot resolve, or fails to import cleanly into QuickBooks or Xero, email{" "}
               <a
-                href="mailto:support@vaultsheet.app"
+                href="mailto:support@vaultsheet.tech"
                 className="text-emerald-400 underline underline-offset-2"
               >
-                support@vaultsheet.app
+                support@vaultsheet.tech
               </a>{" "}
               with your order receipt within 14 days of purchase for a prompt, full refund—or send
               us the column layout header screenshot (without sensitive data) and we will add support.

@@ -95,10 +95,10 @@ export default function PrivacyPage() {
               Questions regarding privacy, enterprise CPA compliance, or billing receipts may be
               directed to{" "}
               <a
-                href="mailto:support@vaultsheet.app"
+                href="mailto:support@vaultsheet.tech"
                 className="text-emerald-400 underline underline-offset-2"
               >
-                support@vaultsheet.app
+                support@vaultsheet.tech
               </a>
               .
             </p>
