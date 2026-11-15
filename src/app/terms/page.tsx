@@ -46,7 +46,7 @@ export default function TermsPage() {
               before purchasing.
             </p>
             <p className="mt-2">
-              <strong>7-Day Audit Pass ($12 one-time) &amp; Pro Bookkeeper ($19/month):</strong>{" "}
+              <strong>7-Day Audit Pass ($12 one-time) &amp; Annual Pro Bookkeeper ($29/year one-time):</strong>{" "}
               Grant full commercial rights to convert unlimited transactions across multiple client
               and business statements into Excel (`.xlsx`), CSV, `.qbo`, `.ofx`, and Xero CSV.
             </p>

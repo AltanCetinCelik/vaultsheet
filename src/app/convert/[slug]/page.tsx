@@ -119,7 +119,7 @@ export default async function BankConverterPage({ params }: PageProps) {
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-300">
             <Lock className="h-3.5 w-3.5" />
             <span>
-              {entry.region} &middot; {entry.currency} &middot; 100% Browser RAM Execution
+              {entry.region} &middot; {entry.currency} &middot; 100% Private · Converts on Your Device
             </span>
           </div>
 
@@ -159,7 +159,7 @@ export default async function BankConverterPage({ params }: PageProps) {
                 <dd className="mono-nums font-medium text-white">{entry.dateFormat}</dd>
               </div>
               <div className="py-3">
-                <dt className="text-slate-400">Column Geometry Profile</dt>
+                <dt className="text-slate-400">Detected Column Layout</dt>
                 <dd className="mt-1 font-medium text-slate-200">{entry.columnLayout}</dd>
               </div>
             </dl>

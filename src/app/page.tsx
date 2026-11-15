@@ -2,13 +2,12 @@ import Link from "next/link";
 import {
   ArrowRight,
   Check,
+  CheckCircle2,
   Chrome,
-  Cpu,
   FileSpreadsheet,
   Lock,
   ShieldCheck,
   Sparkles,
-  Terminal,
   X,
 } from "lucide-react";
 import ConverterWorkbench from "@/components/ConverterWorkbench";
@@ -60,7 +59,7 @@ export default function HomePage() {
               VaultSheet
             </span>
             <span className="hidden sm:inline-flex items-center rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-emerald-300">
-              Local RAM Engine
+              100% Private &amp; Local
             </span>
           </Link>
 
@@ -107,28 +106,28 @@ export default function HomePage() {
             <div className="mx-auto max-w-3xl text-center">
               <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1 text-xs font-medium text-emerald-300">
                 <Lock className="h-3.5 w-3.5" />
-                <span>0 KB uploaded to any server — runs 100% inside your browser RAM</span>
+                <span>100% Private — Your Financial PDFs Never Leave Your Computer</span>
               </div>
 
               <h1 className="mt-5 text-3xl font-bold tracking-tight text-white sm:text-5xl sm:leading-[1.1]">
-                Convert PDF Bank Statements to{" "}
-                <span className="text-emerald-400">Reconciled Excel, QBO &amp; Xero</span>
+                Turn PDF Bank Statements into{" "}
+                <span className="text-emerald-400">Clean Excel, QuickBooks &amp; Xero Files</span>
               </h1>
 
               <p className="mt-4 text-base text-slate-300 sm:text-lg leading-relaxed">
-                Drop any multi-page Chase, Wise, Mercury, Revolut, or international bank PDF.
-                VaultSheet extracts X/Y coordinate tables locally, stitches wrapped descriptions,
-                and mathematically verifies every row to the exact cent.
+                Drop your bank or credit card PDF below. VaultSheet converts multi-page statements
+                directly on your device in seconds—stitched, categorized, and mathematically
+                reconciled to the exact cent.
               </p>
 
               <div className="mt-6 flex flex-wrap items-center justify-center gap-3 text-xs text-slate-300">
                 <span className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-[#0d121b] px-3 py-1.5">
                   <Check className="h-3.5 w-3.5 text-emerald-400" />
-                  Opening + Credits - Debits = Closing Verified
+                  Opening + Deposits &minus; Withdrawals = Closing Verified
                 </span>
                 <span className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-[#0d121b] px-3 py-1.5">
                   <Check className="h-3.5 w-3.5 text-emerald-400" />
-                  7 Formats: XLSX, CSV, QBO, Xero, OFX, JSON
+                  8 Formats: Excel, .QBO, QuickBooks CSV, Xero, OFX
                 </span>
                 <span className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-[#0d121b] px-3 py-1.5">
                   <Check className="h-3.5 w-3.5 text-emerald-400" />
@@ -171,7 +170,7 @@ export default function HomePage() {
                   <tr>
                     <td className="px-5 py-4 font-medium text-white">Server Upload Exposure</td>
                     <td className="px-5 py-4 text-emerald-300 font-medium">
-                      Zero bytes (Browser RAM Web Worker)
+                      Zero bytes uploaded (runs on your device)
                     </td>
                     <td className="px-5 py-4 text-rose-300">Uploads full PDF to remote cloud</td>
                     <td className="px-5 py-4 text-amber-300">Sent to external AI endpoints</td>
@@ -230,28 +229,27 @@ export default function HomePage() {
             <div className="grid gap-8 lg:grid-cols-3">
               <div className="rounded-2xl border border-white/10 bg-[#0d121b] p-6">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
-                  <Cpu className="h-5 w-5" />
+                  <Lock className="h-5 w-5" />
                 </div>
                 <h3 className="mt-4 text-lg font-semibold text-white">
-                  X/Y Coordinate Geometry Engine
+                  100% On-Device Privacy
                 </h3>
                 <p className="mt-2 text-sm text-slate-400 leading-relaxed">
-                  Instead of brittle regex on flattened text, VaultSheet clusters every PDF glyph by
-                  page, Y-baseline, and horizontal column bounds using a local PDF.js Web Worker.
+                  Client bank statements never touch a cloud server. Everything converts inside your
+                  own browser—even with Wi-Fi turned off.
                 </p>
               </div>
 
               <div className="rounded-2xl border border-white/10 bg-[#0d121b] p-6">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
-                  <Terminal className="h-5 w-5" />
+                  <CheckCircle2 className="h-5 w-5" />
                 </div>
                 <h3 className="mt-4 text-lg font-semibold text-white">
-                  Verifiable Zero-Network Audit
+                  Automatic Balance Reconciliation
                 </h3>
                 <p className="mt-2 text-sm text-slate-400 leading-relaxed">
-                  Open Chrome DevTools &rarr; Network tab before dropping your statement. Watch
-                  0 bytes leave your machine—even if you switch your Wi-Fi off after loading the
-                  page.
+                  VaultSheet checks Opening Balance + Deposits &minus; Withdrawals = Closing Balance
+                  on every file so you never import a broken ledger.
                 </p>
               </div>
 
@@ -260,11 +258,11 @@ export default function HomePage() {
                   <FileSpreadsheet className="h-5 w-5" />
                 </div>
                 <h3 className="mt-4 text-lg font-semibold text-white">
-                  Audit-Ready 3-Sheet Workbooks
+                  Zero QuickBooks OL-222 Errors
                 </h3>
                 <p className="mt-2 text-sm text-slate-400 leading-relaxed">
-                  Every Excel download includes a formatted Transactions ledger, a Reconciliation
-                  Summary proving zero cent drift, and a Category Spend Rollup sheet.
+                  Exports compliant Web Connect .QBO files (Checking, Savings &amp; Credit Card)
+                  plus 3-column and 4-column QuickBooks &amp; Xero CSVs.
                 </p>
               </div>
             </div>
@@ -348,11 +346,11 @@ export default function HomePage() {
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-400 shrink-0" />
-                      All 7 export formats (XLSX, QBO, Xero, OFX)
+                      All 8 export formats (XLSX, QBO, QB CSV, Xero, OFX)
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-400 shrink-0" />
-                      Instant offline-verified license key (VS-PASS-...)
+                      Instant license key delivery (VS-...)
                     </li>
                   </ul>
                 </div>
@@ -366,26 +364,26 @@ export default function HomePage() {
                 </a>
               </div>
 
-              {/* Pro Bookkeeper Monthly */}
+              {/* Annual Pro Bookkeeper */}
               <div className="flex flex-col justify-between rounded-2xl border border-white/10 bg-[#0d121b] p-7">
                 <div>
                   <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-white">Pro Bookkeeper</h3>
+                    <h3 className="text-lg font-semibold text-white">Annual Pro Bookkeeper</h3>
                     <span className="rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5 text-xs text-slate-300">
                       Firms &amp; CPAs
                     </span>
                   </div>
                   <div className="mt-4 flex items-baseline gap-1">
-                    <span className="text-4xl font-bold text-white mono-nums">$19</span>
-                    <span className="text-sm text-slate-400">/ month</span>
+                    <span className="text-4xl font-bold text-white mono-nums">$29</span>
+                    <span className="text-sm text-slate-400">/ year</span>
                   </div>
                   <p className="mt-2 text-sm text-slate-400">
-                    Continuous high-volume client statement processing &amp; extension access.
+                    One-time annual pass — no auto-renewal. Ideal for year-round client books.
                   </p>
                   <ul className="mt-6 space-y-3 text-sm text-slate-300">
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-400 shrink-0" />
-                      Everything in 7-Day Pass, unlimited months
+                      Everything in 7-Day Pass for a full 12 months
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-400 shrink-0" />
@@ -403,7 +401,7 @@ export default function HomePage() {
                   rel={proCheckout.startsWith("http") ? "noopener noreferrer" : undefined}
                   className="mt-8 inline-flex items-center justify-center rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-300 hover:bg-emerald-500/20 transition-colors"
                 >
-                  Activate Pro Bookkeeper ($19/mo)
+                  Get Annual Pro Pass ($29/yr)
                 </a>
               </div>
             </div>
@@ -444,22 +442,48 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-white/10 bg-[#070a0f] p-5 font-mono text-xs text-slate-300">
-                <div className="flex items-center justify-between border-b border-white/10 pb-3 text-slate-400">
-                  <span>chrome-extension/manifest.json</span>
-                  <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-300">
-                    MV3 Offline Safe
+              <div className="space-y-3 rounded-xl border border-white/10 bg-[#070a0f] p-5">
+                <div className="flex items-center justify-between border-b border-white/10 pb-3 text-xs text-slate-400">
+                  <span className="font-semibold text-slate-200">Quick Bookkeeper Workflow</span>
+                  <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+                    100% Offline Safe
                   </span>
                 </div>
-                <pre className="mt-3 overflow-x-auto leading-relaxed text-slate-300">
-{`{
-  "manifest_version": 3,
-  "name": "VaultSheet — Local Bank Statement Converter",
-  "permissions": ["downloads"],
-  "host_permissions": [],
-  "action": { "default_popup": "popup.html" }
-}`}
-                </pre>
+                <div className="space-y-2.5 text-xs">
+                  <div className="flex items-start gap-3 rounded-lg border border-white/10 bg-[#0d121b] p-3">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-[11px] font-bold text-emerald-300">
+                      1
+                    </span>
+                    <div>
+                      <p className="font-semibold text-white">Download PDF from your bank portal</p>
+                      <p className="mt-0.5 text-slate-400">
+                        Grab your monthly checking, savings, or credit card statement from Chase, BofA, Wise, or any bank.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 rounded-lg border border-white/10 bg-[#0d121b] p-3">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-[11px] font-bold text-emerald-300">
+                      2
+                    </span>
+                    <div>
+                      <p className="font-semibold text-white">Open VaultSheet in Chrome toolbar</p>
+                      <p className="mt-0.5 text-slate-400">
+                        Zero permissions to read your browsing tabs or banking logins—works strictly on files you choose.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 rounded-lg border border-white/10 bg-[#0d121b] p-3">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-[11px] font-bold text-emerald-300">
+                      3
+                    </span>
+                    <div>
+                      <p className="font-semibold text-white">Export reconciled .QBO or CSV in one click</p>
+                      <p className="mt-0.5 text-slate-400">
+                        Verify deposits, withdrawals, and net totals immediately before importing into QuickBooks or Xero.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
