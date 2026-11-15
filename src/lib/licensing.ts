@@ -1,11 +1,13 @@
 export const FREE_ROW_LIMIT = 25;
 
-// Replace with your live Polar.sh / Lemon Squeezy / Paddle checkout URLs once storefront is linked
+// Live Polar.sh checkout routes backed by /checkout?products=<PRODUCT_ID>
 export const CHECKOUT_URLS = {
   pass7Day:
-    process.env.NEXT_PUBLIC_CHECKOUT_PASS_URL || "#pricing",
+    process.env.NEXT_PUBLIC_CHECKOUT_PASS_URL ||
+    "/checkout?products=4ceb2ddc-a3ca-4161-8931-9024af24050d",
   proMonthly:
-    process.env.NEXT_PUBLIC_CHECKOUT_PRO_URL || "#pricing",
+    process.env.NEXT_PUBLIC_CHECKOUT_PRO_URL ||
+    "/checkout?products=8d86923c-900b-4dc1-8322-50185382e70b",
 };
 
 export interface LicenseValidationResult {
@@ -58,8 +60,9 @@ export function verifyLicenseKey(rawKey: string): LicenseValidationResult {
     };
   }
 
-  // Standard UUIDv4 license keys issued by Polar.sh / Lemon Squeezy
-  const uuidLike = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/;
+  // Standard UUIDv4 license keys (with optional VS- / VS_ prefix) issued by Polar.sh / Lemon Squeezy
+  const uuidLike =
+    /^(?:VS[-_])?[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/;
   if (uuidLike.test(key)) {
     return {
       valid: true,
