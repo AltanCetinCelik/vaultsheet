@@ -2,15 +2,16 @@
 
 @layer base {
   :root {
-    --bg-canvas: #070a0f;
-    --bg-surface: #0d121b;
-    --bg-elevated: #121925;
-    --border-subtle: rgba(255, 255, 255, 0.08);
-    --border-strong: rgba(255, 255, 255, 0.16);
-    --text-primary: #f1f5f9;
-    --text-secondary: #94a3b8;
-    --accent-emerald: #10b981;
-    --accent-amber: #f59e0b;
+    --bg-canvas: #f8fafc;
+    --bg-surface: #ffffff;
+    --bg-elevated: #f1f5f9;
+    --border-subtle: #e2e8f0;
+    --border-strong: #cbd5e1;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --accent-primary: #2563eb;
+    --accent-emerald: #059669;
+    --accent-amber: #d97706;
   }
 
   html {
@@ -22,8 +23,9 @@
   body {
     font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
     background:
-      radial-gradient(1100px 540px at 50% -120px, rgba(16, 185, 129, 0.09), transparent 65%),
-      linear-gradient(180deg, #070a0f 0%, #090d14 100%);
+      radial-gradient(ellipse 80% 42% at 50% -10%, rgba(37, 99, 235, 0.06), transparent 70%),
+      #f8fafc;
+    color: var(--text-primary);
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
   }
@@ -40,9 +42,27 @@
 
 .grid-backdrop {
   background-image:
-    linear-gradient(to right, rgba(148, 163, 184, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+    linear-gradient(to right, rgba(15, 23, 42, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(15, 23, 42, 0.03) 1px, transparent 1px);
   background-size: 36px 36px;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 button:not(:disabled),
@@ -53,7 +73,7 @@ summary {
 }
 
 :focus-visible {
-  outline: 2px solid rgba(16, 185, 129, 0.75);
+  outline: 2px solid rgba(37, 99, 235, 0.65);
   outline-offset: 2px;
 }
 

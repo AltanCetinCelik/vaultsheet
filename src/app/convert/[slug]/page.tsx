@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ArrowRight, CheckCircle2, Lock, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, ShieldCheck } from "lucide-react";
 import ConverterWorkbench from "@/components/ConverterWorkbench";
 import { getSeoBankBySlug, SEO_BANKS } from "@/lib/seoCatalog";
 
@@ -74,25 +74,25 @@ export default async function BankConverterPage({ params }: PageProps) {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-[#f8fafc] text-slate-900">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
       />
 
-      <header className="border-b border-white/10 bg-[#070a0f]/90 backdrop-blur-md">
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6 lg:px-8">
-          <Link href="/" className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-500/40 bg-emerald-500/15 text-emerald-400">
+          <Link href="/" className="flex items-center gap-2.5 group">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white shadow-2xs transition group-hover:bg-blue-600">
               <ShieldCheck className="h-4 w-4" />
             </span>
-            <span className="text-base font-semibold text-white">VaultSheet</span>
+            <span className="text-base font-bold tracking-tight text-slate-900">VaultSheet</span>
           </Link>
 
           <div className="flex items-center gap-3">
             <Link
               href="/convert"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-white/10 transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition-colors"
             >
               <ArrowLeft className="h-3.5 w-3.5" /> All {SEO_BANKS.length} Banks
             </Link>
@@ -102,31 +102,28 @@ export default async function BankConverterPage({ params }: PageProps) {
 
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-10 sm:px-6 lg:px-8">
         {/* Breadcrumb */}
-        <nav className="flex items-center gap-2 text-xs text-slate-400">
-          <Link href="/" className="hover:text-white transition-colors">
+        <nav className="flex items-center gap-2 text-xs text-slate-500">
+          <Link href="/" className="hover:text-slate-900 transition-colors">
             Home
           </Link>
           <span>/</span>
-          <Link href="/convert" className="hover:text-white transition-colors">
+          <Link href="/convert" className="hover:text-slate-900 transition-colors">
             Converters
           </Link>
           <span>/</span>
-          <span className="text-emerald-400">{entry.shortName}</span>
+          <span className="font-semibold text-blue-600">{entry.shortName}</span>
         </nav>
 
         {/* Page Intro */}
         <div className="mt-5 max-w-4xl">
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-300">
-            <Lock className="h-3.5 w-3.5" />
-            <span>
-              {entry.region} &middot; {entry.currency} &middot; 100% Private · Converts on Your Device
-            </span>
-          </div>
+          <p className="text-xs font-bold uppercase tracking-widest text-blue-600">
+            {entry.region} &middot; {entry.currency} &middot; 100% Local Browser Conversion
+          </p>
 
-          <h1 className="mt-4 text-3xl font-bold tracking-tight text-white sm:text-4xl">
+          <h1 className="mt-2.5 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
             {entry.title}
           </h1>
-          <p className="mt-3 text-base text-slate-300 leading-relaxed">
+          <p className="mt-3 text-base text-slate-600 leading-relaxed">
             {entry.metaDescription}
           </p>
         </div>
@@ -141,38 +138,38 @@ export default async function BankConverterPage({ params }: PageProps) {
 
         {/* Statement Profile Specs & Pain Points */}
         <section className="mt-12 grid gap-6 lg:grid-cols-2">
-          <div className="rounded-2xl border border-white/10 bg-[#0d121b] p-6">
-            <h2 className="text-lg font-semibold text-white">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-2xs">
+            <h2 className="text-lg font-bold text-slate-900">
               {entry.shortName} Statement Format Profile
             </h2>
-            <dl className="mt-4 divide-y divide-white/10 text-sm">
+            <dl className="mt-4 divide-y divide-slate-200 text-sm">
               <div className="flex items-center justify-between py-3">
-                <dt className="text-slate-400">Region / Institution Scope</dt>
-                <dd className="font-medium text-white">{entry.region}</dd>
+                <dt className="text-slate-500">Region / Institution Scope</dt>
+                <dd className="font-semibold text-slate-900">{entry.region}</dd>
               </div>
               <div className="flex items-center justify-between py-3">
-                <dt className="text-slate-400">Primary Currency</dt>
-                <dd className="mono-nums font-medium text-emerald-400">{entry.currency}</dd>
+                <dt className="text-slate-500">Primary Currency</dt>
+                <dd className="mono-nums font-bold text-blue-600">{entry.currency}</dd>
               </div>
               <div className="flex items-center justify-between py-3">
-                <dt className="text-slate-400">Date Normalization Rule</dt>
-                <dd className="mono-nums font-medium text-white">{entry.dateFormat}</dd>
+                <dt className="text-slate-500">Date Normalization Rule</dt>
+                <dd className="mono-nums font-semibold text-slate-900">{entry.dateFormat}</dd>
               </div>
               <div className="py-3">
-                <dt className="text-slate-400">Detected Column Layout</dt>
-                <dd className="mt-1 font-medium text-slate-200">{entry.columnLayout}</dd>
+                <dt className="text-slate-500">Detected Column Layout</dt>
+                <dd className="mt-1 font-medium text-slate-800">{entry.columnLayout}</dd>
               </div>
             </dl>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-[#0d121b] p-6">
-            <h2 className="text-lg font-semibold text-white">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-2xs">
+            <h2 className="text-lg font-bold text-slate-900">
               What VaultSheet Fixes Automatically for {entry.shortName}
             </h2>
-            <ul className="mt-4 space-y-3 text-sm text-slate-300">
+            <ul className="mt-4 space-y-3 text-sm text-slate-600">
               {entry.painPoints.map((point) => (
                 <li key={point} className="flex items-start gap-2.5">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-400 shrink-0" />
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600 shrink-0" />
                   <span>{point}</span>
                 </li>
               ))}
@@ -181,15 +178,15 @@ export default async function BankConverterPage({ params }: PageProps) {
         </section>
 
         {/* FAQs */}
-        <section className="mt-12 rounded-2xl border border-white/10 bg-[#0d121b] p-6 sm:p-8">
-          <h2 className="text-xl font-bold text-white">
-            Frequently Asked Questions — {entry.bankName}
+        <section className="mt-12 rounded-2xl border border-slate-200 bg-white p-6 shadow-2xs sm:p-8">
+          <h2 className="text-xl font-bold text-slate-900">
+            Frequently Asked Questions &mdash; {entry.bankName}
           </h2>
-          <div className="mt-6 grid gap-6 md:grid-cols-2">
+          <div className="mt-6 grid gap-5 md:grid-cols-2">
             {entry.faqs.map((faq) => (
-              <div key={faq.question} className="rounded-xl border border-white/10 bg-[#070a0f] p-5">
-                <h3 className="text-sm font-semibold text-white">{faq.question}</h3>
-                <p className="mt-2 text-xs text-slate-300 leading-relaxed">{faq.answer}</p>
+              <div key={faq.question} className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+                <h3 className="text-sm font-bold text-slate-900">{faq.question}</h3>
+                <p className="mt-2 text-xs text-slate-600 leading-relaxed">{faq.answer}</p>
               </div>
             ))}
           </div>
@@ -198,10 +195,10 @@ export default async function BankConverterPage({ params }: PageProps) {
         {/* Related Banks */}
         <section className="mt-12">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-white">Related Statement Converters</h2>
+            <h2 className="text-lg font-bold text-slate-900">Related Statement Converters</h2>
             <Link
               href="/convert"
-              className="inline-flex items-center gap-1 text-xs font-medium text-emerald-400 hover:text-emerald-300"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700"
             >
               Browse All {SEO_BANKS.length} <ArrowRight className="h-3.5 w-3.5" />
             </Link>
@@ -211,10 +208,10 @@ export default async function BankConverterPage({ params }: PageProps) {
               <Link
                 key={rel.slug}
                 href={`/convert/${rel.slug}`}
-                className="flex items-center justify-between rounded-xl border border-white/10 bg-[#0d121b] px-4 py-3 text-sm text-slate-200 hover:border-emerald-500/40 hover:text-white transition-colors"
+                className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 shadow-2xs hover:border-blue-400 hover:text-blue-600 transition-colors"
               >
                 <span>{rel.bankName}</span>
-                <span className="mono-nums text-xs text-emerald-400">{rel.currency}</span>
+                <span className="mono-nums text-xs font-semibold text-slate-500">{rel.currency}</span>
               </Link>
             ))}
           </div>

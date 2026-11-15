@@ -68,7 +68,7 @@ export default function RootLayout({
     offers: [
       { "@type": "Offer", price: "0", priceCurrency: "USD", name: "Free Preview" },
       { "@type": "Offer", price: "12", priceCurrency: "USD", name: "7-Day Tax & Audit Pass" },
-      { "@type": "Offer", price: "19", priceCurrency: "USD", name: "Pro Bookkeeper Monthly" },
+      { "@type": "Offer", price: "29", priceCurrency: "USD", name: "Annual Pro Bookkeeper Pass" },
     ],
   };
 

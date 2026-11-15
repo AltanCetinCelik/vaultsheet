@@ -564,44 +564,35 @@ export default function ConverterWorkbench({
   const { reconciliation, metadata } = result;
 
   return (
-    <div className="w-full rounded-2xl border border-white/10 bg-[#0c111a]/95 shadow-[0_24px_90px_rgba(0,0,0,0.65)] backdrop-blur-sm">
-      {/* Guided 3-Step Workflow & Privacy Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-6">
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/15 px-2.5 py-1 font-semibold text-emerald-300">
-            <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-bold text-slate-950">
-              1
-            </span>
-            Drop Bank PDF
+    <div className="w-full overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[0_20px_50px_-12px_rgba(15,23,42,0.08)]">
+      {/* Top Application Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/80 px-4 py-3 sm:px-6">
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <div className="flex items-center gap-2 font-semibold text-slate-900">
+            <ShieldCheck className="h-4 w-4 text-blue-600" />
+            <span>Bank Statement Ledger</span>
+            {contextBankName && (
+              <span className="font-normal text-slate-500">&middot; {contextBankName}</span>
+            )}
+          </div>
+          <span className="hidden h-3.5 w-px bg-slate-300 sm:inline-block" />
+          <span className="hidden items-center gap-1.5 text-[11px] font-medium text-slate-500 sm:inline-flex">
+            <Lock className="h-3 w-3 text-emerald-600" />
+            Local Browser Mode &mdash; Zero Server Uploads
           </span>
-          <span className="text-slate-600">&rarr;</span>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 font-medium text-slate-200">
-            <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-white/15 text-[10px] font-bold text-white">
-              2
-            </span>
-            Instant Balance Check
-          </span>
-          <span className="text-slate-600">&rarr;</span>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 font-medium text-slate-200">
-            <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-white/15 text-[10px] font-bold text-white">
-              3
-            </span>
-            Download Excel or .QBO
-          </span>
-          {contextBankName && (
-            <span className="inline-flex items-center rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-200">
-              {contextBankName}
-            </span>
-          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium text-slate-300">
-            <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-            100% Private · Files Never Leave Your Computer
-          </span>
+          <button
+            type="button"
+            onClick={handleDownloadSamplePdf}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:text-slate-900"
+          >
+            <FileText className="h-3.5 w-3.5 text-slate-500" />
+            Download Sample PDF
+          </button>
           {licenseStatus.valid ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-300">
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
               <KeyRound className="h-3.5 w-3.5" />
               {licenseStatus.plan === "pass_7d" ? "7-Day Audit Pass Active" : "Annual Pro Active"}
             </span>
@@ -612,17 +603,17 @@ export default function ConverterWorkbench({
                 setUpgradeReason("");
                 setShowUpgradeModal(true);
               }}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:border-emerald-400/50 hover:bg-white/10"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:border-blue-300 hover:bg-slate-50 hover:text-slate-900"
             >
-              <KeyRound className="h-3.5 w-3.5 text-emerald-400" />
+              <KeyRound className="h-3.5 w-3.5 text-blue-600" />
               Activate License Key
             </button>
           )}
         </div>
       </div>
 
-      {/* Dropzone & Sample Statement Bar */}
-      <div className="grid gap-4 border-b border-white/10 p-4 sm:p-6 lg:grid-cols-12">
+      {/* Streamlined Upload Dropzone & Sample Preset Switcher */}
+      <div className="border-b border-slate-200 bg-white p-4 sm:p-5">
         <div
           onDragOver={(e) => {
             e.preventDefault();
@@ -637,10 +628,10 @@ export default function ConverterWorkbench({
             }
           }}
           onClick={() => fileInputRef.current?.click()}
-          className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed p-5 text-center transition lg:col-span-5 ${
+          className={`flex cursor-pointer flex-col items-start justify-between gap-4 rounded-xl border-2 border-dashed p-5 transition sm:flex-row sm:items-center ${
             isDragging
-              ? "border-emerald-400 bg-emerald-500/10"
-              : "border-white/20 bg-[#080c13] hover:border-emerald-400/50 hover:bg-[#0e1522]"
+              ? "border-blue-500 bg-blue-50/80"
+              : "border-blue-200 bg-blue-50/30 hover:border-blue-400 hover:bg-blue-50/55"
           }`}
         >
           <input
@@ -656,52 +647,55 @@ export default function ConverterWorkbench({
               }
             }}
           />
-          <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
-            <Upload className="h-5 w-5" />
-          </div>
-          <p className="text-sm font-semibold text-white">
-            {isParsing
-              ? "Reading your statement safely on this device..."
-              : "Drop Your PDF Bank Statement Here — or Click to Browse"}
-          </p>
-          <p className="mt-1 text-xs text-slate-400">
-            Works with single or multi-month PDFs from Chase, Wells Fargo, BofA, Wise, Mercury, Revolut &amp; 60+ banks
-          </p>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowPasteModal(true);
-            }}
-            className="mt-2.5 inline-flex items-center gap-1 rounded-md border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] font-medium text-slate-300 hover:border-emerald-400/50 hover:text-white"
-          >
-            <FileText className="h-3 w-3 text-emerald-400" />
-            Or Paste Scanned OCR / Portal Table Text
-          </button>
-        </div>
 
-        {/* Preset Samples + Sample PDF Download */}
-        <div className="flex flex-col justify-between rounded-xl border border-white/10 bg-[#080c13] p-4 lg:col-span-7">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-start gap-4 sm:items-center">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-xs">
+              <Upload className="h-5 w-5" />
+            </div>
             <div>
-              <p className="text-xs font-semibold text-slate-200">
-                No PDF handy? Click a sample statement to test live:
+              <p className="text-sm font-semibold text-slate-900 sm:text-base">
+                {isParsing
+                  ? "Reading your statement securely inside browser RAM..."
+                  : "Drop your PDF bank statement here, or click to browse"}
               </p>
-              <p className="mt-0.5 text-xs text-slate-400">
-                Each button generates a real bank statement PDF and converts it instantly with unlimited free exports.
+              <p className="mt-0.5 text-xs text-slate-500">
+                Supports single or multi-page PDFs from Chase, Wells Fargo, BofA, Wise, Mercury, Revolut &amp; 60+ banks
               </p>
             </div>
-            <button
-              type="button"
-              onClick={handleDownloadSamplePdf}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-xs font-medium text-slate-200 transition hover:bg-white/10"
-            >
-              <FileText className="h-3.5 w-3.5 text-emerald-400" />
-              Download Sample PDF
-            </button>
           </div>
 
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                fileInputRef.current?.click();
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-2xs transition hover:bg-slate-800"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              Choose PDF File
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowPasteModal(true);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:text-slate-900"
+            >
+              <FileText className="h-3.5 w-3.5 text-slate-500" />
+              Paste Scanned / OCR Text
+            </button>
+          </div>
+        </div>
+
+        {/* Horizontal Instant Demo Preset Switcher */}
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3.5">
+          <span className="text-xs font-medium text-slate-500">
+            Instant live demo preset (unlimited free test exports):
+          </span>
+          <div className="flex flex-wrap items-center gap-1.5">
             {(Object.keys(BANK_PRESETS) as SamplePresetId[]).map((id) => {
               const p = BANK_PRESETS[id];
               const active = result.isSample && activePreset === id;
@@ -710,15 +704,19 @@ export default function ConverterWorkbench({
                   key={id}
                   type="button"
                   onClick={() => handleLoadSample(id)}
-                  className={`flex flex-col items-start rounded-lg border px-3 py-2 text-left transition ${
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs transition ${
                     active
-                      ? "border-emerald-400/70 bg-emerald-500/15 text-white"
-                      : "border-white/10 bg-white/[0.03] text-slate-300 hover:border-white/25 hover:bg-white/[0.06]"
+                      ? "bg-slate-900 font-semibold text-white shadow-2xs"
+                      : "bg-slate-100 font-medium text-slate-700 hover:bg-slate-200/80 hover:text-slate-900"
                   }`}
                 >
-                  <span className="text-xs font-semibold">{p.label}</span>
-                  <span className="mono-nums mt-0.5 text-[11px] text-slate-400">
-                    {p.currency} · {p.dateHint}
+                  <span>{p.label}</span>
+                  <span
+                    className={`mono-nums text-[10px] ${
+                      active ? "text-slate-300" : "text-slate-500"
+                    }`}
+                  >
+                    {p.currency}
                   </span>
                 </button>
               );
@@ -727,126 +725,165 @@ export default function ConverterWorkbench({
         </div>
       </div>
 
-      {/* Balance Check Summary + Eye-Level Primary Downloads + Collapsible Accountant Settings */}
-      <div className="border-b border-white/10 bg-[#090e17] px-4 py-4 sm:px-6">
+      {/* Reconciliation Summary, Export Controls & 4 Financial KPI Cards */}
+      <div className="border-b border-slate-200 bg-slate-50/70 px-4 py-4 sm:px-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="space-y-2.5">
+          <div className="min-w-0 space-y-1.5">
             <div className="flex flex-wrap items-center gap-2.5">
+              <h2 className="text-base font-bold text-slate-900 truncate">
+                {metadata.bankDetected}
+              </h2>
               {reconciliation.isFullyReconciled ? (
-                <div className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-300">
-                  <CheckCircle2 className="h-4 w-4" />
-                  Balance Verified to the Exact Cent ($0.00 Diff · {reconciliation.matchedRows}/{result.transactions.length} Rows)
-                </div>
-              ) : (
-                <div className="inline-flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-300">
-                  <AlertTriangle className="h-4 w-4" />
-                  Review Needed ({reconciliation.mismatchRows} row mismatch · Diff:{" "}
-                  {formatMoney(reconciliation.discrepancy, metadata.currency)})
-                </div>
-              )}
-
-              <span className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-300">
-                <span className="font-medium text-white">{metadata.bankDetected}</span>
-                <span className="text-slate-500">&middot;</span>
-                <span className="mono-nums">****{metadata.accountLast4}</span>
-                <span className="text-slate-500">&middot;</span>
-                <span className="mono-nums text-emerald-300">{metadata.currency}</span>
-                <span className="text-slate-500">&middot;</span>
-                <span className="mono-nums text-slate-400">
-                  {metadata.periodStart ?? "—"} to {metadata.periodEnd ?? "—"} ({result.transactions.length} txns)
+                <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Reconciled ($0.00 diff &middot; {reconciliation.matchedRows}/{result.transactions.length})
                 </span>
-              </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Review Needed ({reconciliation.mismatchRows} mismatch &middot;{" "}
+                  {formatMoney(reconciliation.discrepancy, metadata.currency)})
+                </span>
+              )}
             </div>
 
-            {/* Clean Read-Only Balance Equation Strip */}
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
-              <div className="flex items-center gap-1.5">
-                <span className="text-slate-400">Opening:</span>
-                <span className="mono-nums font-semibold text-white">
-                  {formatMoney(reconciliation.openingBalance, metadata.currency)}
-                </span>
-              </div>
-              <span className="text-slate-600">&middot;</span>
-              <div className="flex items-center gap-1.5">
-                <span className="text-slate-400">+ Deposits:</span>
-                <span className="mono-nums font-semibold text-emerald-400">
-                  +{formatMoney(reconciliation.totalCredits, metadata.currency)}
-                </span>
-              </div>
-              <span className="text-slate-600">&middot;</span>
-              <div className="flex items-center gap-1.5">
-                <span className="text-slate-400">&minus; Withdrawals:</span>
-                <span className="mono-nums font-semibold text-rose-400">
-                  -{formatMoney(reconciliation.totalDebits, metadata.currency)}
-                </span>
-              </div>
-              <span className="text-slate-600">=</span>
-              <div className="flex items-center gap-1.5">
-                <span className="text-slate-400">Closing:</span>
-                <span
-                  className={`mono-nums font-semibold ${
-                    reconciliation.isFullyReconciled ? "text-emerald-400" : "text-amber-300"
-                  }`}
-                >
-                  {formatMoney(
-                    reconciliation.closingBalance ?? reconciliation.calculatedClosingBalance,
-                    metadata.currency
-                  )}
-                </span>
-              </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <span className="mono-nums font-medium text-slate-700">
+                Acct ****{metadata.accountLast4}
+              </span>
+              <span>&middot;</span>
+              <span className="mono-nums font-medium text-slate-700">{metadata.currency}</span>
+              <span>&middot;</span>
+              <span className="mono-nums">
+                {metadata.periodStart ?? "—"} to {metadata.periodEnd ?? "—"}
+              </span>
+              <span>&middot;</span>
+              <span>{result.transactions.length} transactions</span>
               {reconciliation.stitchedLineCount > 0 && (
-                <span className="text-[11px] text-slate-500">
-                  ({reconciliation.stitchedLineCount} wrapped memos merged)
-                </span>
+                <>
+                  <span>&middot;</span>
+                  <span className="text-blue-700 font-medium">
+                    {reconciliation.stitchedLineCount} wrapped memos stitched
+                  </span>
+                </>
               )}
             </div>
           </div>
 
-          {/* Primary Actions at Eye Level */}
+          {/* Primary Export Hierarchy */}
           <div className="flex flex-wrap items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={() => handleExport("xlsx")}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3.5 py-2 text-xs font-semibold text-slate-950 transition hover:bg-emerald-400"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-blue-700"
             >
               <FileSpreadsheet className="h-4 w-4" />
               Download Excel (.xlsx)
-              {!result.isSample && !licenseStatus.valid && <Lock className="h-3 w-3 opacity-80" />}
+              {!result.isSample && !licenseStatus.valid && <Lock className="h-3 w-3 opacity-85" />}
             </button>
 
             <button
               type="button"
               onClick={() => handleExport("qbo")}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-white/15"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-slate-800"
             >
-              <Download className="h-3.5 w-3.5 text-emerald-400" />
+              <Download className="h-3.5 w-3.5" />
               Download QuickBooks (.QBO)
-              {!result.isSample && !licenseStatus.valid && <Lock className="h-3 w-3 opacity-80" />}
+              {!result.isSample && !licenseStatus.valid && <Lock className="h-3 w-3 opacity-85" />}
             </button>
+
+            <div className="inline-flex items-center rounded-lg border border-slate-300 bg-white p-0.5 shadow-2xs">
+              <select
+                value={secondaryFormat}
+                onChange={(e) => setSecondaryFormat(e.target.value as ExportFormat)}
+                aria-label="Additional accounting export format"
+                className="bg-transparent px-2 py-1 text-xs font-medium text-slate-700 focus:outline-none"
+              >
+                <option value="quickbooks_csv">QB CSV (4-Col)</option>
+                <option value="quickbooks_3col_csv">QB CSV (3-Col)</option>
+                <option value="xero_csv">Xero CSV</option>
+                <option value="csv">Standard CSV</option>
+                <option value="ofx">OFX (.ofx)</option>
+                <option value="json">JSON</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => handleExport(secondaryFormat)}
+                className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-800 transition hover:bg-slate-200"
+              >
+                Export
+              </button>
+            </div>
 
             <button
               type="button"
               onClick={() => setShowSettings((prev) => !prev)}
               aria-expanded={showSettings}
-              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition ${
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium shadow-2xs transition ${
                 showSettings
-                  ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-200"
-                  : "border-white/15 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white"
+                  ? "border-blue-500 bg-blue-50 text-blue-700"
+                  : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900"
               }`}
             >
               <SlidersHorizontal className="h-3.5 w-3.5" />
-              Adjust Balances &amp; Settings
+              Settings
             </button>
+          </div>
+        </div>
+
+        {/* 4 Clean Financial KPI Metric Cards */}
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 shadow-2xs">
+            <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              Opening Balance
+            </span>
+            <span className="mono-nums mt-0.5 block text-sm font-bold text-slate-900 sm:text-base">
+              {formatMoney(reconciliation.openingBalance, metadata.currency)}
+            </span>
+          </div>
+
+          <div className="rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 shadow-2xs">
+            <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              + Total Deposits
+            </span>
+            <span className="mono-nums mt-0.5 block text-sm font-bold text-emerald-700 sm:text-base">
+              +{formatMoney(reconciliation.totalCredits, metadata.currency)}
+            </span>
+          </div>
+
+          <div className="rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 shadow-2xs">
+            <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              &minus; Total Withdrawals
+            </span>
+            <span className="mono-nums mt-0.5 block text-sm font-bold text-slate-900 sm:text-base">
+              -{formatMoney(reconciliation.totalDebits, metadata.currency)}
+            </span>
+          </div>
+
+          <div className="rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 shadow-2xs">
+            <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              = Closing Balance
+            </span>
+            <span
+              className={`mono-nums mt-0.5 block text-sm font-bold sm:text-base ${
+                reconciliation.isFullyReconciled ? "text-slate-900" : "text-amber-700"
+              }`}
+            >
+              {formatMoney(
+                reconciliation.closingBalance ?? reconciliation.calculatedClosingBalance,
+                metadata.currency
+              )}
+            </span>
           </div>
         </div>
 
         {/* Collapsible Balance & QuickBooks Account Settings Drawer */}
         {showSettings && (
-          <div className="mt-4 grid gap-3 rounded-xl border border-white/10 bg-[#0d1420] p-4 sm:grid-cols-2 lg:grid-cols-6">
+          <div className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xs sm:grid-cols-2 lg:grid-cols-6">
             <div>
               <label
                 htmlFor="opening-balance-input"
-                className="block text-[11px] font-medium text-slate-400"
+                className="block text-[11px] font-medium text-slate-600"
               >
                 Opening Balance
               </label>
@@ -861,14 +898,14 @@ export default function ConverterWorkbench({
                     : "Auto / Enter"
                 }
                 onChange={(e) => handleExplicitBalanceChange("opening", e.target.value)}
-                className="mono-nums mt-1 w-full rounded-lg border border-white/15 bg-[#080c13] px-2.5 py-1.5 text-xs font-semibold text-white placeholder:text-slate-500 focus:border-emerald-400/60 focus:outline-none"
+                className="mono-nums mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none"
               />
             </div>
 
             <div>
               <label
                 htmlFor="closing-balance-input"
-                className="block text-[11px] font-medium text-slate-400"
+                className="block text-[11px] font-medium text-slate-600"
               >
                 Statement Closing
               </label>
@@ -883,14 +920,14 @@ export default function ConverterWorkbench({
                     : "Auto / Enter"
                 }
                 onChange={(e) => handleExplicitBalanceChange("closing", e.target.value)}
-                className="mono-nums mt-1 w-full rounded-lg border border-white/15 bg-[#080c13] px-2.5 py-1.5 text-xs font-semibold text-white placeholder:text-slate-500 focus:border-emerald-400/60 focus:outline-none"
+                className="mono-nums mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none"
               />
             </div>
 
             <div>
               <label
                 htmlFor="qbo-account-type"
-                className="block text-[11px] font-medium text-slate-400"
+                className="block text-[11px] font-medium text-slate-600"
               >
                 QuickBooks Account Type
               </label>
@@ -899,7 +936,7 @@ export default function ConverterWorkbench({
                 value={metadata.accountType}
                 onChange={(e) => handleAccountTypeChange(e.target.value as AccountType)}
                 aria-label="Statement account type for QuickBooks export"
-                className="mt-1 w-full rounded-lg border border-white/15 bg-[#080c13] px-2.5 py-1.5 text-xs text-slate-200 focus:border-emerald-400/60 focus:outline-none"
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-800 focus:border-blue-500 focus:bg-white focus:outline-none"
               >
                 <option value="CHECKING">Checking (.qbo)</option>
                 <option value="SAVINGS">Savings (.qbo)</option>
@@ -910,7 +947,7 @@ export default function ConverterWorkbench({
             <div>
               <label
                 htmlFor="statement-currency"
-                className="block text-[11px] font-medium text-slate-400"
+                className="block text-[11px] font-medium text-slate-600"
               >
                 Currency
               </label>
@@ -919,7 +956,7 @@ export default function ConverterWorkbench({
                 value={metadata.currency}
                 onChange={(e) => handleMetadataField("currency", e.target.value)}
                 aria-label="Statement currency"
-                className="mono-nums mt-1 w-full rounded-lg border border-white/15 bg-[#080c13] px-2.5 py-1.5 text-xs text-emerald-300 focus:border-emerald-400/60 focus:outline-none"
+                className="mono-nums mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none"
               >
                 <option value="USD">USD</option>
                 <option value="EUR">EUR</option>
@@ -932,7 +969,7 @@ export default function ConverterWorkbench({
             <div>
               <label
                 htmlFor="account-last4"
-                className="block text-[11px] font-medium text-slate-400"
+                className="block text-[11px] font-medium text-slate-600"
               >
                 Account Last 4 Digits
               </label>
@@ -943,7 +980,7 @@ export default function ConverterWorkbench({
                 value={metadata.accountLast4}
                 onChange={(e) => handleMetadataField("accountLast4", e.target.value)}
                 aria-label="Account last 4 digits"
-                className="mono-nums mt-1 w-full rounded-lg border border-white/15 bg-[#080c13] px-2.5 py-1.5 text-xs text-white focus:border-emerald-400/60 focus:outline-none"
+                className="mono-nums mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none"
               />
             </div>
 
@@ -952,9 +989,9 @@ export default function ConverterWorkbench({
                 type="button"
                 onClick={handleInvertAllSigns}
                 title="Invert all Debit/Credit signs (useful for Credit Card PDFs)"
-                className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:border-emerald-400/40 hover:bg-white/10"
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
               >
-                <ArrowLeftRight className="h-3.5 w-3.5 text-emerald-400" />
+                <ArrowLeftRight className="h-3.5 w-3.5 text-blue-600" />
                 Flip All +/- Signs
               </button>
             </div>
@@ -962,8 +999,8 @@ export default function ConverterWorkbench({
         )}
       </div>
 
-      {/* Clean Search, Filter & Row Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-6">
+      {/* Search, Category Filter & Row Controls */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
@@ -972,7 +1009,7 @@ export default function ConverterWorkbench({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search merchant, date, or memo..."
-              className="w-60 rounded-lg border border-white/10 bg-[#080c13] py-1.5 pl-8 pr-3 text-xs text-white placeholder:text-slate-500 focus:border-emerald-400/60 focus:outline-none"
+              className="w-60 rounded-lg border border-slate-200 bg-slate-50 py-1.5 pl-8 pr-3 text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none"
             />
           </div>
 
@@ -980,7 +1017,7 @@ export default function ConverterWorkbench({
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
             aria-label="Filter transactions by category"
-            className="rounded-lg border border-white/10 bg-[#080c13] px-2.5 py-1.5 text-xs text-slate-200 focus:border-emerald-400/60 focus:outline-none"
+            className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-700 focus:border-blue-500 focus:bg-white focus:outline-none"
           >
             <option value="ALL">All Categories ({result.transactions.length})</option>
             {Array.from(categoryCounts.entries()).map(([cat, count]) => (
@@ -993,9 +1030,9 @@ export default function ConverterWorkbench({
           <button
             type="button"
             onClick={handleAddRow}
-            className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-medium text-slate-200 transition hover:bg-white/10"
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-900"
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className="h-3.5 w-3.5 text-slate-500" />
             Add Row
           </button>
 
@@ -1003,7 +1040,7 @@ export default function ConverterWorkbench({
             <button
               type="button"
               onClick={handleRemoveDuplicates}
-              className="inline-flex items-center gap-1 rounded-lg border border-amber-500/40 bg-amber-500/15 px-2.5 py-1.5 text-xs font-medium text-amber-200 transition hover:bg-amber-500/25"
+              className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-100"
             >
               <Trash2 className="h-3.5 w-3.5" />
               Remove {reconciliation.duplicateRows} Duplicates
@@ -1011,64 +1048,64 @@ export default function ConverterWorkbench({
           )}
         </div>
 
-        <span className="text-xs text-slate-400">
-          Click any cell to edit · Totals update automatically
+        <span className="text-xs text-slate-500">
+          Click any cell to edit inline &middot; Balances recalculate automatically
         </span>
       </div>
 
       {/* Warnings if any */}
       {result.warnings.length > 0 && (
-        <div className="border-b border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-200 sm:px-6">
+        <div className="border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800 sm:px-6">
           {result.warnings.join(" ")}
         </div>
       )}
 
       {/* Interactive Financial Spreadsheet Table */}
-      <div className="max-h-[430px] overflow-auto">
+      <div className="max-h-[440px] overflow-auto bg-white">
         <table className="w-full border-collapse text-left text-xs">
-          <thead className="sticky top-0 z-10 border-b border-white/10 bg-[#0a0f18] text-[11px] uppercase tracking-wider text-slate-400">
+          <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             <tr>
-              <th className="px-3 py-2.5">Date</th>
-              <th className="px-3 py-2.5">Description (Stitched Multi-Line)</th>
-              <th className="px-3 py-2.5">Category</th>
-              <th className="px-3 py-2.5 text-right">Amount ({metadata.currency})</th>
-              <th className="px-3 py-2.5 text-right">Balance</th>
-              <th className="px-3 py-2.5 text-center">Audit</th>
-              <th className="px-3 py-2.5 text-right">Actions</th>
+              <th className="px-3.5 py-2.5">Date</th>
+              <th className="px-3.5 py-2.5">Description</th>
+              <th className="px-3.5 py-2.5">Category</th>
+              <th className="px-3.5 py-2.5 text-right">Amount ({metadata.currency})</th>
+              <th className="px-3.5 py-2.5 text-right">Balance</th>
+              <th className="px-3.5 py-2.5 text-center">Audit</th>
+              <th className="px-3.5 py-2.5 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/5">
+          <tbody className="divide-y divide-slate-100">
             {filteredRows.map((row) => (
               <tr
                 key={row.id}
-                className={`transition hover:bg-white/[0.03] ${
-                  row.balanceStatus === "mismatch" ? "bg-amber-500/10" : ""
+                className={`transition hover:bg-blue-50/40 ${
+                  row.balanceStatus === "mismatch" ? "bg-amber-50/60" : ""
                 }`}
               >
-                <td className="px-3 py-2 align-top">
+                <td className="px-3.5 py-2 align-top">
                   <input
                     type="text"
                     value={row.date}
                     onChange={(e) => handleCellChange(row.id, "date", e.target.value)}
                     aria-label="Transaction date"
-                    className="mono-nums w-24 rounded border border-transparent bg-transparent px-1 py-0.5 text-slate-200 focus:border-emerald-400/50 focus:bg-[#080c13] focus:outline-none"
+                    className="mono-nums w-24 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-slate-700 focus:border-blue-500 focus:bg-white focus:outline-none"
                   />
                 </td>
-                <td className="min-w-[240px] px-3 py-2 align-top">
+                <td className="min-w-[260px] px-3.5 py-2 align-top">
                   <input
                     type="text"
                     value={row.description}
                     onChange={(e) => handleCellChange(row.id, "description", e.target.value)}
                     aria-label="Transaction description"
-                    className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-slate-100 focus:border-emerald-400/50 focus:bg-[#080c13] focus:outline-none"
+                    className="w-full rounded border border-transparent bg-transparent px-1.5 py-0.5 font-medium text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none"
                   />
                 </td>
-                <td className="px-3 py-2 align-top">
+                <td className="px-3.5 py-2 align-top">
                   <select
                     value={row.category}
                     onChange={(e) => handleCellChange(row.id, "category", e.target.value)}
                     aria-label="Transaction category"
-                    className="rounded border border-white/10 bg-[#080c13] px-2 py-0.5 text-[11px] text-slate-300 focus:border-emerald-400/50 focus:outline-none"
+                    className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 hover:border-slate-300 focus:border-blue-500 focus:outline-none"
                   >
                     {CATEGORIES.map((c) => (
                       <option key={c} value={c}>
@@ -1077,58 +1114,58 @@ export default function ConverterWorkbench({
                     ))}
                   </select>
                 </td>
-                <td className="px-3 py-2 text-right align-top">
+                <td className="px-3.5 py-2 text-right align-top">
                   <input
                     type="number"
                     step="0.01"
                     value={row.amount}
                     onChange={(e) => handleCellChange(row.id, "amount", e.target.value)}
                     aria-label="Transaction amount"
-                    className={`mono-nums w-24 rounded border border-transparent bg-transparent px-1 py-0.5 text-right font-medium focus:border-emerald-400/50 focus:bg-[#080c13] focus:outline-none ${
-                      row.amount >= 0 ? "text-emerald-400" : "text-rose-300"
+                    className={`mono-nums w-24 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-right font-semibold focus:border-blue-500 focus:bg-white focus:outline-none ${
+                      row.amount >= 0 ? "text-emerald-700" : "text-slate-900"
                     }`}
                   />
                 </td>
-                <td className="px-3 py-2 text-right align-top">
+                <td className="px-3.5 py-2 text-right align-top">
                   <input
                     type="number"
                     step="0.01"
                     value={row.balance ?? ""}
                     onChange={(e) => handleCellChange(row.id, "balance", e.target.value)}
                     aria-label="Running balance"
-                    className="mono-nums w-24 rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-slate-300 focus:border-emerald-400/50 focus:bg-[#080c13] focus:outline-none"
+                    className="mono-nums w-24 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-right text-slate-600 focus:border-blue-500 focus:bg-white focus:outline-none"
                   />
                 </td>
-                <td className="px-3 py-2 text-center align-top">
+                <td className="px-3.5 py-2 text-center align-top">
                   <div className="inline-flex items-center gap-1">
                     {row.balanceStatus === "matched" ? (
-                      <span className="inline-flex items-center gap-1 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300">
-                        OK
+                      <span className="inline-flex items-center rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+                        Matched
                       </span>
                     ) : row.balanceStatus === "mismatch" ? (
-                      <span className="inline-flex items-center gap-1 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">
-                        DIFF
+                      <span className="inline-flex items-center rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                        Diff
                       </span>
                     ) : (
-                      <span className="text-[10px] text-slate-500">—</span>
+                      <span className="text-[10px] text-slate-400">—</span>
                     )}
                     {row.isDuplicate && (
                       <span
                         title="Potential duplicate from overlapping statements"
-                        className="inline-flex items-center rounded bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-rose-300"
+                        className="inline-flex items-center rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700"
                       >
                         DUP
                       </span>
                     )}
                   </div>
                 </td>
-                <td className="px-3 py-2 text-right align-top">
+                <td className="px-3.5 py-2 text-right align-top">
                   <div className="inline-flex items-center gap-1">
                     <button
                       type="button"
                       title="Flip Debit / Credit Sign"
                       onClick={() => handleFlipSign(row.id)}
-                      className="rounded border border-white/10 p-1 text-slate-400 hover:border-white/25 hover:text-white"
+                      className="rounded border border-slate-200 p-1 text-slate-500 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
                     >
                       <ArrowLeftRight className="h-3 w-3" />
                     </button>
@@ -1136,7 +1173,7 @@ export default function ConverterWorkbench({
                       type="button"
                       title="Delete row"
                       onClick={() => handleDeleteRow(row.id)}
-                      className="rounded border border-white/10 p-1 text-slate-400 hover:border-rose-500/40 hover:text-rose-300"
+                      className="rounded border border-slate-200 p-1 text-slate-500 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700"
                     >
                       <Trash2 className="h-3 w-3" />
                     </button>
@@ -1146,7 +1183,7 @@ export default function ConverterWorkbench({
             ))}
             {filteredRows.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-400">
+                <td colSpan={7} className="px-4 py-12 text-center text-sm text-slate-500">
                   No matching transactions found.
                 </td>
               </tr>
@@ -1155,24 +1192,24 @@ export default function ConverterWorkbench({
         </table>
       </div>
 
-      {/* Streamlined Bottom Export Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 bg-[#080c13] px-4 py-4 sm:px-6">
-        <div className="text-xs text-slate-400">
+      {/* Clean Footer Status & Quick CSV Export Strip */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3.5 sm:px-6">
+        <div className="text-xs text-slate-600">
           {result.isSample ? (
-            <span className="text-emerald-300">
-              Sample mode: All 8 export formats are unlocked so you can verify output quality.
+            <span className="font-medium text-emerald-700">
+              Sample mode: All 8 export formats are unlocked so you can verify import formatting first.
             </span>
           ) : licenseStatus.valid ? (
-            <span className="text-emerald-300">
+            <span className="font-medium text-emerald-700">
               License active: Unlimited rows, batch PDFs &amp; all accounting feeds unlocked.
             </span>
           ) : (
             <span>
-              Uploaded PDFs: CSV/JSON free up to {FREE_ROW_LIMIT} rows · Excel/QBO/OFX require{" "}
+              Uploaded PDFs: Free up to {FREE_ROW_LIMIT} rows in CSV/JSON &middot; Full Excel/QBO/OFX require{" "}
               <button
                 type="button"
                 onClick={() => setShowUpgradeModal(true)}
-                className="font-semibold text-emerald-400 underline underline-offset-2"
+                className="font-semibold text-blue-600 underline underline-offset-2 hover:text-blue-700"
               >
                 $12 Pass or Annual Pro
               </button>
@@ -1183,108 +1220,67 @@ export default function ConverterWorkbench({
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => handleExport("xlsx")}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3.5 py-2 text-xs font-semibold text-slate-950 transition hover:bg-emerald-400"
-          >
-            <FileSpreadsheet className="h-4 w-4" />
-            Download Excel (.xlsx)
-            {!result.isSample && !licenseStatus.valid && <Lock className="h-3 w-3 opacity-80" />}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleExport("qbo")}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-white/15"
-          >
-            Download QuickBooks (.QBO)
-            {!result.isSample && !licenseStatus.valid && <Lock className="h-3 w-3 opacity-80" />}
-          </button>
-
-          <button
-            type="button"
             onClick={() => handleExport("csv")}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs font-medium text-white transition hover:bg-white/10"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:bg-slate-100 hover:text-slate-900"
           >
-            <Download className="h-3.5 w-3.5" />
-            Standard CSV
+            <Download className="h-3.5 w-3.5 text-slate-500" />
+            Download CSV
           </button>
-
-          <div className="flex items-center rounded-lg border border-white/15 bg-[#0c111a] p-0.5">
-            <select
-              value={secondaryFormat}
-              onChange={(e) => setSecondaryFormat(e.target.value as ExportFormat)}
-              aria-label="Additional accounting export format"
-              className="bg-transparent px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none"
-            >
-              <option value="quickbooks_csv" className="bg-[#0c111a]">
-                QuickBooks Online CSV (4-Col)
-              </option>
-              <option value="quickbooks_3col_csv" className="bg-[#0c111a]">
-                QuickBooks Online CSV (3-Col)
-              </option>
-              <option value="xero_csv" className="bg-[#0c111a]">
-                Xero Bank Feed CSV
-              </option>
-              <option value="ofx" className="bg-[#0c111a]">
-                OFX Money / Wave (.ofx)
-              </option>
-              <option value="json" className="bg-[#0c111a]">
-                JSON Ledger
-              </option>
-            </select>
-            <button
-              type="button"
-              onClick={() => handleExport(secondaryFormat)}
-              className="rounded-md bg-white/10 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-500 hover:text-slate-950"
-            >
-              Export Selected
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => handleExport("xero_csv")}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:bg-slate-100 hover:text-slate-900"
+          >
+            <Download className="h-3.5 w-3.5 text-slate-500" />
+            Xero CSV
+          </button>
         </div>
       </div>
 
       {/* License & Upgrade Modal */}
       {showUpgradeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-white/15 bg-[#0e1420] p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-emerald-400" />
-                <h3 className="text-base font-bold text-white">Unlock Unlimited & Accounting Exports</h3>
+                <Sparkles className="h-5 w-5 text-blue-600" />
+                <h3 className="text-base font-bold text-slate-900">
+                  Unlock Unlimited &amp; Accounting Exports
+                </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setShowUpgradeModal(false)}
-                className="rounded-lg p-1 text-slate-400 hover:bg-white/10 hover:text-white"
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
             {upgradeReason && (
-              <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
                 {upgradeReason}
               </p>
             )}
 
             {!result.isSample && result.transactions.length > 0 && (
-              <div className="mt-3 rounded-xl border border-white/10 bg-[#080c13] p-3">
-                <p className="text-[11px] font-medium text-slate-300">
-                  Skeptical before paying? Test QuickBooks/Excel import with the first{" "}
-                  {Math.min(FREE_ROW_LIMIT, result.transactions.length)} rows of your own file free:
+              <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-[11px] font-medium text-slate-700">
+                  Want to verify format compatibility before purchasing? Export the first{" "}
+                  {Math.min(FREE_ROW_LIMIT, result.transactions.length)} rows of your statement free:
                 </p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   <button
                     type="button"
                     onClick={() => handleExport("qbo", true)}
-                    className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/20"
+                    className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
                   >
                     Download Free 25-Row .QBO Sample
                   </button>
                   <button
                     type="button"
                     onClick={() => handleExport("csv", true)}
-                    className="rounded-lg border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] font-medium text-slate-200 hover:bg-white/10"
+                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
                   >
                     Download Free 25-Row .CSV Sample
                   </button>
@@ -1298,11 +1294,11 @@ export default function ConverterWorkbench({
                 onClick={() => {
                   if (CHECKOUT_URLS.pass7Day === "#pricing") setShowUpgradeModal(false);
                 }}
-                className="flex flex-col rounded-xl border border-white/15 bg-white/[0.03] p-3.5 transition hover:border-emerald-400/60"
+                className="flex flex-col rounded-xl border border-slate-200 bg-slate-50 p-3.5 transition hover:border-blue-400 hover:bg-blue-50/40"
               >
-                <span className="text-xs font-semibold text-slate-300">7-Day Audit Pass</span>
-                <span className="mono-nums mt-1 text-xl font-bold text-white">$12</span>
-                <span className="mt-1 text-[11px] text-slate-400">One-time · No subscription</span>
+                <span className="text-xs font-semibold text-slate-700">7-Day Audit Pass</span>
+                <span className="mono-nums mt-1 text-xl font-bold text-slate-900">$12</span>
+                <span className="mt-1 text-[11px] text-slate-500">One-time &middot; No renewal</span>
               </a>
 
               <a
@@ -1310,17 +1306,17 @@ export default function ConverterWorkbench({
                 onClick={() => {
                   if (CHECKOUT_URLS.proMonthly === "#pricing") setShowUpgradeModal(false);
                 }}
-                className="flex flex-col rounded-xl border border-emerald-500/50 bg-emerald-500/10 p-3.5 transition hover:bg-emerald-500/15"
+                className="flex flex-col rounded-xl border-2 border-blue-600 bg-blue-50/40 p-3.5 transition hover:bg-blue-50/80"
               >
-                <span className="text-xs font-semibold text-emerald-300">Annual Pro Bookkeeper</span>
-                <span className="mono-nums mt-1 text-xl font-bold text-white">$29 / year</span>
-                <span className="mt-1 text-[11px] text-slate-300">One-time pass, no auto-renewal</span>
+                <span className="text-xs font-semibold text-blue-700">Annual Pro Bookkeeper</span>
+                <span className="mono-nums mt-1 text-xl font-bold text-slate-900">$29 / year</span>
+                <span className="mt-1 text-[11px] text-slate-600">One-time pass, no renewal</span>
               </a>
             </div>
 
-            <form onSubmit={handleActivateLicense} className="mt-5 border-t border-white/10 pt-4">
-              <label className="block text-xs font-medium text-slate-300">
-                Already purchased via Polar / Lemon Squeezy? Enter License Key:
+            <form onSubmit={handleActivateLicense} className="mt-5 border-t border-slate-200 pt-4">
+              <label className="block text-xs font-medium text-slate-700">
+                Already purchased? Enter your License Key:
               </label>
               <div className="mt-2 flex gap-2">
                 <input
@@ -1330,18 +1326,18 @@ export default function ConverterWorkbench({
                     setLicenseKeyDraft(e.target.value);
                     if (licenseFeedback) setLicenseFeedback(null);
                   }}
-                  placeholder="VS-PRO-XXXX-XX or UUID key"
-                  className="mono-nums flex-1 rounded-lg border border-white/15 bg-[#080c13] px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:border-emerald-400 focus:outline-none"
+                  placeholder="VS-XXXX-XXXX-XXXX"
+                  className="mono-nums flex-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none"
                 />
                 <button
                   type="submit"
-                  className="rounded-lg bg-emerald-500 px-3.5 py-2 text-xs font-semibold text-slate-950 hover:bg-emerald-400"
+                  className="rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white hover:bg-slate-800"
                 >
                   Activate
                 </button>
               </div>
               {licenseStatus.message && !licenseStatus.valid && (
-                <p className="mt-1.5 text-xs text-rose-400">{licenseStatus.message}</p>
+                <p className="mt-1.5 text-xs text-rose-600">{licenseStatus.message}</p>
               )}
             </form>
           </div>
@@ -1350,24 +1346,26 @@ export default function ConverterWorkbench({
 
       {/* Paste Raw Statement / OCR Text Modal */}
       {showPasteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl border border-white/15 bg-[#0e1420] p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-2">
-                <FileText className="h-5 w-5 text-emerald-400" />
-                <h3 className="text-base font-bold text-white">Paste OCR or Raw Statement Text</h3>
+                <FileText className="h-5 w-5 text-blue-600" />
+                <h3 className="text-base font-bold text-slate-900">
+                  Paste OCR or Raw Statement Text
+                </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setShowPasteModal(false)}
-                className="rounded-lg p-1 text-slate-400 hover:bg-white/10 hover:text-white"
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <p className="mt-2 text-xs text-slate-400">
-              Works on copy-pasted scanned PDF OCR output, messy bank portal tables, or CSV lines.
-              Runs strictly inside browser RAM.
+            <p className="mt-2 text-xs text-slate-500">
+              Works on copy-pasted scanned PDF OCR output, online banking tables, or raw CSV text.
+              Processed strictly inside local browser memory.
             </p>
             <form onSubmit={handleParsePastedText} className="mt-4">
               <textarea
@@ -1375,19 +1373,19 @@ export default function ConverterWorkbench({
                 value={pastedText}
                 onChange={(e) => setPastedText(e.target.value)}
                 placeholder={`Opening Balance: 1000.00\n10/02/2026  AWS Cloud Services       -145.20    854.80\n10/05/2026  Stripe Payout Settlement  2400.00   3254.80\nClosing Balance: 3254.80`}
-                className="mono-nums w-full rounded-xl border border-white/15 bg-[#080c13] p-3 text-xs text-white placeholder:text-slate-500 focus:border-emerald-400 focus:outline-none"
+                className="mono-nums w-full rounded-xl border border-slate-300 bg-slate-50 p-3 text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none"
               />
               <div className="mt-4 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setShowPasteModal(false)}
-                  className="rounded-lg border border-white/15 px-3.5 py-2 text-xs font-medium text-slate-300 hover:bg-white/5"
+                  className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="rounded-lg bg-emerald-500 px-4 py-2 text-xs font-semibold text-slate-950 hover:bg-emerald-400"
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
                 >
                   Extract &amp; Reconcile Locally
                 </button>
@@ -1399,7 +1397,7 @@ export default function ConverterWorkbench({
 
       {/* Floating Toast */}
       {toast && (
-        <div className="fixed bottom-5 right-5 z-50 rounded-xl border border-emerald-500/40 bg-[#0d1522] px-4 py-3 text-xs font-medium text-emerald-200 shadow-xl">
+        <div className="fixed bottom-5 right-5 z-50 rounded-xl border border-slate-800 bg-slate-900 px-4 py-3 text-xs font-medium text-white shadow-xl">
           {toast}
         </div>
       )}
