@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VaultSheet Quick Converter</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="badge-dot" aria-hidden="true"></span>
+          <div>
+            <h1>VaultSheet</h1>
+            <p class="subtitle">100% Local RAM Converter</p>
+          </div>
+        </div>
+        <span class="pill">0 KB Uploaded</span>
+      </header>
+
+      <label id="dropzone" class="dropzone" for="fileInput">
+        <input id="fileInput" type="file" accept=".pdf,.csv,application/pdf,text/csv" hidden />
+        <strong>Drop PDF or CSV Bank Statement</strong>
+        <span>Runs locally inside extension memory</span>
+      </label>
+
+      <div id="statusBox" class="status hidden"></div>
+
+      <section id="summaryGrid" class="summary hidden">
+        <div class="metric">
+          <span>Rows</span>
+          <strong id="rowCount">0</strong>
+        </div>
+        <div class="metric">
+          <span>Total Credits</span>
+          <strong id="totalCredits" class="pos">$0.00</strong>
+        </div>
+        <div class="metric">
+          <span>Total Debits</span>
+          <strong id="totalDebits" class="neg">$0.00</strong>
+        </div>
+      </section>
+
+      <section id="tableWrap" class="table-wrap hidden">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Description</th>
+              <th class="num">Amount</th>
+            </tr>
+          </thead>
+          <tbody id="previewBody"></tbody>
+        </table>
+      </section>
+
+      <div id="actions" class="actions hidden">
+        <button id="exportCsvBtn" type="button" class="btn btn-secondary">Download CSV</button>
+        <button id="exportQboBtn" type="button" class="btn btn-primary">Download .QBO</button>
+      </div>
+
+      <footer class="footer">
+        <a
+          id="openFullWorkbench"
+          href="https://vaultsheet.app/#workbench"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Need compressed PDFs / XLSX / Xero? Open Full Workbench &rarr;
+        </a>
+      </footer>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

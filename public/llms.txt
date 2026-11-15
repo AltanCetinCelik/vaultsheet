@@ -1,0 +1,19 @@
+# VaultSheet
+
+> 100% browser-local PDF bank statement and financial ledger converter to Excel (.xlsx), CSV, QuickBooks (.qbo / Web Connect CSV), Xero CSV, OFX, and JSON.
+
+## Core Architecture
+- Zero server uploads: all PDF parsing runs strictly in browser RAM via a local `pdfjs-dist` Web Worker plus a deterministic coordinate table reconstructor.
+- Mathematical audit verification: verifies `Opening Balance + Credits - Debits == Closing Balance` down to exact cents and flags row-level running balance mismatches inline.
+- Multi-line stitching: merges wrapped wire details, card suffixes, and FX notes directly into the parent transaction row.
+- Localized number/date parsing: supports US (`1,234.56`), European (`1.234,56`), accounting parentheses `(450.25)`, and `CR/DR` credit/debit notation.
+
+## Key Routes
+- `/` — Interactive statement workbench, built-in real PDF 1.4 sample generator (`Chase`, `Wise`, `Mercury`, `Revolut`), competitor comparison, and pricing.
+- `/convert` — Searchable directory of all 64 bank and format converter presets across US, UK, EU, Canada, Australia, and Global fintechs.
+- `/convert/[slug]` — Dedicated bank/format converter pages with pre-configured rules, format profiles, and FAQs.
+
+## Pricing
+- Free Preview: $0 (up to 25 exported rows per file, full parsing and cent reconciliation audit).
+- 7-Day Tax & Audit Pass: $12 one-time pass (unlimited rows, multi-file merge, all 7 formats).
+- Pro Bookkeeper: $19/month (unlimited client statements, commercial usage, Chrome Extension access).

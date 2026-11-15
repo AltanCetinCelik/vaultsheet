@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "VaultSheet — Local PDF Bank Statement Converter",
+  "version": "1.0.0",
+  "description": "Extract transactions from PDF & CSV bank statements locally in browser RAM. Export clean CSV or QuickBooks (.qbo) with zero uploads.",
+  "permissions": ["downloads"],
+  "host_permissions": [],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "VaultSheet Local Converter",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  }
+}

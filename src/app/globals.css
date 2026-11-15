@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-canvas: #070a0f;
+    --bg-surface: #0d121b;
+    --bg-elevated: #121925;
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.16);
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --accent-emerald: #10b981;
+    --accent-amber: #f59e0b;
+  }
+
+  html {
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
+    background:
+      radial-gradient(1100px 540px at 50% -120px, rgba(16, 185, 129, 0.09), transparent 65%),
+      linear-gradient(180deg, #070a0f 0%, #090d14 100%);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.mono-nums {
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.grid-backdrop {
+  background-image:
+    linear-gradient(to right, rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+  background-size: 36px 36px;
+}
+
+button:not(:disabled),
+[role="button"],
+select,
+summary {
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid rgba(16, 185, 129, 0.75);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
