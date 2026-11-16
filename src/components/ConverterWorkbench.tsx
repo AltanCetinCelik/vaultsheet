@@ -16,6 +16,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Clock,
+  Columns2,
   Copy,
   Download,
   ExternalLink,
@@ -36,6 +37,7 @@ import {
   UserCheck,
   X,
 } from "lucide-react";
+import PdfPagePreview from "@/components/PdfPagePreview";
 import type {
   AccountType,
   CategoryName,
@@ -50,6 +52,7 @@ import {
   loadSamplePreset,
   parsePdfFileInBrowser,
   parseRawStatementText,
+  PdfPasswordRequiredError,
   reconcileTransactions,
   toCents,
 } from "@/lib/statementParser";
@@ -93,6 +96,8 @@ const CUSTOM_RULES_STORAGE_KEY = "vaultsheet_custom_rules_v1";
 const CUSTOM_RULES_CHANGE_EVENT = "vaultsheet-rules-changed";
 const HISTORY_STORAGE_KEY = "vaultsheet_history_v1";
 const HISTORY_CHANGE_EVENT = "vaultsheet-history-changed";
+const FREE_XLSX_STORAGE_KEY = "vaultsheet_free_xlsx_used_v1";
+const FREE_XLSX_CHANGE_EVENT = "vaultsheet-free-xlsx-changed";
 
 interface CustomCategoryRule {
   id: string;
@@ -128,15 +133,37 @@ function formatMoney(val: number | null, currency: string): string {
         ? "€"
         : currency === "GBP"
           ? "£"
-          : currency === "CAD"
-            ? "CA$"
-            : currency === "AUD"
-              ? "A$"
-              : "$";
+          : currency === "TRY"
+            ? "₺"
+            : currency === "CAD"
+              ? "CA$"
+              : currency === "AUD"
+                ? "A$"
+                : "$";
     return `${sign}${sym}${formatted}`;
   } catch {
     return `${sign}${abs.toFixed(2)} ${currency}`;
   }
+}
+
+function subscribeFreeXlsxStorage(onStoreChange: () => void) {
+  if (typeof window === "undefined") return () => {};
+  const handler = () => onStoreChange();
+  window.addEventListener("storage", handler);
+  window.addEventListener(FREE_XLSX_CHANGE_EVENT, handler);
+  return () => {
+    window.removeEventListener("storage", handler);
+    window.removeEventListener(FREE_XLSX_CHANGE_EVENT, handler);
+  };
+}
+
+function loadRawFreeXlsxFlag(): string {
+  if (typeof window === "undefined") return "0";
+  return window.localStorage.getItem(FREE_XLSX_STORAGE_KEY) ?? "0";
+}
+
+function getServerFreeXlsxSnapshot(): string {
+  return "0";
 }
 
 function subscribeLicenseStorage(onStoreChange: () => void) {
@@ -281,6 +308,21 @@ export default function ConverterWorkbench({
 
   const [isDragging, setIsDragging] = useState(false);
   const [isParsing, setIsParsing] = useState(false);
+  const [parseStatusText, setParseStatusText] = useState<string>(
+    "Reading and reconciling your PDF safely on this device..."
+  );
+  const [activePdfBytes, setActivePdfBytes] = useState<Uint8Array | null>(() =>
+    generateSampleStatementPdf(defaultPreset)
+  );
+  const [activePdfPassword, setActivePdfPassword] = useState<string | undefined>(undefined);
+  const [previewPage, setPreviewPage] = useState(1);
+  const [showPdfSplitView, setShowPdfSplitView] = useState(true);
+
+  const [pendingPasswordFile, setPendingPasswordFile] = useState<File | null>(null);
+  const [pdfPasswordInput, setPdfPasswordInput] = useState("");
+  const [pdfPasswordError, setPdfPasswordError] = useState<string | null>(null);
+  const [isUnlockingPdf, setIsUnlockingPdf] = useState(false);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
   const [showAdvancedTools, setShowAdvancedTools] = useState(false);
@@ -306,6 +348,11 @@ export default function ConverterWorkbench({
     subscribeHistoryStorage,
     loadRawHistoryJson,
     getServerHistorySnapshot
+  );
+  const rawFreeXlsxFlag = useSyncExternalStore(
+    subscribeFreeXlsxStorage,
+    loadRawFreeXlsxFlag,
+    getServerFreeXlsxSnapshot
   );
 
   // Auth & Account modals
@@ -393,6 +440,16 @@ export default function ConverterWorkbench({
       rowLimit: ANONYMOUS_ROW_LIMIT,
     };
   }, [storedProfile, storedLicenseKey]);
+
+  const freeExcelUsed = rawFreeXlsxFlag === "1";
+  const isMultiFileCurrent = result.metadata.fileName.endsWith("-statements-merged.pdf");
+  const freeExcelAvailable =
+    !result.isSample &&
+    !accountTier.isPaid &&
+    !freeExcelUsed &&
+    !isMultiFileCurrent &&
+    result.transactions.length > 0 &&
+    result.transactions.length <= 100;
 
   const licenseKeyInput = licenseKeyDraft ?? storedLicenseKey;
 
@@ -548,6 +605,9 @@ export default function ConverterWorkbench({
     setActivePreset(presetId);
     const parsed = loadSamplePreset(presetId);
     setResult(parsed);
+    setActivePdfBytes(generateSampleStatementPdf(presetId));
+    setActivePdfPassword(undefined);
+    setPreviewPage(1);
     setExplicitOpening(parsed.reconciliation.openingBalance);
     setExplicitClosing(parsed.reconciliation.closingBalance);
     setCategoryFilter("ALL");
@@ -558,6 +618,9 @@ export default function ConverterWorkbench({
   const handleRestoreHistory = useCallback(
     (entry: SavedConversionEntry) => {
       setResult(entry.result);
+      setActivePdfBytes(null);
+      setActivePdfPassword(undefined);
+      setPreviewPage(1);
       setExplicitOpening(entry.result.reconciliation.openingBalance);
       setExplicitClosing(entry.result.reconciliation.closingBalance);
       setCategoryFilter("ALL");
@@ -599,15 +662,24 @@ export default function ConverterWorkbench({
       }
 
       setIsParsing(true);
+      setParseStatusText("Reading and reconciling your PDF safely on this device...");
       try {
         const parsedList: ParseResult[] = [];
+        let firstPdfBytes: Uint8Array | null = null;
+
         for (const f of files) {
           const lower = f.name.toLowerCase();
           if (lower.endsWith(".csv") || lower.endsWith(".txt")) {
             const raw = await f.text();
             parsedList.push(parseRawStatementText(raw, f.name));
           } else {
-            parsedList.push(await parsePdfFileInBrowser(f));
+            if (!firstPdfBytes) {
+              firstPdfBytes = new Uint8Array(await f.arrayBuffer());
+            }
+            const parsedPdf = await parsePdfFileInBrowser(f, {
+              onStatus: (msg) => setParseStatusText(msg),
+            });
+            parsedList.push(parsedPdf);
           }
         }
 
@@ -621,7 +693,9 @@ export default function ConverterWorkbench({
           setExplicitOpening(finalResult.reconciliation.openingBalance);
           setExplicitClosing(finalResult.reconciliation.closingBalance);
           showToast(
-            `Converted ${finalResult.transactions.length} transactions locally (${finalResult.metadata.parseMode}).`
+            finalResult.metadata.parseMode === "ocr-tesseract"
+              ? `Scanned PDF read via local OCR: ${finalResult.transactions.length} transactions extracted.`
+              : `Converted ${finalResult.transactions.length} transactions locally (${finalResult.metadata.parseMode}).`
           );
         } else {
           const mergedRows = applyCustomRulesToRows(
@@ -664,17 +738,76 @@ export default function ConverterWorkbench({
           );
         }
 
+        setActivePdfBytes(firstPdfBytes);
+        setActivePdfPassword(undefined);
+        setPreviewPage(1);
+        setShowPdfSplitView(Boolean(firstPdfBytes));
         setResult(finalResult);
         saveConversionToHistory(finalResult);
         setCategoryFilter("ALL");
         setSearchQuery("");
         setViewMode("results");
+      } catch (err) {
+        if (err instanceof PdfPasswordRequiredError) {
+          setPendingPasswordFile(files[0]);
+          setPdfPasswordInput("");
+          setPdfPasswordError(null);
+        } else {
+          showToast("Could not parse this file. Try pasting OCR text or checking file format.");
+        }
       } finally {
         setIsParsing(false);
+        setParseStatusText("Reading and reconciling your PDF safely on this device...");
       }
     },
     [showToast, applyCustomRulesToRows]
   );
+
+  const handleUnlockPdfSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pendingPasswordFile || !pdfPasswordInput) {
+      setPdfPasswordError("Enter the password for this PDF.");
+      return;
+    }
+
+    setIsUnlockingPdf(true);
+    setPdfPasswordError(null);
+    try {
+      const pdfBytes = new Uint8Array(await pendingPasswordFile.arrayBuffer());
+      const parsedRaw = await parsePdfFileInBrowser(pendingPasswordFile, {
+        password: pdfPasswordInput,
+        onStatus: (msg) => setParseStatusText(msg),
+      });
+      const finalResult: ParseResult = {
+        ...parsedRaw,
+        transactions: applyCustomRulesToRows(parsedRaw.transactions),
+      };
+      setActivePdfBytes(pdfBytes);
+      setActivePdfPassword(pdfPasswordInput);
+      setPreviewPage(1);
+      setShowPdfSplitView(true);
+      setExplicitOpening(finalResult.reconciliation.openingBalance);
+      setExplicitClosing(finalResult.reconciliation.closingBalance);
+      setResult(finalResult);
+      saveConversionToHistory(finalResult);
+      setCategoryFilter("ALL");
+      setSearchQuery("");
+      setPendingPasswordFile(null);
+      setPdfPasswordInput("");
+      setViewMode("results");
+      showToast(
+        `Unlocked and extracted ${finalResult.transactions.length} transactions locally.`
+      );
+    } catch (err) {
+      if (err instanceof PdfPasswordRequiredError) {
+        setPdfPasswordError(err.message);
+      } else {
+        setPdfPasswordError("Could not decrypt or parse this PDF file.");
+      }
+    } finally {
+      setIsUnlockingPdf(false);
+    }
+  };
 
   const handleCellChange = (
     rowId: string,
@@ -792,6 +925,9 @@ export default function ConverterWorkbench({
       transactions: applyCustomRulesToRows(parsedRaw.transactions),
     };
     setResult(parsed);
+    setActivePdfBytes(null);
+    setActivePdfPassword(undefined);
+    setPreviewPage(1);
     saveConversionToHistory(parsed);
     setExplicitOpening(parsed.reconciliation.openingBalance);
     setExplicitClosing(parsed.reconciliation.closingBalance);
@@ -831,13 +967,24 @@ export default function ConverterWorkbench({
     const format: ExportFormat = choice;
     const isProFormat = format === "xlsx" || format === "qbo" || format === "ofx";
     const isMultiFileBatch = result.metadata.fileName.endsWith("-statements-merged.pdf");
+    const qualifiesFirstFreeExcel =
+      !result.isSample &&
+      !accountTier.isPaid &&
+      !sampleSliceOnly &&
+      !isMultiFileBatch &&
+      !freeExcelUsed &&
+      (format === "xlsx" || format === "csv") &&
+      result.transactions.length <= 100;
     const exceedsTierRows =
-      !result.isSample && result.transactions.length > accountTier.rowLimit;
+      !result.isSample &&
+      !qualifiesFirstFreeExcel &&
+      result.transactions.length > accountTier.rowLimit;
 
     if (
       !result.isSample &&
       !accountTier.isPaid &&
       !sampleSliceOnly &&
+      !qualifiesFirstFreeExcel &&
       (isProFormat || exceedsTierRows || isMultiFileBatch)
     ) {
       if (!accountTier.isLoggedIn && exceedsTierRows && !isProFormat) {
@@ -855,7 +1002,7 @@ export default function ConverterWorkbench({
                     ? `Free accounts allow up to ${FREE_ROW_LIMIT} rows per PDF`
                     : `Guest preview allows up to ${ANONYMOUS_ROW_LIMIT} rows (or ${FREE_ROW_LIMIT} rows with a Free Account)`
                 }. Export Unlimited rows with a $12 Pass or test ${Math.min(accountTier.rowLimit, result.transactions.length)} rows free first.`
-              : `Full .XLSX workbooks, QuickBooks (.QBO), and .OFX files on uploaded PDFs require a $12 Pass or Annual Pro license (or test a ${accountTier.rowLimit}-row sample below first).`
+              : `You've already used your 1st Free Excel export, or .QBO/.OFX requires a $12 Pass or Annual Pro license. Unlock unlimited exports below!`
         );
         setAuthTab("key");
       }
@@ -905,10 +1052,17 @@ export default function ConverterWorkbench({
       triggerBlobDownload(exportToJsonString(exportTarget), mimeType, downloadName);
     }
 
+    if (qualifiesFirstFreeExcel && typeof window !== "undefined") {
+      window.localStorage.setItem(FREE_XLSX_STORAGE_KEY, "1");
+      window.dispatchEvent(new Event(FREE_XLSX_CHANGE_EVENT));
+    }
+
     showToast(
       sampleSliceOnly
         ? `Downloaded ${accountTier.rowLimit}-row test (${downloadName}) locally.`
-        : `Downloaded ${downloadName} locally — 0 bytes sent to any server.`
+        : qualifiesFirstFreeExcel
+          ? `Downloaded your 1st full ${format.toUpperCase()} file free! Upgrade anytime for unlimited files & QuickBooks .QBO.`
+          : `Downloaded ${downloadName} locally — 0 bytes sent to any server.`
     );
   };
 
@@ -1229,9 +1383,7 @@ export default function ConverterWorkbench({
             </div>
 
             <h2 className="mt-5 text-xl font-bold text-slate-900 sm:text-2xl">
-              {isParsing
-                ? "Reading and reconciling your PDF safely on this device..."
-                : "Drop your PDF bank statement here"}
+              {isParsing ? parseStatusText : "Drop your PDF bank statement here"}
             </h2>
 
             <p className="mt-2 max-w-lg text-sm text-slate-500">
@@ -1381,8 +1533,13 @@ export default function ConverterWorkbench({
                 >
                   <FileSpreadsheet className="h-4 w-4" />
                   Download Excel (.xlsx)
-                  {!result.isSample && !accountTier.isPaid && (
-                    <Lock className="h-3 w-3 opacity-85" />
+                  {freeExcelAvailable ? (
+                    <span className="rounded bg-emerald-400/95 px-1.5 py-0.5 text-[10px] font-extrabold text-slate-950">
+                      1st File Free
+                    </span>
+                  ) : (
+                    !result.isSample &&
+                    !accountTier.isPaid && <Lock className="h-3 w-3 opacity-85" />
                   )}
                 </button>
 
@@ -1514,7 +1671,22 @@ export default function ConverterWorkbench({
               )}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {activePdfBytes && (
+                <button
+                  type="button"
+                  onClick={() => setShowPdfSplitView((prev) => !prev)}
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold shadow-2xs transition ${
+                    showPdfSplitView
+                      ? "border-blue-500 bg-blue-50 text-blue-700"
+                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  <Columns2 className="h-3.5 w-3.5" />
+                  Split View: PDF + Table
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => handleExport("audit_pdf")}
@@ -1634,6 +1806,7 @@ export default function ConverterWorkbench({
                     <option value="USD">USD</option>
                     <option value="EUR">EUR</option>
                     <option value="GBP">GBP</option>
+                    <option value="TRY">TRY</option>
                     <option value="CAD">CAD</option>
                     <option value="AUD">AUD</option>
                   </select>
@@ -1756,132 +1929,160 @@ export default function ConverterWorkbench({
             </div>
           )}
 
-          {/* Interactive Ledger Table */}
-          <div className="max-h-[430px] overflow-auto bg-white">
-            <table className="w-full border-collapse text-left text-xs">
-              <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                <tr>
-                  <th className="px-3.5 py-2.5">Date</th>
-                  <th className="px-3.5 py-2.5">Description</th>
-                  <th className="px-3.5 py-2.5">Category</th>
-                  <th className="px-3.5 py-2.5 text-right">Amount ({metadata.currency})</th>
-                  <th className="px-3.5 py-2.5 text-right">Balance</th>
-                  <th className="px-3.5 py-2.5 text-center">Audit</th>
-                  <th className="px-3.5 py-2.5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredRows.map((row) => (
-                  <tr
-                    key={row.id}
-                    className={`transition hover:bg-blue-50/40 ${
-                      row.balanceStatus === "mismatch" ? "bg-amber-50/60" : ""
-                    }`}
-                  >
-                    <td className="px-3.5 py-2 align-top">
-                      <input
-                        type="text"
-                        value={row.date}
-                        onChange={(e) => handleCellChange(row.id, "date", e.target.value)}
-                        aria-label="Transaction date"
-                        className="mono-nums w-24 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-slate-700 focus:border-blue-500 focus:bg-white focus:outline-none"
-                      />
-                    </td>
-                    <td className="min-w-[260px] px-3.5 py-2 align-top">
-                      <input
-                        type="text"
-                        value={row.description}
-                        onChange={(e) =>
-                          handleCellChange(row.id, "description", e.target.value)
-                        }
-                        aria-label="Transaction description"
-                        className="w-full rounded border border-transparent bg-transparent px-1.5 py-0.5 font-medium text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none"
-                      />
-                    </td>
-                    <td className="px-3.5 py-2 align-top">
-                      <select
-                        value={row.category}
-                        onChange={(e) =>
-                          handleCellChange(row.id, "category", e.target.value)
-                        }
-                        aria-label="Transaction category"
-                        className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 hover:border-slate-300 focus:border-blue-500 focus:outline-none"
-                      >
-                        {CATEGORIES.map((c) => (
-                          <option key={c} value={c}>
-                            {c}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="px-3.5 py-2 text-right align-top">
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={row.amount}
-                        onChange={(e) => handleCellChange(row.id, "amount", e.target.value)}
-                        aria-label="Transaction amount"
-                        className={`mono-nums w-24 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-right font-semibold focus:border-blue-500 focus:bg-white focus:outline-none ${
-                          row.amount >= 0 ? "text-emerald-700" : "text-slate-900"
-                        }`}
-                      />
-                    </td>
-                    <td className="px-3.5 py-2 text-right align-top">
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={row.balance ?? ""}
-                        onChange={(e) => handleCellChange(row.id, "balance", e.target.value)}
-                        aria-label="Running balance"
-                        className="mono-nums w-24 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-right text-slate-600 focus:border-blue-500 focus:bg-white focus:outline-none"
-                      />
-                    </td>
-                    <td className="px-3.5 py-2 text-center align-top">
-                      <div className="inline-flex items-center gap-1">
-                        {row.balanceStatus === "matched" ? (
-                          <span className="inline-flex items-center rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
-                            Matched
-                          </span>
-                        ) : row.balanceStatus === "mismatch" ? (
-                          <span className="inline-flex items-center rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
-                            Diff
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-slate-400">—</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-3.5 py-2 text-right align-top">
-                      <div className="inline-flex items-center gap-1">
-                        <button
-                          type="button"
-                          title="Flip Debit / Credit Sign"
-                          onClick={() => handleFlipSign(row.id)}
-                          className="rounded border border-slate-200 p-1 text-slate-500 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
-                        >
-                          <ArrowLeftRight className="h-3 w-3" />
-                        </button>
-                        <button
-                          type="button"
-                          title="Delete row"
-                          onClick={() => handleDeleteRow(row.id)}
-                          className="rounded border border-slate-200 p-1 text-slate-500 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {filteredRows.length === 0 && (
+          {/* Side-by-Side Live PDF Split Viewer + Extracted Ledger Table */}
+          <div
+            className={
+              showPdfSplitView && activePdfBytes
+                ? "grid lg:grid-cols-12"
+                : "block"
+            }
+          >
+            {showPdfSplitView && activePdfBytes && (
+              <div className="border-b border-slate-200 lg:col-span-5 lg:border-b-0 lg:border-r">
+                <PdfPagePreview
+                  pdfBytes={activePdfBytes}
+                  pdfPassword={activePdfPassword}
+                  activePage={previewPage}
+                  onPageChange={setPreviewPage}
+                />
+              </div>
+            )}
+
+            <div
+              className={`${
+                showPdfSplitView && activePdfBytes ? "lg:col-span-7" : "w-full"
+              } max-h-[540px] overflow-auto bg-white`}
+            >
+              <table className="w-full border-collapse text-left text-xs">
+                <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                   <tr>
-                    <td colSpan={7} className="px-4 py-12 text-center text-sm text-slate-500">
-                      No matching transactions found.
-                    </td>
+                    <th className="px-3.5 py-2.5">Date</th>
+                    <th className="px-3.5 py-2.5">Description</th>
+                    <th className="px-3.5 py-2.5">Category</th>
+                    <th className="px-3.5 py-2.5 text-right">Amount ({metadata.currency})</th>
+                    <th className="px-3.5 py-2.5 text-right">Balance</th>
+                    <th className="px-3.5 py-2.5 text-center">Audit</th>
+                    <th className="px-3.5 py-2.5 text-right">Actions</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredRows.map((row) => (
+                    <tr
+                      key={row.id}
+                      onClick={() => {
+                        if (row.page && row.page !== previewPage) {
+                          setPreviewPage(row.page);
+                        }
+                      }}
+                      className={`transition hover:bg-blue-50/40 ${
+                        row.balanceStatus === "mismatch" ? "bg-amber-50/60" : ""
+                      }`}
+                    >
+                      <td className="px-3.5 py-2 align-top">
+                        <input
+                          type="text"
+                          value={row.date}
+                          onChange={(e) => handleCellChange(row.id, "date", e.target.value)}
+                          aria-label="Transaction date"
+                          className="mono-nums w-24 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-slate-700 focus:border-blue-500 focus:bg-white focus:outline-none"
+                        />
+                      </td>
+                      <td className="min-w-[220px] px-3.5 py-2 align-top">
+                        <input
+                          type="text"
+                          value={row.description}
+                          onChange={(e) =>
+                            handleCellChange(row.id, "description", e.target.value)
+                          }
+                          aria-label="Transaction description"
+                          className="w-full rounded border border-transparent bg-transparent px-1.5 py-0.5 font-medium text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none"
+                        />
+                      </td>
+                      <td className="px-3.5 py-2 align-top">
+                        <select
+                          value={row.category}
+                          onChange={(e) =>
+                            handleCellChange(row.id, "category", e.target.value)
+                          }
+                          aria-label="Transaction category"
+                          className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 hover:border-slate-300 focus:border-blue-500 focus:outline-none"
+                        >
+                          {CATEGORIES.map((c) => (
+                            <option key={c} value={c}>
+                              {c}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-3.5 py-2 text-right align-top">
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={row.amount}
+                          onChange={(e) => handleCellChange(row.id, "amount", e.target.value)}
+                          aria-label="Transaction amount"
+                          className={`mono-nums w-24 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-right font-semibold focus:border-blue-500 focus:bg-white focus:outline-none ${
+                            row.amount >= 0 ? "text-emerald-700" : "text-slate-900"
+                          }`}
+                        />
+                      </td>
+                      <td className="px-3.5 py-2 text-right align-top">
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={row.balance ?? ""}
+                          onChange={(e) => handleCellChange(row.id, "balance", e.target.value)}
+                          aria-label="Running balance"
+                          className="mono-nums w-24 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-right text-slate-600 focus:border-blue-500 focus:bg-white focus:outline-none"
+                        />
+                      </td>
+                      <td className="px-3.5 py-2 text-center align-top">
+                        <div className="inline-flex items-center gap-1">
+                          {row.balanceStatus === "matched" ? (
+                            <span className="inline-flex items-center rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+                              Matched
+                            </span>
+                          ) : row.balanceStatus === "mismatch" ? (
+                            <span className="inline-flex items-center rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                              Diff
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400">—</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3.5 py-2 text-right align-top">
+                        <div className="inline-flex items-center gap-1">
+                          <button
+                            type="button"
+                            title="Flip Debit / Credit Sign"
+                            onClick={() => handleFlipSign(row.id)}
+                            className="rounded border border-slate-200 p-1 text-slate-500 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+                          >
+                            <ArrowLeftRight className="h-3 w-3" />
+                          </button>
+                          <button
+                            type="button"
+                            title="Delete row"
+                            onClick={() => handleDeleteRow(row.id)}
+                            className="rounded border border-slate-200 p-1 text-slate-500 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredRows.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-12 text-center text-sm text-slate-500">
+                        No matching transactions found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {/* Tier & Account Status Strip */}
@@ -1894,6 +2095,10 @@ export default function ConverterWorkbench({
               ) : accountTier.isPaid ? (
                 <span className="font-medium text-emerald-700">
                   {accountTier.planName} active: Unlimited rows, batch PDF merge &amp; all formats unlocked.
+                </span>
+              ) : freeExcelAvailable ? (
+                <span className="font-medium text-emerald-700">
+                  1st Full Uploaded Statement Gift: Download Excel (.xlsx) free right above (up to 100 rows) to verify quality!
                 </span>
               ) : accountTier.isLoggedIn ? (
                 <span className="text-slate-600">
@@ -2376,6 +2581,71 @@ export default function ConverterWorkbench({
                   className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
                 >
                   Extract &amp; Reconcile Locally
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Unlock Password-Protected PDF Modal */}
+      {pendingPasswordFile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2">
+                <Lock className="h-5 w-5 text-blue-600" />
+                <h3 className="text-base font-bold text-slate-900">
+                  Password-Protected PDF
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingPasswordFile(null);
+                  setPdfPasswordInput("");
+                  setPdfPasswordError(null);
+                }}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Enter the password to decrypt{" "}
+              <strong className="text-slate-800">{pendingPasswordFile.name}</strong> locally in
+              browser memory. Your password is never transmitted anywhere.
+            </p>
+            <form onSubmit={handleUnlockPdfSubmit} className="mt-4 space-y-3">
+              <input
+                type="password"
+                autoFocus
+                required
+                value={pdfPasswordInput}
+                onChange={(e) => setPdfPasswordInput(e.target.value)}
+                placeholder="Enter statement PDF password..."
+                className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none"
+              />
+              {pdfPasswordError && (
+                <p className="text-xs font-medium text-rose-600">{pdfPasswordError}</p>
+              )}
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPendingPasswordFile(null);
+                    setPdfPasswordInput("");
+                  }}
+                  className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUnlockingPdf}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-60"
+                >
+                  {isUnlockingPdf ? "Unlocking..." : "Unlock & Convert Locally"}
                 </button>
               </div>
             </form>

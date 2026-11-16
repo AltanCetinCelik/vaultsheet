@@ -1,4 +1,4 @@
-export type SamplePresetId = "chase" | "wise" | "mercury" | "revolut";
+export type SamplePresetId = "chase" | "wise" | "mercury" | "revolut" | "garanti";
 
 export type AccountType = "CHECKING" | "SAVINGS" | "CREDITCARD";
 
@@ -75,7 +75,7 @@ export interface StatementMetadata {
   routingNumber: string;
   periodStart: string | null;
   periodEnd: string | null;
-  parseMode: "pdfjs-browser" | "native-stream";
+  parseMode: "pdfjs-browser" | "native-stream" | "ocr-tesseract";
 }
 
 export interface ParseResult {

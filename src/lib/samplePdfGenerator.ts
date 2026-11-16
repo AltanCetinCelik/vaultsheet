@@ -41,6 +41,16 @@ export const BANK_PRESETS: Record<SamplePresetId, BankPresetMeta> = {
     sampleFileName: "revolut-business-gbp-statement-sample.pdf",
     summary: "Split Money Out / Money In columns with card spend, transfers, and bank fees.",
   },
+  garanti: {
+    id: "garanti",
+    label: "Garanti BBVA (TRY)",
+    bankName: "Garanti BBVA Ticari Vadesiz TL",
+    currency: "TRY",
+    accountLast4: "6190",
+    dateHint: "DD.MM.YYYY",
+    sampleFileName: "garanti-bbva-ticari-ekstre-sample.pdf",
+    summary: "Turkish format (DD.MM.YYYY, 1.240,50 TL), Tarih / Aciklama / Tutar / Bakiye.",
+  },
 };
 
 interface SampleTxnSpec {
@@ -53,7 +63,9 @@ interface PresetBlueprint {
   bankTitle: string;
   accountLine: string;
   periodLine: string;
-  currency: "USD" | "EUR" | "GBP";
+  openingLabel?: string;
+  closingLabel?: string;
+  currency: "USD" | "EUR" | "GBP" | "TRY";
   numberStyle: "us" | "eu";
   layout: "single-amount" | "split-debit-credit";
   colHeaders: string[];
@@ -314,6 +326,70 @@ const BLUEPRINTS: Record<SamplePresetId, PresetBlueprint> = {
       },
     ],
   },
+  garanti: {
+    bankTitle: "TURKIYE GARANTI BANKASI A.S. - TICARI VADESIZ TL HESAP EKSTRESI",
+    accountLine: "Hesap No: 000482-0006190   Para Birimi: TRY   Donem: Ekim 2026",
+    periodLine: "Ekstre Tarih Araligi: 01.10.2026 - 31.10.2026",
+    openingLabel: "Devreden Bakiye",
+    closingLabel: "Donem Sonu Bakiyesi",
+    currency: "TRY",
+    numberStyle: "eu",
+    layout: "single-amount",
+    colHeaders: ["Tarih", "Aciklama", "Tutar", "Bakiye"],
+    openingCents: 14500000, // 145.000,00 TRY
+    txns: [
+      {
+        date: "02.10.2026",
+        lines: ["IYZICO UYE ISYERI ODEMESI", "REF: 202610029941 POS HAKEDIS"],
+        amountCents: 6845000,
+      },
+      {
+        date: "04.10.2026",
+        lines: ["TURK TELEKOM KURUMSAL FIBER", "OTOMATIK FATURA ODEME #4410"],
+        amountCents: -189050,
+      },
+      {
+        date: "07.10.2026",
+        lines: ["AMAZON WEB SERVICES EMEA SARL", "BULUT SUNUCU KULLANIM FATURASI"],
+        amountCents: -1425000,
+      },
+      {
+        date: "11.10.2026",
+        lines: ["TRENDYOL SATICI HAKEDIS AKTARIMI", "E-TICARET PAZARYERI SETTLEMENT"],
+        amountCents: 9432000,
+      },
+      {
+        date: "15.10.2026",
+        lines: ["MAAS ODEMESI EKIM BORDRO", "TOPLU PERSONEL EFT TALIMATI"],
+        amountCents: -8500000,
+      },
+      {
+        date: "17.10.2026",
+        lines: ["GARANTI FAST HAVALE UCRETI", "BSMV DAHIL ISLEM MASRAFI"],
+        amountCents: -1240,
+      },
+      {
+        date: "20.10.2026",
+        lines: ["SHELL PETROL KURUMSAL TASITMATIK", "FILO AKARYAKIT DONEM FATURASI"],
+        amountCents: -648075,
+      },
+      {
+        date: "23.10.2026",
+        lines: ["GOOGLE IRELAND REKLAM HARCAMASI", "GOOGLE ADS KAMPANYA ODEMESI"],
+        amountCents: -2250000,
+      },
+      {
+        date: "26.10.2026",
+        lines: ["PARASUT YAZILIM ABONELIK", "YILLIK ON MUHASEBE PAKETI"],
+        amountCents: -420000,
+      },
+      {
+        date: "29.10.2026",
+        lines: ["MUSTERI FATURA TAHSILATI EFT", "ACIKLAMA: NO 2026-884 PROJE BEDELI"],
+        amountCents: 5200000,
+      },
+    ],
+  },
 };
 
 function escapePdfString(text: string): string {
@@ -346,7 +422,7 @@ export function generateSampleStatementPdf(presetId: SamplePresetId): Uint8Array
     buildTextOp(
       42,
       703,
-      `Opening Balance: ${formatCents(bp.openingCents, bp.numberStyle)} ${bp.currency}`,
+      `${bp.openingLabel ?? "Opening Balance"}: ${formatCents(bp.openingCents, bp.numberStyle)} ${bp.currency}`,
       true,
       10
     )
@@ -355,7 +431,7 @@ export function generateSampleStatementPdf(presetId: SamplePresetId): Uint8Array
     buildTextOp(
       320,
       703,
-      `Closing Balance: ${formatCents(closingCents, bp.numberStyle)} ${bp.currency}`,
+      `${bp.closingLabel ?? "Closing Balance"}: ${formatCents(closingCents, bp.numberStyle)} ${bp.currency}`,
       true,
       10
     )

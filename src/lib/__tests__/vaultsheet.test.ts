@@ -20,7 +20,7 @@ import { computeKeyChecksum, verifyLicenseKey } from "@/lib/licensing";
 import { getSeoBankBySlug, SEO_BANKS } from "@/lib/seoCatalog";
 import type { PositionedTextItem, SamplePresetId, TransactionRow } from "@/lib/types";
 
-const PRESET_IDS: SamplePresetId[] = ["chase", "wise", "mercury", "revolut"];
+const PRESET_IDS: SamplePresetId[] = ["chase", "wise", "mercury", "revolut", "garanti"];
 
 describe("Sample PDF 1.4 Generator & Deterministic Parser", () => {
   it.each(PRESET_IDS)("generates valid binary PDF and reconciles 100% for %s", (presetId) => {
@@ -269,5 +269,23 @@ describe("Commercial Hardening: Multi-Section, Split Runs, OCR Paste & QuickBook
     expect(ascii.trimEnd().endsWith("%%EOF")).toBe(true);
     expect(ascii).toContain("VAULTSHEET - MATHEMATICAL RECONCILIATION & AUDIT CERTIFICATE");
     expect(ascii).toContain("VERIFIED TO THE EXACT CENT");
+  });
+
+  it("parses Turkish Garanti BBVA statements (TRY, Devreden Bakiye, (B)/(A), Turkish months)", () => {
+    const bytes = generateSampleStatementPdf("garanti");
+    const parsed = parsePdfBytesDeterministic(bytes, "garanti-bbva-ekim.pdf", true);
+
+    expect(parsed.metadata.currency).toBe("TRY");
+    expect(parsed.metadata.bankDetected).toContain("Garanti");
+    expect(parsed.metadata.periodStart).toBe("2026-10-02");
+    expect(parsed.metadata.periodEnd).toBe("2026-10-29");
+    expect(parsed.transactions[0]?.date).toBe("2026-10-02");
+    expect(parsed.transactions).toHaveLength(10);
+    expect(parsed.reconciliation.isFullyReconciled).toBe(true);
+    expect(parsed.reconciliation.discrepancy).toBe(0);
+
+    expect(parseLocalizedNumber("1.250,40 TL (B)")).toBe(-1250.4);
+    expect(parseLocalizedNumber("4.800,00 ₺ (A)")).toBe(4800);
+    expect(normalizeDateString("14 Ekim 2026")).toBe("2026-10-14");
   });
 });

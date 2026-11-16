@@ -13,29 +13,71 @@ import { BANK_PRESETS, generateSampleStatementPdf } from "./samplePdfGenerator";
 const MONTH_MAP: Record<string, string> = {
   jan: "01",
   january: "01",
+  oca: "01",
+  ocak: "01",
   feb: "02",
   february: "02",
+  sub: "02",
+  subat: "02",
+  şub: "02",
+  şubat: "02",
   mar: "03",
   march: "03",
+  mart: "03",
   apr: "04",
   april: "04",
+  nis: "04",
+  nisan: "04",
   may: "05",
+  mayis: "05",
+  mayıs: "05",
   jun: "06",
   june: "06",
+  haz: "06",
+  haziran: "06",
   jul: "07",
   july: "07",
+  tem: "07",
+  temmuz: "07",
   aug: "08",
   august: "08",
+  agu: "08",
+  ağu: "08",
+  agustos: "08",
+  ağustos: "08",
   sep: "09",
   sept: "09",
   september: "09",
+  eyl: "09",
+  eylul: "09",
+  eylül: "09",
   oct: "10",
   october: "10",
+  eki: "10",
+  ekim: "10",
   nov: "11",
   november: "11",
+  kas: "11",
+  kasim: "11",
+  kasım: "11",
   dec: "12",
   december: "12",
+  ara: "12",
+  aralik: "12",
+  aralık: "12",
 };
+
+function normLatinFold(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/i\u0307/g, "i")
+    .replace(/ğ/g, "g")
+    .replace(/ü/g, "u")
+    .replace(/ş/g, "s")
+    .replace(/ı/g, "i")
+    .replace(/ö/g, "o")
+    .replace(/ç/g, "c");
+}
 
 export function toCents(value: number): number {
   return Math.round(value * 100);
@@ -55,15 +97,15 @@ export function parseLocalizedNumber(raw: string): number | null {
     isNegative = true;
     cleaned = cleaned.slice(1, -1).trim();
   }
-  if (/\bDR\b$/i.test(cleaned)) {
+  if (/(?:\bDR\b|\bBOR[CÇ]\b|\(B\)|\sB)$/i.test(cleaned)) {
     isNegative = true;
-    cleaned = cleaned.replace(/\bDR\b$/i, "").trim();
-  } else if (/\bCR\b$/i.test(cleaned)) {
-    cleaned = cleaned.replace(/\bCR\b$/i, "").trim();
+    cleaned = cleaned.replace(/(?:\bDR\b|\bBOR[CÇ]\b|\(B\)|\sB)$/i, "").trim();
+  } else if (/(?:\bCR\b|\bALACAK\b|\(A\)|\sA)$/i.test(cleaned)) {
+    cleaned = cleaned.replace(/(?:\bCR\b|\bALACAK\b|\(A\)|\sA)$/i, "").trim();
   }
 
-  cleaned = cleaned.replace(/^(USD|EUR|GBP|CAD|AUD|CHF|TRY)\s*/i, "").trim();
-  cleaned = cleaned.replace(/\s*(USD|EUR|GBP|CAD|AUD|CHF|TRY)$/i, "").trim();
+  cleaned = cleaned.replace(/^(USD|EUR|GBP|CAD|AUD|CHF|TRY|TL)\s*/i, "").trim();
+  cleaned = cleaned.replace(/\s*(USD|EUR|GBP|CAD|AUD|CHF|TRY|TL)$/i, "").trim();
   cleaned = cleaned.replace(/[$€£¥₺\s]/g, "");
 
   if (cleaned.startsWith("-")) {
@@ -191,11 +233,11 @@ export function normalizeDateString(
     }
   }
 
-  // DD MMM YYYY (02 Oct 2026, 02-Oct-2026)
-  const dmy = s.match(/^(\d{1,2})[\s-]+([A-Za-z]{3,9})(?:[\s,]+(\d{2,4}))?$/);
+  // DD MMM YYYY (02 Oct 2026, 02-Oct-2026, 02 Ekim 2026)
+  const dmy = s.match(/^(\d{1,2})[\s-]+([A-Za-zÇĞİÖŞÜçğıöşü]{3,12})(?:[\s,]+(\d{2,4}))?$/);
   if (dmy) {
     const day = Number(dmy[1]);
-    const month = MONTH_MAP[dmy[2].toLowerCase()];
+    const month = MONTH_MAP[dmy[2].toLowerCase()] ?? MONTH_MAP[normLatinFold(dmy[2])];
     let yr = dmy[3] ? Number(dmy[3]) : defaultYear;
     if (yr < 100) yr += 2000;
     if (month && day >= 1 && day <= 31) {
@@ -204,9 +246,9 @@ export function normalizeDateString(
   }
 
   // MMM DD, YYYY (Oct 02, 2026 or Oct 02)
-  const mdy = s.match(/^([A-Za-z]{3,9})\s+(\d{1,2})(?:,?\s+(\d{2,4}))?$/);
+  const mdy = s.match(/^([A-Za-zÇĞİÖŞÜçğıöşü]{3,12})\s+(\d{1,2})(?:,?\s+(\d{2,4}))?$/);
   if (mdy) {
-    const month = MONTH_MAP[mdy[1].toLowerCase()];
+    const month = MONTH_MAP[mdy[1].toLowerCase()] ?? MONTH_MAP[normLatinFold(mdy[1])];
     const day = Number(mdy[2]);
     let yr = mdy[3] ? Number(mdy[3]) : defaultYear;
     if (yr < 100) yr += 2000;
@@ -222,9 +264,9 @@ export function classifyMerchantCategory(
   description: string,
   amount: number
 ): CategoryName {
-  const d = description.toLowerCase();
+  const d = normLatinFold(description);
   if (
-    /(stripe|paypal|paddle|lemon\s*squeezy|polar|shopify.*payout|bacs.*settlement|client retainer|payout|settlement)/i.test(
+    /(stripe|paypal|paddle|lemon\s*squeezy|polar|shopify.*payout|bacs.*settlement|client retainer|payout|settlement|iyzico|paytr|hakedis|tahsilat|trendyol|hepsiburada)/i.test(
       d
     ) &&
     amount > 0
@@ -232,42 +274,46 @@ export function classifyMerchantCategory(
     return "Revenue & Payouts";
   }
   if (
-    /(wire.*fee|service charge|account maintenance|plan fee|bank fee|fx conversion fee|overdraft|atm fee)/i.test(
+    /(wire.*fee|service charge|account maintenance|plan fee|bank fee|fx conversion fee|overdraft|atm fee|bsmv|havale ucret|eft ucret|islem masraf|komisyon|hesap isletim)/i.test(
       d
     )
   ) {
     return "Bank Fees";
   }
   if (
-    /(gusto|rippling|payroll|deel|salary|contractor|wages|adp|justworks)/i.test(d)
+    /(gusto|rippling|payroll|deel|salary|contractor|wages|adp|justworks|maas|bordro|personel|sgk)/i.test(d)
   ) {
     return "Payroll & Contractors";
   }
   if (
-    /(aws|amazon web services|hetzner|vercel|cloudflare|openai|anthropic|github|figma|linear|notion|slack|google workspace|heroku|digitalocean|supabase|datadog|sentry)/i.test(
+    /(aws|amazon web services|hetzner|vercel|cloudflare|openai|anthropic|github|figma|linear|notion|slack|google workspace|heroku|digitalocean|supabase|datadog|sentry|parasut|bulut|yazilim)/i.test(
       d
     )
   ) {
     return "SaaS & Cloud";
   }
   if (
-    /(google ads|meta platforms|facebook ads|linkedin|tiktok ads|reddit ads|ads billing)/i.test(
+    /(google ads|google ireland.*reklam|reklam|meta platforms|facebook ads|linkedin|tiktok ads|reddit ads|ads billing)/i.test(
       d
     )
   ) {
     return "Marketing & Ads";
   }
   if (
-    /(airline|united|lufthansa|delta|trainline|uber|lyft|hotel|airbnb|coffee|sweetgreen|restaurant|cafe|flight|rail)/i.test(
+    /(airline|united|lufthansa|delta|trainline|uber|lyft|hotel|airbnb|coffee|sweetgreen|restaurant|cafe|flight|rail|shell|opet|tasitmatik|thy|pegasus|taksi)/i.test(
       d
     )
   ) {
     return "Travel & Meals";
   }
-  if (/(wise|revolut|sepa|transfer|ach|wire|treasury|fx)/i.test(d)) {
+  if (/(wise|revolut|sepa|transfer|ach|wire|treasury|fx|fast|havale|eft)/i.test(d)) {
     return "Transfers & FX";
   }
-  if (/(electric|internet|verizon|comcast|wework|regus|office|staples)/i.test(d)) {
+  if (
+    /(electric|elektrik|dogalgaz|turk telekom|turkcell|vodafone|fiber|fatura|internet|verizon|comcast|wework|regus|office|staples)/i.test(
+      d
+    )
+  ) {
     return "Utilities & Office";
   }
   return amount > 0 ? "Revenue & Payouts" : "Uncategorized";
@@ -500,7 +546,7 @@ function detectStatementMetadata(
   rows: VisualRow[],
   fileName: string,
   pageCount: number,
-  parseMode: "pdfjs-browser" | "native-stream"
+  parseMode: "pdfjs-browser" | "native-stream" | "ocr-tesseract"
 ): {
   metadata: StatementMetadata;
   openingBalance: number | null;
@@ -509,13 +555,22 @@ function detectStatementMetadata(
   defaultYear: number;
 } {
   const headerText = rows.slice(0, 6).map((r) => r.text).join("\n");
-  const fullText = rows.slice(0, 25).map((r) => r.text).join("\n");
-  const headerLower = headerText.toLowerCase();
-  const lower = fullText.toLowerCase();
+  const fullText = rows.slice(0, 28).map((r) => r.text).join("\n");
+  const headerLower = normLatinFold(headerText);
+  const lower = normLatinFold(fullText);
 
   let bankDetected = "Bank Statement PDF";
   let routingNumber = "021000021";
   const bankPatterns: [RegExp, string, string][] = [
+    [/garanti\s*bbva|turkiye garanti bankasi|garanti bank/i, "Garanti BBVA", "021000021"],
+    [/is bankasi|turkiye is bankasi|isbank/i, "Turkiye Is Bankasi", "021000021"],
+    [/yapi\s*kredi|yapikredi/i, "Yapi Kredi", "021000021"],
+    [/akbank/i, "Akbank", "021000021"],
+    [/ziraat\s*bank/i, "Ziraat Bankasi", "021000021"],
+    [/enpara|qnb\s*finans/i, "QNB / Enpara", "021000021"],
+    [/vakifbank/i, "VakifBank", "021000021"],
+    [/halkbank/i, "Halkbank", "021000021"],
+    [/denizbank/i, "DenizBank", "021000021"],
     [/chase|jpmorgan/i, "Chase Bank", "021000021"],
     [/wise|transferwise/i, "Wise Business", "026073150"],
     [/mercury/i, "Mercury", "021000021"],
@@ -561,22 +616,25 @@ function detectStatementMetadata(
 
   let accountType: AccountType = "CHECKING";
   if (
-    /\b(credit\s*card|minimum\s*payment|credit\s*limit|new\s*charges|cash\s*advance|billing\s*cycle|statement\s*balance)\b/i.test(
-      `${fullText} ${fileName}`
+    /\b(credit\s*card|kredi\s*karti|minimum\s*payment|asgari\s*odeme|credit\s*limit|new\s*charges|cash\s*advance|billing\s*cycle|statement\s*balance|donem\s*borcu)\b/i.test(
+      `${lower} ${fileName}`
     )
   ) {
     accountType = "CREDITCARD";
-  } else if (/\b(savings\s*account|high[- ]yield\s*savings|money\s*market)\b/i.test(fullText)) {
+  } else if (/\b(savings\s*account|vadeli|high[- ]yield\s*savings|money\s*market)\b/i.test(lower)) {
     accountType = "SAVINGS";
   }
 
   let currency = "USD";
-  if (/\bEUR\b|€/.test(fullText)) currency = "EUR";
+  if (/(?:\bTRY\b|\bTL\b|₺)/.test(fullText)) currency = "TRY";
+  else if (/\bEUR\b|€/.test(fullText)) currency = "EUR";
   else if (/\bGBP\b|£/.test(fullText)) currency = "GBP";
   else if (/\bCAD\b/.test(fullText)) currency = "CAD";
   else if (/\bAUD\b/.test(fullText)) currency = "AUD";
 
-  const acctMatch = fullText.match(/(?:Account(?:\s*(?:Number|No\.?|Ending))?|IBAN)\s*[:#]?\s*[*A-Z0-9\s-]*(\d{4})\b/i);
+  const acctMatch = fullText.match(
+    /(?:Account(?:\s*(?:Number|No\.?|Ending))?|IBAN|Hesap\s*(?:No|Numarasi|Numarası)?|M[uü][sş]teri\s*No)\s*[:#]?\s*[*A-Z0-9\s-]*(\d{4})\b/i
+  );
   const accountLast4 = acctMatch ? acctMatch[1] : "0000";
 
   const yearMatch = fullText.match(/\b(202[0-9])\b/);
@@ -585,22 +643,28 @@ function detectStatementMetadata(
   const preferDayFirst =
     currency === "EUR" ||
     currency === "GBP" ||
-    /\b(Wise|Revolut|Barclays|Monzo|Lloyds|HSBC|ING|N26)\b/i.test(bankDetected) ||
-    /\d{2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}/i.test(fullText);
+    currency === "TRY" ||
+    /\b(Wise|Revolut|Barclays|Monzo|Lloyds|HSBC|ING|N26|Garanti|Akbank|Ziraat|Enpara)\b/i.test(
+      bankDetected
+    ) ||
+    /\d{2}\.\d{2}\.\d{4}/.test(fullText) ||
+    /\d{2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|Oca|Sub|Mar|Nis|Haz|Tem|Agu|Eyl|Eki|Kas|Ara)/i.test(
+      fullText
+    );
 
   let openingBalance: number | null = null;
   let closingBalance: number | null = null;
 
   for (const row of rows) {
-    const t = row.text;
-    const openMatch = t.match(
-      /(?:(?:Opening|Beginning|Starting|Previous|Prior)\s+Balance|Balance\s+(?:Forward|Brought\s+Forward))\s*[:\s]+([()\-+$€£\d.,]+(?:\s*(?:CR|DR|USD|EUR|GBP))?)/i
+    const tNorm = normLatinFold(row.text);
+    const openMatch = tNorm.match(
+      /(?:(?:opening|beginning|starting|previous|prior)\s+balance|balance\s+(?:forward|brought\s+forward)|devreden\s+bakiye|acilis\s+bakiyesi|onceki\s+(?:donem\s+)?bakiyesi|baslangic\s+bakiyesi|donem\s+basi\s+bakiyesi)\s*[:\s]+([()\-+$€£₺\d.,]+(?:\s*(?:cr|dr|usd|eur|gbp|try|tl|\(b\)|\(a\)|b|a))?)/i
     );
     if (openMatch && openingBalance === null) {
       openingBalance = parseLocalizedNumber(openMatch[1]);
     }
-    const closeMatch = t.match(
-      /(?:(?:Closing|Ending|New|Current|Final|Total\s+New)\s+Balance|Balance\s+Carried\s+Forward)\s*[:\s]+([()\-+$€£\d.,]+(?:\s*(?:CR|DR|USD|EUR|GBP))?)/i
+    const closeMatch = tNorm.match(
+      /(?:(?:closing|ending|new|current|final|total\s+new)\s+balance|balance\s+carried\s+forward|donem\s+sonu\s+bakiyesi|kapanis\s+bakiyesi|son\s+bakiye|guncel\s+bakiye)\s*[:\s]+([()\-+$€£₺\d.,]+(?:\s*(?:cr|dr|usd|eur|gbp|try|tl|\(b\)|\(a\)|b|a))?)/i
     );
     if (closeMatch) {
       closingBalance = parseLocalizedNumber(closeMatch[1]);
@@ -641,10 +705,14 @@ interface ColumnLayout {
 function detectColumnLayout(rows: VisualRow[]): ColumnLayout | null {
   for (let i = 0; i < rows.length; i++) {
     const items = rows[i].items;
-    const labels = items.map((it) => it.str.trim().toLowerCase());
-    const hasDate = labels.some((l) => /^date|posted|value date/.test(l));
+    const labels = items.map((it) => normLatinFold(it.str.trim()));
+    const hasDate = labels.some((l) =>
+      /^(date|posted|value date|tarih|islem tarihi|valor|datum|fecha)/.test(l)
+    );
     const hasMoneyCol = labels.some((l) =>
-      /(amount|debit|credit|money out|money in|withdrawal|deposit|paid out|paid in|balance)/.test(l)
+      /(amount|debit|credit|money out|money in|withdrawal|deposit|paid out|paid in|balance|tutar|borc|alacak|bakiye|cikis|giris|saldo)/.test(
+        l
+      )
     );
     if (!hasDate || !hasMoneyCol) continue;
 
@@ -656,13 +724,23 @@ function detectColumnLayout(rows: VisualRow[]): ColumnLayout | null {
     let balanceX: number | null = null;
 
     for (const it of items) {
-      const l = it.str.trim().toLowerCase();
-      if (/^date|posted/.test(l)) dateX = it.x;
-      else if (/description|details|particulars|merchant|narrative/.test(l)) descX = it.x;
-      else if (/debit|money out|withdrawal|paid out|spent/.test(l)) debitX = it.x;
-      else if (/credit|money in|deposit|paid in|received/.test(l)) creditX = it.x;
-      else if (/^amount/.test(l)) amountX = it.x;
-      else if (/balance/.test(l)) balanceX = it.x;
+      const l = normLatinFold(it.str.trim());
+      if (/^(date|posted|tarih|islem tarihi|datum|fecha)/.test(l)) dateX = it.x;
+      else if (
+        /(description|details|particulars|merchant|narrative|aciklama|islem aciklamasi|detay|hareket)/.test(
+          l
+        )
+      ) {
+        descX = it.x;
+      } else if (/(debit|money out|withdrawal|paid out|spent|borc|cikis|cekilen)/.test(l)) {
+        debitX = it.x;
+      } else if (/(credit|money in|deposit|paid in|received|alacak|giris|yatirilan)/.test(l)) {
+        creditX = it.x;
+      } else if (/^(amount|tutar|islem tutari|miktar)/.test(l)) {
+        amountX = it.x;
+      } else if (/(balance|bakiye|kalan bakiye|saldo)/.test(l)) {
+        balanceX = it.x;
+      }
     }
 
     const numericXs = [debitX, creditX, amountX, balanceX]
@@ -685,12 +763,26 @@ function detectColumnLayout(rows: VisualRow[]): ColumnLayout | null {
 }
 
 function isIgnorableNoiseLine(text: string): boolean {
-  const lower = text.trim().toLowerCase();
+  const lower = normLatinFold(text.trim());
   if (!lower) return true;
-  if (/^page\s+\d+(\s+of\s+\d+)?$/.test(lower)) return true;
-  if (/^(opening|beginning|closing|ending|previous)\s+balance\b/.test(lower)) return true;
-  if (/^(date|description|details|debit|credit|amount|balance|\s)+$/i.test(lower)) return true;
-  if (/^(statement period|account number|iban|sort code|continued on next page)/i.test(lower)) return true;
+  if (/^(page|sayfa)\s+\d+(\s+(of|\/)\s+\d+)?$/.test(lower)) return true;
+  if (
+    /^(opening|beginning|closing|ending|previous)\s+balance\b|^(devreden|acilis|kapanis|donem sonu)\s+bakiye/.test(
+      lower
+    )
+  ) {
+    return true;
+  }
+  if (/^(date|description|details|debit|credit|amount|balance|tarih|aciklama|tutar|borc|alacak|bakiye|\s)+$/i.test(lower)) {
+    return true;
+  }
+  if (
+    /^(statement period|account number|iban|sort code|continued on next page|hesap no|ekstre tarih)/i.test(
+      lower
+    )
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -864,19 +956,19 @@ export function reconcileTransactions(
 }
 
 const LEADING_DATE_REGEX =
-  /^(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}(?:,?\s*\d{2,4})?|\d{1,2}[\s-]+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*(?:[\s,]+\d{2,4})?)\s+(.+)$/i;
+  /^(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|Oca|Sub|Nis|Haz|Tem|Agu|Eyl|Eki|Kas|Ara)[a-zçğıöşü]*\s+\d{1,2}(?:,?\s*\d{2,4})?|\d{1,2}[\s-]+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|Oca|Sub|Nis|Haz|Tem|Agu|Eyl|Eki|Kas|Ara)[a-zçğıöşü]*(?:[\s,]+\d{2,4})?)\s+(.+)$/i;
 
 function detectSectionSign(text: string): "credit" | "debit" | null {
-  const clean = text.trim().toLowerCase();
+  const clean = normLatinFold(text.trim());
   if (
-    /\b(deposits?\s+and\s+additions?|electronic\s+deposits?|credits?\s+and\s+additions?|payments?\s+and\s+(?:other\s+)?credits?|money\s+in)\b/i.test(
+    /\b(deposits?\s+and\s+additions?|electronic\s+deposits?|credits?\s+and\s+additions?|payments?\s+and\s+(?:other\s+)?credits?|money\s+in|para\s+girisleri|gelen\s+havaleler|tahsilatlar)\b/i.test(
       clean
     )
   ) {
     return "credit";
   }
   if (
-    /\b(withdrawals?\s+and\s+(?:other\s+)?subtractions?|atm\s*&?\s*debit\s+card\s+withdrawals?|electronic\s+withdrawals?|checks?\s+paid|other\s+subtractions?|service\s+fees?|purchases?\s+and\s+adjustments?|new\s+charges?|card\s+transactions?|money\s+out)\b/i.test(
+    /\b(withdrawals?\s+and\s+(?:other\s+)?subtractions?|atm\s*&?\s*debit\s+card\s+withdrawals?|electronic\s+withdrawals?|checks?\s+paid|other\s+subtractions?|service\s+fees?|purchases?\s+and\s+adjustments?|new\s+charges?|card\s+transactions?|money\s+out|para\s+cikislari|giden\s+havaleler|harcamalar)\b/i.test(
       clean
     )
   ) {
@@ -1007,7 +1099,7 @@ export function buildParseResultFromTextItems(
   items: PositionedTextItem[],
   fileName: string,
   pageCount: number,
-  parseMode: "pdfjs-browser" | "native-stream",
+  parseMode: "pdfjs-browser" | "native-stream" | "ocr-tesseract",
   isSample = false
 ): ParseResult {
   const rows = groupItemsIntoVisualRows(items);
@@ -1190,11 +1282,26 @@ export function loadSamplePreset(presetId: SamplePresetId): ParseResult {
   return parsed;
 }
 
+export class PdfPasswordRequiredError extends Error {
+  constructor(message = "This PDF requires a password to open.") {
+    super(message);
+    this.name = "PdfPasswordRequiredError";
+  }
+}
+
 /**
- * Browser client parser: tries full pdfjs-dist extraction first (handles compressed streams & CMap fonts),
- * and seamlessly falls back to native-stream coordinate extraction if worker fails.
+ * Browser client parser:
+ * 1) Tries full pdfjs-dist extraction (supporting password-protected PDFs).
+ * 2) If digital text is missing (scanned/image PDF), automatically renders pages to canvas and runs local tesseract.js OCR.
+ * 3) Falls back to native uncompressed text stream extractor if needed.
  */
-export async function parsePdfFileInBrowser(file: File): Promise<ParseResult> {
+export async function parsePdfFileInBrowser(
+  file: File,
+  options?: {
+    password?: string;
+    onStatus?: (msg: string) => void;
+  }
+): Promise<ParseResult> {
   const arrayBuffer = await file.arrayBuffer();
   const bytes = new Uint8Array(arrayBuffer);
 
@@ -1203,8 +1310,29 @@ export async function parsePdfFileInBrowser(file: File): Promise<ParseResult> {
     if (pdfjs.GlobalWorkerOptions) {
       pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
     }
-    const loadingTask = pdfjs.getDocument({ data: bytes.slice() });
-    const pdfDoc = await loadingTask.promise;
+    const loadingTask = pdfjs.getDocument({
+      data: bytes.slice(),
+      password: options?.password,
+    });
+
+    let pdfDoc;
+    try {
+      pdfDoc = await loadingTask.promise;
+    } catch (docErr) {
+      const errInfo = docErr as { name?: string; message?: string; code?: number };
+      if (
+        errInfo?.name === "PasswordException" ||
+        /password/i.test(errInfo?.message || "")
+      ) {
+        throw new PdfPasswordRequiredError(
+          options?.password
+            ? "Incorrect PDF password. Please double-check and try again."
+            : "This PDF statement is password-protected."
+        );
+      }
+      throw docErr;
+    }
+
     const allItems: PositionedTextItem[] = [];
 
     for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
@@ -1224,16 +1352,66 @@ export async function parsePdfFileInBrowser(file: File): Promise<ParseResult> {
       }
     }
 
-    if (allItems.length > 0) {
-      return buildParseResultFromTextItems(
+    if (allItems.length >= 5) {
+      const textParsed = buildParseResultFromTextItems(
         allItems,
         file.name,
         pdfDoc.numPages,
         "pdfjs-browser",
         false
       );
+      if (textParsed.transactions.length > 0) {
+        return textParsed;
+      }
     }
-  } catch {
+
+    // Scanned image PDF detected -> run browser-local OCR via tesseract.js
+    if (typeof document !== "undefined") {
+      const pagesToScan = Math.min(pdfDoc.numPages, 10);
+      options?.onStatus?.(
+        `Scanned image PDF detected — running local OCR (page 1/${pagesToScan})...`
+      );
+      const { createWorker } = await import("tesseract.js");
+      const worker = await createWorker("eng+tur").catch(() => createWorker("eng"));
+
+      try {
+        const ocrPagesText: string[] = [];
+        for (let pageNum = 1; pageNum <= pagesToScan; pageNum++) {
+          options?.onStatus?.(
+            `Running local on-device OCR on page ${pageNum} of ${pagesToScan}...`
+          );
+          const page = await pdfDoc.getPage(pageNum);
+          const viewport = page.getViewport({ scale: 2.0 });
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.floor(viewport.width));
+          canvas.height = Math.max(1, Math.floor(viewport.height));
+          await page.render({ canvas, viewport }).promise;
+          const ocrRes = await worker.recognize(canvas);
+          if (ocrRes?.data?.text) {
+            ocrPagesText.push(ocrRes.data.text);
+          }
+        }
+
+        const combinedText = ocrPagesText.join("\n").trim();
+        if (combinedText) {
+          const ocrParsed = parseRawStatementText(combinedText, file.name);
+          return {
+            ...ocrParsed,
+            metadata: {
+              ...ocrParsed.metadata,
+              pageCount: pdfDoc.numPages,
+              parseMode: "ocr-tesseract",
+            },
+          };
+        }
+      } finally {
+        await worker.terminate().catch(() => {});
+      }
+    }
+  } catch (err) {
+    if (err instanceof PdfPasswordRequiredError) {
+      throw err;
+    }
     // Fallback to deterministic uncompressed stream extractor
   }
 

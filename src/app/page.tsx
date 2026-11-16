@@ -3,7 +3,6 @@ import {
   ArrowRight,
   Check,
   CheckCircle2,
-  Chrome,
   FileSpreadsheet,
   Lock,
   ShieldCheck,
@@ -430,20 +429,24 @@ OUT  chase-oct-2026.qbo ->  Local Blob Download`}
                     <span className="text-sm text-slate-500">forever</span>
                   </div>
                   <p className="mt-2 text-sm text-slate-600">
-                    Test {ANONYMOUS_ROW_LIMIT} rows as guest, or sign up free for {FREE_ROW_LIMIT} rows/PDF &amp; history.
+                    1st full uploaded statement Excel (.xlsx) export free (up to 100 rows), plus {FREE_ROW_LIMIT} CSV rows/PDF with a free account.
                   </p>
                   <ul className="mt-6 space-y-3 text-sm text-slate-700">
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-600 shrink-0" />
-                      Full PDF parsing &amp; reconciliation audit
+                      <span><strong>1st full Excel (.xlsx) export free</strong> (up to 100 rows)</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-emerald-600 shrink-0" />
+                      Side-by-side live PDF preview &amp; reconciliation audit
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-emerald-600 shrink-0" />
+                      Local Tesseract OCR (scanned PDFs) &amp; password PDF unlock
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-600 shrink-0" />
                       Export {ANONYMOUS_ROW_LIMIT} CSV rows (guest) / {FREE_ROW_LIMIT} rows (free account)
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-emerald-600 shrink-0" />
-                      Saved recent conversion history locally
                     </li>
                   </ul>
                 </div>
@@ -536,96 +539,6 @@ OUT  chase-oct-2026.qbo ->  Local Blob Download`}
                 >
                   Get Annual Pro Pass ($29/yr)
                 </a>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Chrome Extension Section */}
-        <section id="extension" className="border-b border-slate-200 bg-[#f8fafc] py-16 scroll-mt-20">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="grid items-center gap-8 rounded-2xl border border-slate-200 bg-white p-8 shadow-xs lg:grid-cols-2">
-              <div>
-                <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                  <Chrome className="h-3.5 w-3.5 text-blue-600" /> Manifest V3 Chrome Extension Included
-                </span>
-                <h2 className="mt-4 text-2xl font-bold text-slate-900 sm:text-3xl">
-                  Convert Statements Directly Inside Your Browser Toolbar
-                </h2>
-                <p className="mt-3 text-sm text-slate-600 leading-relaxed">
-                  Just downloaded a statement from your online banking portal or reviewing QuickBooks
-                  in a tab? Click the VaultSheet extension icon to inspect transaction totals and
-                  export CSV or QBO immediately&mdash;without switching apps or uploading files.
-                </p>
-                <div className="mt-6 flex flex-wrap items-center gap-3">
-                  <a
-                    href="/vaultsheet-chrome-extension.zip"
-                    download
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2.5 text-xs font-semibold text-white shadow-xs hover:bg-slate-800 transition-colors"
-                  >
-                    Download Extension (.zip)
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </a>
-                  <Link
-                    href="/convert"
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-                  >
-                    Explore Supported Formats
-                  </Link>
-                </div>
-              </div>
-
-              <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-5">
-                <div className="flex items-center justify-between border-b border-slate-200 pb-3 text-xs text-slate-500">
-                  <span className="font-semibold text-slate-800">Quick Bookkeeper Workflow</span>
-                  <span className="rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                    100% Offline Safe
-                  </span>
-                </div>
-                <div className="space-y-2.5 text-xs">
-                  <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[11px] font-bold text-white">
-                      1
-                    </span>
-                    <div>
-                      <p className="font-semibold text-slate-900">
-                        Download PDF from your bank portal
-                      </p>
-                      <p className="mt-0.5 text-slate-500">
-                        Grab your monthly checking, savings, or credit card statement from Chase,
-                        BofA, Wise, or any bank.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[11px] font-bold text-white">
-                      2
-                    </span>
-                    <div>
-                      <p className="font-semibold text-slate-900">
-                        Open VaultSheet in Chrome toolbar
-                      </p>
-                      <p className="mt-0.5 text-slate-500">
-                        Zero permissions to read your browsing tabs or banking logins&mdash;works
-                        strictly on files you choose.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[11px] font-bold text-white">
-                      3
-                    </span>
-                    <div>
-                      <p className="font-semibold text-slate-900">
-                        Export reconciled .QBO or CSV in one click
-                      </p>
-                      <p className="mt-0.5 text-slate-500">
-                        Verify deposits, withdrawals, and net totals immediately before importing
-                        into QuickBooks or Xero.
-                      </p>
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
