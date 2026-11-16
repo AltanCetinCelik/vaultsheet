@@ -2,6 +2,7 @@
 
 import React, {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -10,19 +11,27 @@ import React, {
 import {
   AlertTriangle,
   ArrowLeftRight,
+  Check,
   CheckCircle2,
+  ChevronDown,
+  Copy,
   Download,
+  ExternalLink,
+  FileCheck2,
   FileSpreadsheet,
   FileText,
   KeyRound,
   Lock,
+  LogOut,
   Plus,
   Search,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Tag,
   Trash2,
   Upload,
+  UserCheck,
   X,
 } from "lucide-react";
 import type {
@@ -43,6 +52,7 @@ import {
   toCents,
 } from "@/lib/statementParser";
 import {
+  exportAuditCertificatePdfBytes,
   exportToCsv,
   exportToExcelBytes,
   exportToJsonString,
@@ -53,8 +63,9 @@ import {
   CHECKOUT_URLS,
   FREE_ROW_LIMIT,
   loadStoredLicenseKey,
-  saveStoredLicenseKey,
+  saveStoredLicenseProfile,
   verifyLicenseKey,
+  type StoredLicenseProfile,
 } from "@/lib/licensing";
 
 const CATEGORIES: CategoryName[] = [
@@ -95,6 +106,23 @@ function formatMoney(val: number | null, currency: string): string {
 }
 
 const LICENSE_CHANGE_EVENT = "vaultsheet-license-changed";
+const LICENSE_PROFILE_STORAGE_KEY = "vaultsheet_license_profile_v1";
+const CUSTOM_RULES_STORAGE_KEY = "vaultsheet_custom_rules_v1";
+const CUSTOM_RULES_CHANGE_EVENT = "vaultsheet-rules-changed";
+
+interface CustomCategoryRule {
+  id: string;
+  keyword: string;
+  category: CategoryName;
+}
+
+const DEFAULT_CUSTOM_RULES: CustomCategoryRule[] = [
+  { id: "rule-stripe", keyword: "STRIPE", category: "Revenue & Payouts" },
+  { id: "rule-aws", keyword: "AWS", category: "SaaS & Cloud" },
+  { id: "rule-gusto", keyword: "GUSTO", category: "Payroll & Contractors" },
+  { id: "rule-ads", keyword: "GOOGLE ADS", category: "Marketing & Ads" },
+];
+const DEFAULT_CUSTOM_RULES_JSON = JSON.stringify(DEFAULT_CUSTOM_RULES);
 
 function subscribeLicenseStorage(onStoreChange: () => void) {
   if (typeof window === "undefined") return () => {};
@@ -109,6 +137,54 @@ function subscribeLicenseStorage(onStoreChange: () => void) {
 
 function getServerLicenseSnapshot(): string {
   return "";
+}
+
+function loadRawLicenseProfileJson(): string {
+  if (typeof window === "undefined") return "";
+  const raw = window.localStorage.getItem(LICENSE_PROFILE_STORAGE_KEY) ?? "";
+  if (!raw) return "";
+  try {
+    const parsed = JSON.parse(raw) as StoredLicenseProfile;
+    if (parsed?.expiresAt && Date.parse(parsed.expiresAt) <= Date.now()) {
+      return "";
+    }
+    return raw;
+  } catch {
+    return "";
+  }
+}
+
+function subscribeRulesStorage(onStoreChange: () => void) {
+  if (typeof window === "undefined") return () => {};
+  const handler = () => onStoreChange();
+  window.addEventListener("storage", handler);
+  window.addEventListener(CUSTOM_RULES_CHANGE_EVENT, handler);
+  return () => {
+    window.removeEventListener("storage", handler);
+    window.removeEventListener(CUSTOM_RULES_CHANGE_EVENT, handler);
+  };
+}
+
+function loadRawRulesJson(): string {
+  if (typeof window === "undefined") return DEFAULT_CUSTOM_RULES_JSON;
+  return window.localStorage.getItem(CUSTOM_RULES_STORAGE_KEY) ?? DEFAULT_CUSTOM_RULES_JSON;
+}
+
+function getServerRulesSnapshot(): string {
+  return DEFAULT_CUSTOM_RULES_JSON;
+}
+
+function formatExpiryShort(iso?: string): string {
+  if (!iso) return "Lifetime / No Expiry";
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return "Active";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(ms));
 }
 
 function triggerBlobDownload(data: BlobPart, mimeType: string, fileName: string) {
@@ -152,13 +228,30 @@ export default function ConverterWorkbench({
     loadStoredLicenseKey,
     getServerLicenseSnapshot
   );
+  const rawLicenseProfileJson = useSyncExternalStore(
+    subscribeLicenseStorage,
+    loadRawLicenseProfileJson,
+    getServerLicenseSnapshot
+  );
+  const rawCustomRulesJson = useSyncExternalStore(
+    subscribeRulesStorage,
+    loadRawRulesJson,
+    getServerRulesSnapshot
+  );
+
   const [licenseKeyDraft, setLicenseKeyDraft] = useState<string | null>(null);
   const [licenseFeedback, setLicenseFeedback] = useState<{
     valid: boolean;
     plan: "free" | "pass_7d" | "pro_monthly";
     message: string;
   } | null>(null);
+  const [isVerifyingLicense, setIsVerifyingLicense] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [showAccountModal, setShowAccountModal] = useState(false);
+  const [showRulesDrawer, setShowRulesDrawer] = useState(false);
+  const [newRuleKeyword, setNewRuleKeyword] = useState("");
+  const [newRuleCategory, setNewRuleCategory] = useState<CategoryName>("SaaS & Cloud");
+  const [copiedKey, setCopiedKey] = useState(false);
   const [showPasteModal, setShowPasteModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [secondaryFormat, setSecondaryFormat] = useState<ExportFormat>("quickbooks_csv");
@@ -167,18 +260,117 @@ export default function ConverterWorkbench({
   const [toast, setToast] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const autoVerifyAttemptedRef = useRef(false);
+
+  const storedProfile = useMemo<StoredLicenseProfile | null>(() => {
+    if (!rawLicenseProfileJson) return null;
+    try {
+      const parsed = JSON.parse(rawLicenseProfileJson) as StoredLicenseProfile;
+      if (!parsed || typeof parsed.key !== "string") return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  }, [rawLicenseProfileJson]);
+
+  const customRules = useMemo<CustomCategoryRule[]>(() => {
+    try {
+      const parsed = JSON.parse(rawCustomRulesJson) as CustomCategoryRule[];
+      return Array.isArray(parsed) ? parsed : DEFAULT_CUSTOM_RULES;
+    } catch {
+      return DEFAULT_CUSTOM_RULES;
+    }
+  }, [rawCustomRulesJson]);
 
   const licenseKey = licenseKeyDraft ?? storedLicenseKey;
   const licenseStatus = useMemo(() => {
     if (licenseFeedback && !licenseFeedback.valid) return licenseFeedback;
+    if (storedProfile) {
+      return {
+        valid: true,
+        plan: storedProfile.plan,
+        message: `${storedProfile.planName} active.`,
+      };
+    }
     if (storedLicenseKey) return verifyLicenseKey(storedLicenseKey);
     return { valid: false, plan: "free" as const, message: "" };
-  }, [licenseFeedback, storedLicenseKey]);
+  }, [licenseFeedback, storedProfile, storedLicenseKey]);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3400);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || autoVerifyAttemptedRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const checkoutId = params.get("checkout_id")?.trim() ?? "";
+
+    if (checkoutId) {
+      autoVerifyAttemptedRef.current = true;
+      fetch("/api/license", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ checkoutId }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data?.valid && data?.key) {
+            saveStoredLicenseProfile({
+              key: data.key,
+              displayKey: data.displayKey || data.key,
+              plan: data.plan,
+              planName: data.planName,
+              customerEmail: data.customerEmail,
+              customerName: data.customerName,
+              purchasedAt: data.purchasedAt,
+              expiresAt: data.expiresAt,
+              portalUrl: data.portalUrl,
+            });
+            window.dispatchEvent(new Event(LICENSE_CHANGE_EVENT));
+            const nextUrl = new URL(window.location.href);
+            nextUrl.searchParams.delete("checkout_id");
+            window.history.replaceState({}, "", nextUrl.pathname + nextUrl.search + nextUrl.hash);
+            setShowAccountModal(true);
+            showToast(data.message || "Your Pro Pass is now active!");
+          }
+        })
+        .catch(() => {
+          // Ignore transient network failures
+        });
+      return;
+    }
+
+    // Upgrade any legacy pasted key in localStorage into a live Polar profile automatically
+    if (storedLicenseKey && !storedProfile) {
+      autoVerifyAttemptedRef.current = true;
+      fetch("/api/license", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ input: storedLicenseKey }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data?.valid && data?.key) {
+            saveStoredLicenseProfile({
+              key: data.key,
+              displayKey: data.displayKey || data.key,
+              plan: data.plan,
+              planName: data.planName,
+              customerEmail: data.customerEmail,
+              customerName: data.customerName,
+              purchasedAt: data.purchasedAt,
+              expiresAt: data.expiresAt,
+              portalUrl: data.portalUrl,
+            });
+            window.dispatchEvent(new Event(LICENSE_CHANGE_EVENT));
+          }
+        })
+        .catch(() => {
+          // Offline fallback continues to honor checksum keys
+        });
+    }
+  }, [storedLicenseKey, storedProfile, showToast]);
 
   const updateRowsAndReconcile = useCallback(
     (
@@ -222,6 +414,22 @@ export default function ConverterWorkbench({
     showToast(`Downloaded real PDF (${BANK_PRESETS[activePreset].sampleFileName}) — try dropping it back in.`);
   }, [activePreset, showToast]);
 
+  const applyCustomRulesToRows = useCallback(
+    (rows: TransactionRow[]): TransactionRow[] => {
+      if (!licenseStatus.valid || customRules.length === 0) return rows;
+      return rows.map((row) => {
+        const descUpper = row.description.toUpperCase();
+        for (const rule of customRules) {
+          if (rule.keyword && descUpper.includes(rule.keyword.toUpperCase())) {
+            return { ...row, category: rule.category };
+          }
+        }
+        return row;
+      });
+    },
+    [licenseStatus.valid, customRules]
+  );
+
   const handleFiles = useCallback(
     async (fileList: FileList | File[]) => {
       const files = Array.from(fileList).filter((f) => {
@@ -252,7 +460,9 @@ export default function ConverterWorkbench({
         }
 
         if (parsedList.length === 1) {
-          const single = parsedList[0];
+          const singleRaw = parsedList[0];
+          const categorizedRows = applyCustomRulesToRows(singleRaw.transactions);
+          const single = { ...singleRaw, transactions: categorizedRows };
           setResult(single);
           setExplicitOpening(single.reconciliation.openingBalance);
           setExplicitClosing(single.reconciliation.closingBalance);
@@ -261,10 +471,12 @@ export default function ConverterWorkbench({
           );
         } else {
           // Batch merge sorted chronologically so user sees consolidated table before exporting
-          const mergedRows = parsedList
-            .flatMap((p) => p.transactions)
-            .sort((a, b) => a.date.localeCompare(b.date))
-            .map((r, i) => ({ ...r, id: `batch-${i + 1}` }));
+          const mergedRows = applyCustomRulesToRows(
+            parsedList
+              .flatMap((p) => p.transactions)
+              .sort((a, b) => a.date.localeCompare(b.date))
+              .map((r, i) => ({ ...r, id: `batch-${i + 1}` }))
+          );
           const first = parsedList[0];
           const last = parsedList[parsedList.length - 1];
           const openBal = first.reconciliation.openingBalance;
@@ -302,7 +514,7 @@ export default function ConverterWorkbench({
         setIsParsing(false);
       }
     },
-    [showToast]
+    [showToast, applyCustomRulesToRows]
   );
 
   const handleCellChange = (
@@ -413,7 +625,11 @@ export default function ConverterWorkbench({
       showToast("Paste raw statement or OCR lines first.");
       return;
     }
-    const parsed = parseRawStatementText(pastedText, "pasted-statement.txt");
+    const parsedRaw = parseRawStatementText(pastedText, "pasted-statement.txt");
+    const parsed = {
+      ...parsedRaw,
+      transactions: applyCustomRulesToRows(parsedRaw.transactions),
+    };
     setResult(parsed);
     setExplicitOpening(parsed.reconciliation.openingBalance);
     setExplicitClosing(parsed.reconciliation.closingBalance);
@@ -523,21 +739,153 @@ export default function ConverterWorkbench({
     }));
   };
 
-  const handleActivateLicense = (e: React.FormEvent) => {
+  const handleActivateLicense = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = verifyLicenseKey(licenseKey);
-    if (res.valid) {
-      saveStoredLicenseKey(licenseKey);
-      setLicenseFeedback(null);
-      setLicenseKeyDraft(null);
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new Event(LICENSE_CHANGE_EVENT));
-      }
-      setShowUpgradeModal(false);
-      showToast(res.message);
-    } else {
-      setLicenseFeedback(res);
+    const trimmed = licenseKey.trim();
+    if (!trimmed) {
+      setLicenseFeedback({
+        valid: false,
+        plan: "free",
+        message: "Enter your checkout email address or VS- license key.",
+      });
+      return;
     }
+
+    setIsVerifyingLicense(true);
+    setLicenseFeedback(null);
+    try {
+      const response = await fetch("/api/license", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ input: trimmed }),
+      });
+      const data = await response.json();
+
+      if (response.ok && data?.valid && data?.key) {
+        saveStoredLicenseProfile({
+          key: data.key,
+          displayKey: data.displayKey || data.key,
+          plan: data.plan,
+          planName: data.planName || "Pro Pass",
+          customerEmail: data.customerEmail,
+          customerName: data.customerName,
+          purchasedAt: data.purchasedAt,
+          expiresAt: data.expiresAt,
+          portalUrl: data.portalUrl,
+        });
+        setLicenseFeedback(null);
+        setLicenseKeyDraft(null);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event(LICENSE_CHANGE_EVENT));
+        }
+        setShowUpgradeModal(false);
+        setShowAccountModal(true);
+        showToast(data.message || "Account verified and activated.");
+      } else {
+        setLicenseFeedback({
+          valid: false,
+          plan: "free",
+          message: data?.message || "Invalid email or license key.",
+        });
+      }
+    } catch {
+      setLicenseFeedback({
+        valid: false,
+        plan: "free",
+        message: "Network error while verifying license. Please try again.",
+      });
+    } finally {
+      setIsVerifyingLicense(false);
+    }
+  };
+
+  const handleSignOut = () => {
+    saveStoredLicenseProfile(null);
+    setLicenseKeyDraft("");
+    setLicenseFeedback(null);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event(LICENSE_CHANGE_EVENT));
+    }
+    setShowAccountModal(false);
+    showToast("Signed out of VaultSheet Pro on this browser.");
+  };
+
+  const handleDownloadAuditPdf = () => {
+    if (!result.isSample && !licenseStatus.valid) {
+      setUpgradeReason(
+        "Downloadable CPA Reconciliation & Audit Certificate PDFs require a $12 7-Day Pass or Annual Pro license (or test it free on any sample preset above)."
+      );
+      setShowUpgradeModal(true);
+      return;
+    }
+    const bytes = exportAuditCertificatePdfBytes(result);
+    const copy = new Uint8Array(bytes.byteLength);
+    copy.set(bytes);
+    const stem =
+      result.metadata.fileName.replace(/\.pdf$/i, "").replace(/[^a-zA-Z0-9_-]+/g, "-") ||
+      "statement";
+    triggerBlobDownload(copy.buffer, "application/pdf", `${stem}-audit-certificate.pdf`);
+    showToast(`Downloaded CPA Audit Certificate (${stem}-audit-certificate.pdf) locally.`);
+  };
+
+  const persistCustomRules = (nextRules: CustomCategoryRule[]) => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(CUSTOM_RULES_STORAGE_KEY, JSON.stringify(nextRules));
+    window.dispatchEvent(new Event(CUSTOM_RULES_CHANGE_EVENT));
+  };
+
+  const handleAddCustomRule = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!result.isSample && !licenseStatus.valid) {
+      setUpgradeReason(
+        "Custom Auto-Categorization Rules require a $12 7-Day Pass or Annual Pro license."
+      );
+      setShowUpgradeModal(true);
+      return;
+    }
+    const kw = newRuleKeyword.trim();
+    if (!kw) return;
+    const nextRules: CustomCategoryRule[] = [
+      ...customRules,
+      { id: `rule-${Date.now()}`, keyword: kw.toUpperCase(), category: newRuleCategory },
+    ];
+    persistCustomRules(nextRules);
+    setNewRuleKeyword("");
+    showToast(`Saved auto-category rule: "${kw.toUpperCase()}" -> ${newRuleCategory}`);
+  };
+
+  const handleDeleteCustomRule = (ruleId: string) => {
+    persistCustomRules(customRules.filter((r) => r.id !== ruleId));
+  };
+
+  const handleApplyCustomRules = () => {
+    if (!result.isSample && !licenseStatus.valid) {
+      setUpgradeReason(
+        "Applying Custom Auto-Categorization Rules on uploaded statements requires a $12 Pass or Annual Pro license."
+      );
+      setShowUpgradeModal(true);
+      return;
+    }
+    let updatedCount = 0;
+    const nextRows = result.transactions.map((row) => {
+      const descUpper = row.description.toUpperCase();
+      for (const rule of customRules) {
+        if (rule.keyword && descUpper.includes(rule.keyword.toUpperCase())) {
+          if (row.category !== rule.category) {
+            updatedCount += 1;
+            return { ...row, category: rule.category };
+          }
+          break;
+        }
+      }
+      return row;
+    });
+    updateRowsAndReconcile(nextRows);
+    showToast(
+      updatedCount > 0
+        ? `Auto-categorized ${updatedCount} transaction${updatedCount === 1 ? "" : "s"} using your rules.`
+        : "All matching transactions already match your category rules."
+    );
   };
 
   const filteredRows = useMemo(() => {
@@ -592,10 +940,22 @@ export default function ConverterWorkbench({
             Download Sample PDF
           </button>
           {licenseStatus.valid ? (
-            <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
-              <KeyRound className="h-3.5 w-3.5" />
-              {licenseStatus.plan === "pass_7d" ? "7-Day Audit Pass Active" : "Annual Pro Active"}
-            </span>
+            <button
+              type="button"
+              onClick={() => setShowAccountModal(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 shadow-2xs transition hover:border-emerald-300 hover:bg-emerald-100"
+            >
+              <UserCheck className="h-3.5 w-3.5 text-emerald-700" />
+              <span>
+                {licenseStatus.plan === "pass_7d" ? "7-Day Audit Pass" : "Annual Pro"}
+              </span>
+              {(storedProfile?.customerEmail || storedProfile?.displayKey) && (
+                <span className="hidden font-normal text-emerald-700 sm:inline">
+                  &middot; {storedProfile.customerEmail || storedProfile.displayKey}
+                </span>
+              )}
+              <ChevronDown className="h-3.5 w-3.5 opacity-75" />
+            </button>
           ) : (
             <button
               type="button"
@@ -606,7 +966,7 @@ export default function ConverterWorkbench({
               className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:border-blue-300 hover:bg-slate-50 hover:text-slate-900"
             >
               <KeyRound className="h-3.5 w-3.5 text-blue-600" />
-              Activate License Key
+              Sign In / License Key
             </button>
           )}
         </div>
@@ -999,6 +1359,141 @@ export default function ConverterWorkbench({
         )}
       </div>
 
+      {/* Pro Bookkeeper Toolkit Bar */}
+      <div
+        className={`flex flex-wrap items-center justify-between gap-3 border-b px-4 py-2.5 sm:px-6 ${
+          licenseStatus.valid
+            ? "border-emerald-200 bg-emerald-50/60"
+            : "border-slate-200 bg-slate-50/90"
+        }`}
+      >
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {licenseStatus.valid ? (
+            <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-800">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700" />
+              PRO WORKSPACE ACTIVE: Unlimited Rows &middot; Batch PDF Merge &middot; .XLSX / .QBO / Audit PDF / Auto-Rules Unlocked
+            </span>
+          ) : (
+            <span className="text-slate-600">
+              <strong className="font-semibold text-slate-800">FREE PREVIEW:</strong> Max {FREE_ROW_LIMIT} rows/PDF &middot;{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  setUpgradeReason("");
+                  setShowUpgradeModal(true);
+                }}
+                className="font-semibold text-blue-600 underline underline-offset-2 hover:text-blue-700"
+              >
+                Sign in or get a $12 Pass
+              </button>{" "}
+              to unlock .XLSX, .QBO, CPA Audit PDF &amp; Auto-Rules
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleDownloadAuditPdf}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-2xs transition hover:border-blue-400 hover:bg-blue-50/40"
+          >
+            <FileCheck2 className="h-3.5 w-3.5 text-blue-600" />
+            Download Audit Certificate (.PDF)
+            {!result.isSample && !licenseStatus.valid && <Lock className="h-3 w-3 opacity-70" />}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowRulesDrawer((prev) => !prev)}
+            aria-expanded={showRulesDrawer}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold shadow-2xs transition ${
+              showRulesDrawer
+                ? "border-blue-500 bg-blue-50 text-blue-700"
+                : "border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
+            }`}
+          >
+            <Tag className="h-3.5 w-3.5 text-blue-600" />
+            Auto-Category Rules ({customRules.length})
+          </button>
+        </div>
+      </div>
+
+      {/* Custom Auto-Categorization Rules Drawer */}
+      {showRulesDrawer && (
+        <div className="border-b border-slate-200 bg-slate-50/60 px-4 py-4 sm:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                Custom Keyword Auto-Categorization Rules
+              </h3>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Automatically assign QuickBooks/Xero accounting categories whenever merchant descriptions match these keywords.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleApplyCustomRules}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-2xs transition hover:bg-slate-800"
+            >
+              <Check className="h-3.5 w-3.5" />
+              Apply Rules to Statement ({result.transactions.length} rows)
+            </button>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            {customRules.map((rule) => (
+              <div
+                key={rule.id}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs shadow-2xs"
+              >
+                <span className="mono-nums font-semibold text-slate-900">
+                  &ldquo;{rule.keyword}&rdquo;
+                </span>
+                <span className="text-slate-400">&rarr;</span>
+                <span className="font-medium text-blue-700">{rule.category}</span>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteCustomRule(rule.id)}
+                  title="Delete rule"
+                  className="ml-1 rounded p-0.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <form onSubmit={handleAddCustomRule} className="mt-3 flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              value={newRuleKeyword}
+              onChange={(e) => setNewRuleKeyword(e.target.value)}
+              placeholder="Merchant keyword (e.g. VERCEL, FIGMA, UBER)..."
+              className="w-64 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none"
+            />
+            <select
+              value={newRuleCategory}
+              onChange={(e) => setNewRuleCategory(e.target.value as CategoryName)}
+              aria-label="Target category for keyword rule"
+              className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-blue-500 focus:outline-none"
+            >
+              {CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <button
+              type="submit"
+              className="inline-flex items-center gap-1 rounded-lg border border-blue-600 bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add Rule
+            </button>
+          </form>
+        </div>
+      )}
+
       {/* Search, Category Filter & Row Controls */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
         <div className="flex flex-wrap items-center gap-2">
@@ -1315,9 +1810,12 @@ export default function ConverterWorkbench({
             </div>
 
             <form onSubmit={handleActivateLicense} className="mt-5 border-t border-slate-200 pt-4">
-              <label className="block text-xs font-medium text-slate-700">
-                Already purchased? Enter your License Key:
+              <label className="block text-xs font-semibold text-slate-800">
+                Already purchased? Sign in with your Polar checkout Email OR License Key:
               </label>
+              <p className="mt-0.5 text-[11px] text-slate-500">
+                Verified directly with Polar.sh — no password needed.
+              </p>
               <div className="mt-2 flex gap-2">
                 <input
                   type="text"
@@ -1326,20 +1824,149 @@ export default function ConverterWorkbench({
                     setLicenseKeyDraft(e.target.value);
                     if (licenseFeedback) setLicenseFeedback(null);
                   }}
-                  placeholder="VS-XXXX-XXXX-XXXX"
-                  className="mono-nums flex-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none"
+                  placeholder="you@example.com or VS-XXXX-XXXX-XXXX"
+                  disabled={isVerifyingLicense}
+                  className="mono-nums flex-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none disabled:opacity-60"
                 />
                 <button
                   type="submit"
-                  className="rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+                  disabled={isVerifyingLicense}
+                  className="rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
                 >
-                  Activate
+                  {isVerifyingLicense ? "Verifying..." : "Verify & Sign In"}
                 </button>
               </div>
               {licenseStatus.message && !licenseStatus.valid && (
                 <p className="mt-1.5 text-xs text-rose-600">{licenseStatus.message}</p>
               )}
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* My Pro Account & Polar License Modal */}
+      {showAccountModal && licenseStatus.valid && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+                  <UserCheck className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">VaultSheet Pro Account</h3>
+                  <p className="text-xs text-emerald-700 font-medium">
+                    {storedProfile?.planName ||
+                      (licenseStatus.plan === "pass_7d"
+                        ? "7-Day Tax & Audit Pass"
+                        : "Annual Pro Bookkeeper Pass")}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAccountModal(false)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-2.5 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs">
+              {storedProfile?.customerEmail && (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-slate-500">Account Email:</span>
+                  <span className="font-semibold text-slate-900">
+                    {storedProfile.customerName
+                      ? `${storedProfile.customerName} (${storedProfile.customerEmail})`
+                      : storedProfile.customerEmail}
+                  </span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-500">License Key:</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="mono-nums font-semibold text-slate-900">
+                    {storedProfile?.displayKey ||
+                      (storedLicenseKey ? `VS-****-${storedLicenseKey.slice(-6)}` : "Active")}
+                  </span>
+                  {(storedProfile?.key || storedLicenseKey) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const fullKey = storedProfile?.key || storedLicenseKey;
+                        if (typeof navigator !== "undefined" && fullKey) {
+                          void navigator.clipboard.writeText(fullKey);
+                          setCopiedKey(true);
+                          setTimeout(() => setCopiedKey(false), 1800);
+                        }
+                      }}
+                      title="Copy full license key"
+                      className="rounded border border-slate-300 bg-white p-1 text-slate-600 hover:bg-slate-100"
+                    >
+                      {copiedKey ? (
+                        <Check className="h-3 w-3 text-emerald-600" />
+                      ) : (
+                        <Copy className="h-3 w-3" />
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-500">Valid Until:</span>
+                <span className="mono-nums font-semibold text-slate-900">
+                  {formatExpiryShort(storedProfile?.expiresAt)}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Unlocked Pro Capabilities
+              </p>
+              <ul className="mt-2 space-y-1.5 text-xs text-slate-700">
+                <li className="flex items-center gap-2">
+                  <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                  Unlimited rows &amp; multi-PDF statement batch merge
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                  Full Excel (.xlsx 3-sheet), QuickBooks (.qbo), Xero CSV &amp; OFX exports
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                  Downloadable CPA Reconciliation &amp; Audit Certificate (.pdf)
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                  Custom Keyword Auto-Categorization Rules
+                </li>
+              </ul>
+            </div>
+
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-4">
+              <a
+                href={storedProfile?.portalUrl || "https://polar.sh/vaultsheet/portal"}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
+              >
+                <ExternalLink className="h-3.5 w-3.5 text-blue-600" />
+                Billing &amp; Receipts (Polar)
+              </a>
+
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                Sign Out
+              </button>
+            </div>
           </div>
         </div>
       )}

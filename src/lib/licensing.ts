@@ -16,7 +16,20 @@ export interface LicenseValidationResult {
   message: string;
 }
 
+export interface StoredLicenseProfile {
+  key: string;
+  displayKey: string;
+  plan: "pass_7d" | "pro_monthly";
+  planName: string;
+  customerEmail?: string;
+  customerName?: string;
+  purchasedAt?: string;
+  expiresAt?: string;
+  portalUrl?: string;
+}
+
 const LICENSE_STORAGE_KEY = "vaultsheet_pro_license_v1";
+const LICENSE_PROFILE_STORAGE_KEY = "vaultsheet_license_profile_v1";
 
 /**
  * Deterministic checksum verifier for VaultSheet keys (format: VS-PASS-XXXX-CC or VS-PRO-XXXX-CC),
@@ -97,7 +110,35 @@ export function saveStoredLicenseKey(key: string): void {
   if (typeof window === "undefined") return;
   if (!key.trim()) {
     window.localStorage.removeItem(LICENSE_STORAGE_KEY);
+    window.localStorage.removeItem(LICENSE_PROFILE_STORAGE_KEY);
   } else {
     window.localStorage.setItem(LICENSE_STORAGE_KEY, key.trim().toUpperCase());
   }
+}
+
+export function loadStoredLicenseProfile(): StoredLicenseProfile | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(LICENSE_PROFILE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredLicenseProfile;
+    if (!parsed || typeof parsed.key !== "string") return null;
+    if (parsed.expiresAt && Date.parse(parsed.expiresAt) <= Date.now()) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function saveStoredLicenseProfile(profile: StoredLicenseProfile | null): void {
+  if (typeof window === "undefined") return;
+  if (!profile) {
+    window.localStorage.removeItem(LICENSE_PROFILE_STORAGE_KEY);
+    window.localStorage.removeItem(LICENSE_STORAGE_KEY);
+    return;
+  }
+  window.localStorage.setItem(LICENSE_STORAGE_KEY, profile.key.trim().toUpperCase());
+  window.localStorage.setItem(LICENSE_PROFILE_STORAGE_KEY, JSON.stringify(profile));
 }

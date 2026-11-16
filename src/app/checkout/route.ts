@@ -23,10 +23,19 @@ export async function GET(request: Request): Promise<Response> {
     request.headers.get("cf-connecting-ip") ??
     undefined;
 
+  const forwardedHost = request.headers.get("x-forwarded-host")?.trim();
+  const forwardedProto = request.headers.get("x-forwarded-proto")?.trim() || "https";
+  const publicOrigin = forwardedHost
+    ? `${forwardedProto}://${forwardedHost}`
+    : url.origin.startsWith("http://localhost")
+      ? "https://vaultsheet.tech"
+      : url.origin;
+
   try {
     const polar = getPolarClient();
     const checkout = await polar.checkouts.create({
       products,
+      success_url: `${publicOrigin}/?checkout_id={CHECKOUT_ID}`,
       customer_email: url.searchParams.get("customer_email") ?? undefined,
       customer_ip_address: ipAddress,
       discount_id: url.searchParams.get("discount_id") ?? undefined,

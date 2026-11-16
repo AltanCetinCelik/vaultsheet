@@ -9,6 +9,7 @@ import {
   reconcileTransactions,
 } from "@/lib/statementParser";
 import {
+  exportAuditCertificatePdfBytes,
   exportToCsv,
   exportToExcelBytes,
   exportToJsonString,
@@ -256,5 +257,17 @@ describe("Commercial Hardening: Multi-Section, Split Runs, OCR Paste & QuickBook
     expect(qboCard).toContain("<CREDITCARDMSGSRSV1>");
     expect(qboCard).toContain("<CCACCTFROM>");
     expect(qboCard).not.toContain("<BANKMSGSRSV1>");
+  });
+
+  it("generates valid binary CPA Reconciliation & Audit Certificate PDF", () => {
+    const bytes = generateSampleStatementPdf("chase");
+    const parsed = parsePdfBytesDeterministic(bytes, "chase-oct.pdf", true);
+    const auditPdf = exportAuditCertificatePdfBytes(parsed);
+    const ascii = new TextDecoder("latin1").decode(auditPdf);
+
+    expect(ascii.startsWith("%PDF-1.4")).toBe(true);
+    expect(ascii.trimEnd().endsWith("%%EOF")).toBe(true);
+    expect(ascii).toContain("VAULTSHEET - MATHEMATICAL RECONCILIATION & AUDIT CERTIFICATE");
+    expect(ascii).toContain("VERIFIED TO THE EXACT CENT");
   });
 });

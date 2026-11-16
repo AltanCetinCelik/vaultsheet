@@ -346,6 +346,188 @@ export function exportToJsonString(result: ParseResult): string {
   return JSON.stringify(result, null, 2);
 }
 
+function escapePdfString(text: string): string {
+  return text
+    .replace(/\\/g, "\\\\")
+    .replace(/\(/g, "\\(")
+    .replace(/\)/g, "\\)")
+    .replace(/[^\x20-\x7E]/g, "?");
+}
+
+function pdfTextOp(x: number, y: number, text: string, bold = false, size = 10): string {
+  const font = bold ? "/F2" : "/F1";
+  return `BT ${font} ${size} Tf 1 0 0 1 ${x.toFixed(1)} ${y.toFixed(1)} Tm (${escapePdfString(text)}) Tj ET`;
+}
+
+function formatAuditAmount(val: number | null, currency: string): string {
+  if (val === null || !Number.isFinite(val)) return "N/A";
+  const sign = val < 0 ? "-" : "";
+  const formatted = new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Math.abs(val));
+  return `${sign}${formatted} ${currency}`;
+}
+
+export function exportAuditCertificatePdfBytes(result: ParseResult): Uint8Array {
+  const { metadata, transactions, reconciliation } = result;
+  const currency = metadata.currency || "USD";
+  const generatedIso = new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC";
+
+  const ops: string[] = [];
+
+  // Header Banner Rule & Title
+  ops.push("0.06 0.09 0.16 rg");
+  ops.push("42 715 528 52 re f");
+  ops.push("1 1 1 rg");
+  ops.push(pdfTextOp(56, 745, "VAULTSHEET - MATHEMATICAL RECONCILIATION & AUDIT CERTIFICATE", true, 12));
+  ops.push(
+    pdfTextOp(
+      56,
+      727,
+      `Generated Locally in Browser RAM (${generatedIso}) | Zero Server Uploads`,
+      false,
+      8.5
+    )
+  );
+
+  // Reset fill to dark slate
+  ops.push("0.06 0.09 0.16 rg");
+  ops.push("0.88 0.91 0.94 RG 0.8 w");
+
+  // Statement Metadata Section
+  ops.push(pdfTextOp(42, 690, "1. STATEMENT METADATA", true, 10.5));
+  ops.push("42 683 m 570 683 l S");
+
+  const metaLines: [string, string][] = [
+    ["Bank / Financial Institution:", metadata.bankDetected || "Unknown Statement"],
+    ["Account Identifier:", `****${metadata.accountLast4 || "0000"} (${metadata.accountType || "CHECKING"})`],
+    ["Source Document:", metadata.fileName || "statement.pdf"],
+    ["Statement Period:", `${metadata.periodStart ?? "N/A"} to ${metadata.periodEnd ?? "N/A"}`],
+    ["Currency / Parsing Mode:", `${currency} (${metadata.parseMode || "local"})`],
+    [
+      "Transactions Audited:",
+      `${transactions.length} rows (${reconciliation.stitchedLineCount} wrapped memos stitched)`,
+    ],
+  ];
+
+  let y = 665;
+  for (const [label, val] of metaLines) {
+    ops.push(pdfTextOp(48, y, label, true, 9.5));
+    ops.push(pdfTextOp(230, y, val, false, 9.5));
+    y -= 16;
+  }
+
+  // Reconciliation Equation Box
+  y -= 10;
+  ops.push("0.97 0.98 0.99 rg");
+  ops.push(`42 ${y - 118} 528 128 re f`);
+  ops.push(`42 ${y - 118} 528 128 re S`);
+  ops.push("0.06 0.09 0.16 rg");
+
+  ops.push(pdfTextOp(54, y - 8, "2. MATHEMATICAL BALANCE RECONCILIATION PROOF", true, 10.5));
+  const auditLines: [string, string, boolean][] = [
+    ["Opening Balance:", formatAuditAmount(reconciliation.openingBalance, currency), false],
+    ["+ Total Deposits (Credits):", `+${formatAuditAmount(reconciliation.totalCredits, currency)}`, false],
+    ["- Total Withdrawals (Debits):", `-${formatAuditAmount(reconciliation.totalDebits, currency)}`, false],
+    [
+      "= Calculated Closing Balance:",
+      formatAuditAmount(reconciliation.calculatedClosingBalance, currency),
+      true,
+    ],
+    ["Statement Closing Balance:", formatAuditAmount(reconciliation.closingBalance, currency), false],
+    [
+      "Audit Status:",
+      reconciliation.isFullyReconciled
+        ? `VERIFIED TO THE EXACT CENT (0.00 ${currency} DISCREPANCY | ${reconciliation.matchedRows}/${transactions.length} ROWS)`
+        : `DISCREPANCY DETECTED (${formatAuditAmount(reconciliation.discrepancy, currency)} | ${reconciliation.mismatchRows} ROW MISMATCH)`,
+      true,
+    ],
+  ];
+
+  let eqY = y - 28;
+  for (const [label, val, bold] of auditLines) {
+    ops.push(pdfTextOp(54, eqY, label, true, 9.5));
+    ops.push(pdfTextOp(240, eqY, val, bold, 9.5));
+    eqY -= 16;
+  }
+
+  // Category Summary Breakdown
+  let catY = y - 144;
+  ops.push(pdfTextOp(42, catY, "3. CATEGORY SUMMARY BREAKDOWN", true, 10.5));
+  catY -= 7;
+  ops.push(`42 ${catY} m 570 ${catY} l S`);
+  catY -= 15;
+  ops.push(pdfTextOp(48, catY, "Category", true, 9));
+  ops.push(pdfTextOp(245, catY, "Txns", true, 9));
+  ops.push(pdfTextOp(315, catY, `Total Inflows (${currency})`, true, 9));
+  ops.push(pdfTextOp(455, catY, `Total Outflows (${currency})`, true, 9));
+  catY -= 6;
+  ops.push(`42 ${catY} m 570 ${catY} l S`);
+  catY -= 14;
+
+  const categoryTotals = new Map<CategoryName, { credits: number; debits: number; count: number }>();
+  for (const tx of transactions) {
+    const entry = categoryTotals.get(tx.category) ?? { credits: 0, debits: 0, count: 0 };
+    entry.count += 1;
+    if (tx.amount >= 0) entry.credits += tx.amount;
+    else entry.debits += Math.abs(tx.amount);
+    categoryTotals.set(tx.category, entry);
+  }
+
+  for (const [cat, stats] of categoryTotals.entries()) {
+    if (catY < 72) break;
+    ops.push(pdfTextOp(48, catY, cat, false, 9));
+    ops.push(pdfTextOp(245, catY, String(stats.count), false, 9));
+    ops.push(pdfTextOp(315, catY, formatAuditAmount(stats.credits, currency), false, 9));
+    ops.push(pdfTextOp(455, catY, formatAuditAmount(stats.debits, currency), false, 9));
+    catY -= 15;
+  }
+
+  // Footer
+  ops.push("0.39 0.45 0.54 rg");
+  ops.push("42 52 m 570 52 l S");
+  ops.push(
+    pdfTextOp(
+      42,
+      36,
+      "Generated 100% locally in browser RAM by VaultSheet (https://vaultsheet.tech) - Zero server uploads.",
+      false,
+      8.5
+    )
+  );
+
+  const streamContent = ops.join("\n") + "\n";
+  const encoder = new TextEncoder();
+  const streamByteLen = encoder.encode(streamContent).length;
+
+  const objects = [
+    "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+    "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+    "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>\nendobj\n",
+    "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+    "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\nendobj\n",
+    `6 0 obj\n<< /Length ${streamByteLen} >>\nstream\n${streamContent}endstream\nendobj\n`,
+  ];
+
+  let pdf = "%PDF-1.4\n";
+  const offsets: number[] = [0];
+  for (const obj of objects) {
+    offsets.push(encoder.encode(pdf).length);
+    pdf += obj;
+  }
+
+  const xrefStart = encoder.encode(pdf).length;
+  pdf += `xref\n0 ${objects.length + 1}\n`;
+  pdf += "0000000000 65535 f \n";
+  for (let i = 1; i <= objects.length; i++) {
+    pdf += `${offsets[i].toString().padStart(10, "0")} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF\n`;
+
+  return encoder.encode(pdf);
+}
+
 export function getExportMimeAndFilename(
   baseFileName: string,
   format: ExportFormat
