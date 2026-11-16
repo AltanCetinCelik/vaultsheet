@@ -1,3 +1,4 @@
+export const ANONYMOUS_ROW_LIMIT = 10;
 export const FREE_ROW_LIMIT = 25;
 
 // Live Polar.sh checkout routes backed by /checkout?products=<PRODUCT_ID>
@@ -10,6 +11,13 @@ export const CHECKOUT_URLS = {
     "/checkout?products=8d86923c-900b-4dc1-8322-50185382e70b",
 };
 
+export function getCheckoutUrlWithEmail(baseUrl: string, email?: string): string {
+  const cleanEmail = email?.trim();
+  if (!cleanEmail || baseUrl.startsWith("#")) return baseUrl;
+  const sep = baseUrl.includes("?") ? "&" : "?";
+  return `${baseUrl}${sep}customer_email=${encodeURIComponent(cleanEmail)}`;
+}
+
 export interface LicenseValidationResult {
   valid: boolean;
   plan: "free" | "pass_7d" | "pro_monthly";
@@ -17,9 +25,10 @@ export interface LicenseValidationResult {
 }
 
 export interface StoredLicenseProfile {
+  customerId?: string;
   key: string;
   displayKey: string;
-  plan: "pass_7d" | "pro_monthly";
+  plan: "free_account" | "pass_7d" | "pro_monthly";
   planName: string;
   customerEmail?: string;
   customerName?: string;
@@ -122,7 +131,7 @@ export function loadStoredLicenseProfile(): StoredLicenseProfile | null {
     const raw = window.localStorage.getItem(LICENSE_PROFILE_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as StoredLicenseProfile;
-    if (!parsed || typeof parsed.key !== "string") return null;
+    if (!parsed || typeof parsed.plan !== "string") return null;
     if (parsed.expiresAt && Date.parse(parsed.expiresAt) <= Date.now()) {
       return null;
     }
@@ -139,6 +148,10 @@ export function saveStoredLicenseProfile(profile: StoredLicenseProfile | null): 
     window.localStorage.removeItem(LICENSE_STORAGE_KEY);
     return;
   }
-  window.localStorage.setItem(LICENSE_STORAGE_KEY, profile.key.trim().toUpperCase());
+  if (profile.key && profile.key.trim()) {
+    window.localStorage.setItem(LICENSE_STORAGE_KEY, profile.key.trim().toUpperCase());
+  } else {
+    window.localStorage.removeItem(LICENSE_STORAGE_KEY);
+  }
   window.localStorage.setItem(LICENSE_PROFILE_STORAGE_KEY, JSON.stringify(profile));
 }

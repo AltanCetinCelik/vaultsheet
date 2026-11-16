@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
 import BankDirectoryClient from "@/components/BankDirectoryClient";
+import NavbarAuthButtons from "@/components/NavbarAuthButtons";
 import { SEO_BANKS } from "@/lib/seoCatalog";
 
 export const metadata: Metadata = {
@@ -24,12 +25,15 @@ export default function ConvertDirectoryPage() {
             <span className="text-base font-bold tracking-tight text-slate-900">VaultSheet</span>
           </Link>
 
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition-colors"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" /> Back to Workbench
-          </Link>
+          <div className="flex items-center gap-2.5">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition-colors"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" /> Back to Workbench
+            </Link>
+            <NavbarAuthButtons />
+          </div>
         </div>
       </header>
 

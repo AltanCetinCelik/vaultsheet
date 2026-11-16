@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowRight, CheckCircle2, ShieldCheck } from "lucide-react";
 import ConverterWorkbench from "@/components/ConverterWorkbench";
+import NavbarAuthButtons from "@/components/NavbarAuthButtons";
 import { getSeoBankBySlug, SEO_BANKS } from "@/lib/seoCatalog";
 
 type PageProps = {
@@ -60,6 +61,8 @@ export default async function BankConverterPage({ params }: PageProps) {
           ).slice(0, 6 - related.length),
         ];
 
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://vaultsheet.tech";
+
   const faqSchema = {
     "@context": "https://schema.org",
     "@type": "FAQPage",
@@ -73,11 +76,45 @@ export default async function BankConverterPage({ params }: PageProps) {
     })),
   };
 
+  const breadcrumbSchema = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: siteUrl },
+      { "@type": "ListItem", position: 2, name: "Bank Converters", item: `${siteUrl}/convert` },
+      { "@type": "ListItem", position: 3, name: entry.bankName, item: `${siteUrl}/convert/${entry.slug}` },
+    ],
+  };
+
+  const howToSchema = {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    name: `How to Convert ${entry.bankName} PDF Statements to Excel & QuickBooks`,
+    description: entry.metaDescription,
+    step: [
+      {
+        "@type": "HowToStep",
+        name: `Upload ${entry.shortName} PDF Statement`,
+        text: `Select or drag-and-drop your ${entry.shortName} PDF statement directly inside the VaultSheet converter.`,
+      },
+      {
+        "@type": "HowToStep",
+        name: "Automatic Balance Reconciliation",
+        text: `VaultSheet normalizes ${entry.dateFormat} dates, merges wrapped memos, and verifies Opening + Deposits - Withdrawals = Closing to the exact cent.`,
+      },
+      {
+        "@type": "HowToStep",
+        name: "Download Excel, CSV, or QuickBooks .QBO",
+        text: "Download your accounting-ready Excel workbook, QuickBooks (.qbo) Web Connect file, or Xero CSV locally.",
+      },
+    ],
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-[#f8fafc] text-slate-900">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify([faqSchema, breadcrumbSchema, howToSchema]) }}
       />
 
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur-md">
@@ -89,13 +126,14 @@ export default async function BankConverterPage({ params }: PageProps) {
             <span className="text-base font-bold tracking-tight text-slate-900">VaultSheet</span>
           </Link>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <Link
               href="/convert"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition-colors"
+              className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition-colors"
             >
               <ArrowLeft className="h-3.5 w-3.5" /> All {SEO_BANKS.length} Banks
             </Link>
+            <NavbarAuthButtons />
           </div>
         </div>
       </header>
@@ -129,11 +167,47 @@ export default async function BankConverterPage({ params }: PageProps) {
         </div>
 
         {/* Interactive Pre-configured Workbench */}
-        <section className="mt-8">
+        <section id="workbench" className="mt-8 scroll-mt-20">
           <ConverterWorkbench
             defaultPreset={entry.samplePreset}
             contextBankName={entry.bankName}
           />
+        </section>
+
+        {/* How to Convert in 3 Steps */}
+        <section className="mt-10 rounded-2xl border border-slate-200 bg-white p-6 shadow-2xs">
+          <h2 className="text-lg font-bold text-slate-900">
+            How to Convert {entry.shortName} PDF to Excel &amp; QuickBooks in 3 Steps
+          </h2>
+          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">
+                1
+              </span>
+              <h3 className="mt-2.5 text-sm font-bold text-slate-900">Select {entry.shortName} PDF</h3>
+              <p className="mt-1 text-xs text-slate-600">
+                Drop single or multiple {entry.shortName} statements above. Parsed 100% locally in browser memory.
+              </p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">
+                2
+              </span>
+              <h3 className="mt-2.5 text-sm font-bold text-slate-900">Verify Cent-Level Math</h3>
+              <p className="mt-1 text-xs text-slate-600">
+                Normalized {entry.dateFormat} dates and Opening/Closing balances verified to $0.00 diff.
+              </p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">
+                3
+              </span>
+              <h3 className="mt-2.5 text-sm font-bold text-slate-900">Download Excel or .QBO</h3>
+              <p className="mt-1 text-xs text-slate-600">
+                Export directly into Excel (.xlsx), QuickBooks (.qbo / CSV), or Xero bank feeds.
+              </p>
+            </div>
+          </div>
         </section>
 
         {/* Statement Profile Specs & Pain Points */}

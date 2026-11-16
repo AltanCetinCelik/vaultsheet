@@ -18,6 +18,9 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://vaultsheet.tech";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
+  alternates: {
+    canonical: "/",
+  },
   title: {
     default: "VaultSheet — 100% Local PDF Bank Statement to Excel, CSV & QBO Converter",
     template: "%s | VaultSheet",
@@ -57,20 +60,37 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const softwareSchema = {
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    name: "VaultSheet",
-    applicationCategory: "FinanceApplication",
-    operatingSystem: "Any (Web Browser, Chrome Extension)",
-    description:
-      "Privacy-first local PDF bank statement to Excel, QuickBooks (.qbo), Xero CSV, and OFX converter running 100% in browser memory.",
-    offers: [
-      { "@type": "Offer", price: "0", priceCurrency: "USD", name: "Free Preview" },
-      { "@type": "Offer", price: "12", priceCurrency: "USD", name: "7-Day Tax & Audit Pass" },
-      { "@type": "Offer", price: "29", priceCurrency: "USD", name: "Annual Pro Bookkeeper Pass" },
-    ],
-  };
+  const softwareSchema = [
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      name: "VaultSheet",
+      url: SITE_URL,
+      applicationCategory: "FinanceApplication",
+      operatingSystem: "Any (Web Browser, Chrome Extension)",
+      description:
+        "Privacy-first local PDF bank statement to Excel, QuickBooks (.qbo), Xero CSV, and OFX converter running 100% in browser memory.",
+      featureList: [
+        "100% client-side in-browser PDF statement parsing",
+        "Cent-level Opening + Deposits - Withdrawals = Closing reconciliation",
+        "Excel (.xlsx), QuickBooks Web Connect (.qbo), QuickBooks CSV, Xero CSV, and OFX exports",
+        "Multi-line transaction memo stitching",
+        "CPA Reconciliation & Audit Certificate PDF export",
+      ],
+      offers: [
+        { "@type": "Offer", price: "0", priceCurrency: "USD", name: "Free Preview & Free Account" },
+        { "@type": "Offer", price: "12", priceCurrency: "USD", name: "7-Day Tax & Audit Pass" },
+        { "@type": "Offer", price: "29", priceCurrency: "USD", name: "Annual Pro Bookkeeper Pass" },
+      ],
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      name: "VaultSheet",
+      url: SITE_URL,
+      email: "support@vaultsheet.tech",
+    },
+  ];
 
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>

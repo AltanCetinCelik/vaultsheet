@@ -10,10 +10,12 @@ import React, {
 } from "react";
 import {
   AlertTriangle,
+  ArrowLeft,
   ArrowLeftRight,
   Check,
   CheckCircle2,
   ChevronDown,
+  Clock,
   Copy,
   Download,
   ExternalLink,
@@ -25,12 +27,12 @@ import {
   LogOut,
   Plus,
   Search,
-  ShieldCheck,
   SlidersHorizontal,
   Sparkles,
   Tag,
   Trash2,
   Upload,
+  User,
   UserCheck,
   X,
 } from "lucide-react";
@@ -60,8 +62,10 @@ import {
   getExportMimeAndFilename,
 } from "@/lib/exporters";
 import {
+  ANONYMOUS_ROW_LIMIT,
   CHECKOUT_URLS,
   FREE_ROW_LIMIT,
+  getCheckoutUrlWithEmail,
   loadStoredLicenseKey,
   saveStoredLicenseProfile,
   verifyLicenseKey,
@@ -79,6 +83,36 @@ const CATEGORIES: CategoryName[] = [
   "Utilities & Office",
   "Uncategorized",
 ];
+
+type WorkbenchExportChoice = ExportFormat | "audit_pdf";
+type AuthModalTab = "signup" | "login" | "key";
+
+const LICENSE_CHANGE_EVENT = "vaultsheet-license-changed";
+const LICENSE_PROFILE_STORAGE_KEY = "vaultsheet_license_profile_v1";
+const CUSTOM_RULES_STORAGE_KEY = "vaultsheet_custom_rules_v1";
+const CUSTOM_RULES_CHANGE_EVENT = "vaultsheet-rules-changed";
+const HISTORY_STORAGE_KEY = "vaultsheet_history_v1";
+const HISTORY_CHANGE_EVENT = "vaultsheet-history-changed";
+
+interface CustomCategoryRule {
+  id: string;
+  keyword: string;
+  category: CategoryName;
+}
+
+interface SavedConversionEntry {
+  id: string;
+  savedAt: string;
+  result: ParseResult;
+}
+
+const DEFAULT_CUSTOM_RULES: CustomCategoryRule[] = [
+  { id: "rule-stripe", keyword: "STRIPE", category: "Revenue & Payouts" },
+  { id: "rule-aws", keyword: "AWS", category: "SaaS & Cloud" },
+  { id: "rule-gusto", keyword: "GUSTO", category: "Payroll & Contractors" },
+  { id: "rule-ads", keyword: "GOOGLE ADS", category: "Marketing & Ads" },
+];
+const DEFAULT_CUSTOM_RULES_JSON = JSON.stringify(DEFAULT_CUSTOM_RULES);
 
 function formatMoney(val: number | null, currency: string): string {
   if (val === null) return "—";
@@ -105,25 +139,6 @@ function formatMoney(val: number | null, currency: string): string {
   }
 }
 
-const LICENSE_CHANGE_EVENT = "vaultsheet-license-changed";
-const LICENSE_PROFILE_STORAGE_KEY = "vaultsheet_license_profile_v1";
-const CUSTOM_RULES_STORAGE_KEY = "vaultsheet_custom_rules_v1";
-const CUSTOM_RULES_CHANGE_EVENT = "vaultsheet-rules-changed";
-
-interface CustomCategoryRule {
-  id: string;
-  keyword: string;
-  category: CategoryName;
-}
-
-const DEFAULT_CUSTOM_RULES: CustomCategoryRule[] = [
-  { id: "rule-stripe", keyword: "STRIPE", category: "Revenue & Payouts" },
-  { id: "rule-aws", keyword: "AWS", category: "SaaS & Cloud" },
-  { id: "rule-gusto", keyword: "GUSTO", category: "Payroll & Contractors" },
-  { id: "rule-ads", keyword: "GOOGLE ADS", category: "Marketing & Ads" },
-];
-const DEFAULT_CUSTOM_RULES_JSON = JSON.stringify(DEFAULT_CUSTOM_RULES);
-
 function subscribeLicenseStorage(onStoreChange: () => void) {
   if (typeof window === "undefined") return () => {};
   const handler = () => onStoreChange();
@@ -135,7 +150,7 @@ function subscribeLicenseStorage(onStoreChange: () => void) {
   };
 }
 
-function getServerLicenseSnapshot(): string {
+function getEmptyServerSnapshot(): string {
   return "";
 }
 
@@ -174,16 +189,58 @@ function getServerRulesSnapshot(): string {
   return DEFAULT_CUSTOM_RULES_JSON;
 }
 
+function subscribeHistoryStorage(onStoreChange: () => void) {
+  if (typeof window === "undefined") return () => {};
+  const handler = () => onStoreChange();
+  window.addEventListener("storage", handler);
+  window.addEventListener(HISTORY_CHANGE_EVENT, handler);
+  return () => {
+    window.removeEventListener("storage", handler);
+    window.removeEventListener(HISTORY_CHANGE_EVENT, handler);
+  };
+}
+
+function loadRawHistoryJson(): string {
+  if (typeof window === "undefined") return "[]";
+  return window.localStorage.getItem(HISTORY_STORAGE_KEY) ?? "[]";
+}
+
+function getServerHistorySnapshot(): string {
+  return "[]";
+}
+
+function saveConversionToHistory(parsed: ParseResult) {
+  if (typeof window === "undefined" || parsed.transactions.length === 0) return;
+  try {
+    const raw = window.localStorage.getItem(HISTORY_STORAGE_KEY) ?? "[]";
+    const list = (JSON.parse(raw) as SavedConversionEntry[]) || [];
+    const trimmedResult: ParseResult = {
+      ...parsed,
+      transactions: parsed.transactions.slice(0, 400),
+    };
+    const next: SavedConversionEntry[] = [
+      {
+        id: `hist-${Date.now()}`,
+        savedAt: new Date().toISOString(),
+        result: trimmedResult,
+      },
+      ...list.filter((item) => item.result.metadata.fileName !== parsed.metadata.fileName),
+    ].slice(0, 5);
+    window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(next));
+    window.dispatchEvent(new Event(HISTORY_CHANGE_EVENT));
+  } catch {
+    // Ignore localStorage quota errors
+  }
+}
+
 function formatExpiryShort(iso?: string): string {
-  if (!iso) return "Lifetime / No Expiry";
+  if (!iso) return "Active (No Expiry)";
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) return "Active";
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
   }).format(new Date(ms));
 }
 
@@ -208,6 +265,9 @@ export default function ConverterWorkbench({
   defaultPreset = "chase",
   contextBankName,
 }: ConverterWorkbenchProps) {
+  const [viewMode, setViewMode] = useState<"upload" | "results">(
+    contextBankName ? "results" : "upload"
+  );
   const [activePreset, setActivePreset] = useState<SamplePresetId>(defaultPreset);
   const [result, setResult] = useState<ParseResult>(() => loadSamplePreset(defaultPreset));
   const [explicitOpening, setExplicitOpening] = useState<number | null>(() => {
@@ -223,40 +283,49 @@ export default function ConverterWorkbench({
   const [isParsing, setIsParsing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
+  const [showAdvancedTools, setShowAdvancedTools] = useState(false);
+  const [secondaryFormat, setSecondaryFormat] =
+    useState<WorkbenchExportChoice>("quickbooks_csv");
+
   const storedLicenseKey = useSyncExternalStore(
     subscribeLicenseStorage,
     loadStoredLicenseKey,
-    getServerLicenseSnapshot
+    getEmptyServerSnapshot
   );
   const rawLicenseProfileJson = useSyncExternalStore(
     subscribeLicenseStorage,
     loadRawLicenseProfileJson,
-    getServerLicenseSnapshot
+    getEmptyServerSnapshot
   );
   const rawCustomRulesJson = useSyncExternalStore(
     subscribeRulesStorage,
     loadRawRulesJson,
     getServerRulesSnapshot
   );
+  const rawHistoryJson = useSyncExternalStore(
+    subscribeHistoryStorage,
+    loadRawHistoryJson,
+    getServerHistorySnapshot
+  );
 
+  // Auth & Account modals
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authTab, setAuthTab] = useState<AuthModalTab>("signup");
+  const [authName, setAuthName] = useState("");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
   const [licenseKeyDraft, setLicenseKeyDraft] = useState<string | null>(null);
-  const [licenseFeedback, setLicenseFeedback] = useState<{
-    valid: boolean;
-    plan: "free" | "pass_7d" | "pro_monthly";
-    message: string;
-  } | null>(null);
-  const [isVerifyingLicense, setIsVerifyingLicense] = useState(false);
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
+  const [upgradeReason, setUpgradeReason] = useState("");
   const [showAccountModal, setShowAccountModal] = useState(false);
-  const [showRulesDrawer, setShowRulesDrawer] = useState(false);
+  const [copiedKey, setCopiedKey] = useState(false);
+
+  // Paste OCR modal & custom rules
+  const [showPasteModal, setShowPasteModal] = useState(false);
+  const [pastedText, setPastedText] = useState("");
   const [newRuleKeyword, setNewRuleKeyword] = useState("");
   const [newRuleCategory, setNewRuleCategory] = useState<CategoryName>("SaaS & Cloud");
-  const [copiedKey, setCopiedKey] = useState(false);
-  const [showPasteModal, setShowPasteModal] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [secondaryFormat, setSecondaryFormat] = useState<ExportFormat>("quickbooks_csv");
-  const [pastedText, setPastedText] = useState("");
-  const [upgradeReason, setUpgradeReason] = useState("");
   const [toast, setToast] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -266,7 +335,7 @@ export default function ConverterWorkbench({
     if (!rawLicenseProfileJson) return null;
     try {
       const parsed = JSON.parse(rawLicenseProfileJson) as StoredLicenseProfile;
-      if (!parsed || typeof parsed.key !== "string") return null;
+      if (!parsed || typeof parsed.plan !== "string") return null;
       return parsed;
     } catch {
       return null;
@@ -282,94 +351,161 @@ export default function ConverterWorkbench({
     }
   }, [rawCustomRulesJson]);
 
-  const licenseKey = licenseKeyDraft ?? storedLicenseKey;
-  const licenseStatus = useMemo(() => {
-    if (licenseFeedback && !licenseFeedback.valid) return licenseFeedback;
+  const savedHistory = useMemo<SavedConversionEntry[]>(() => {
+    try {
+      const parsed = JSON.parse(rawHistoryJson) as SavedConversionEntry[];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }, [rawHistoryJson]);
+
+  const accountTier = useMemo(() => {
     if (storedProfile) {
+      const isPaid =
+        storedProfile.plan === "pass_7d" || storedProfile.plan === "pro_monthly";
       return {
-        valid: true,
+        isLoggedIn: true,
+        isPaid,
         plan: storedProfile.plan,
-        message: `${storedProfile.planName} active.`,
+        planName: storedProfile.planName,
+        rowLimit: isPaid ? Infinity : FREE_ROW_LIMIT,
       };
     }
-    if (storedLicenseKey) return verifyLicenseKey(storedLicenseKey);
-    return { valid: false, plan: "free" as const, message: "" };
-  }, [licenseFeedback, storedProfile, storedLicenseKey]);
+    if (storedLicenseKey && verifyLicenseKey(storedLicenseKey).valid) {
+      const legacy = verifyLicenseKey(storedLicenseKey);
+      return {
+        isLoggedIn: true,
+        isPaid: true,
+        plan: legacy.plan as "pass_7d" | "pro_monthly",
+        planName:
+          legacy.plan === "pass_7d"
+            ? "7-Day Tax & Audit Pass"
+            : "Annual Pro Bookkeeper Pass",
+        rowLimit: Infinity,
+      };
+    }
+    return {
+      isLoggedIn: false,
+      isPaid: false,
+      plan: "anonymous" as const,
+      planName: "Guest Preview",
+      rowLimit: ANONYMOUS_ROW_LIMIT,
+    };
+  }, [storedProfile, storedLicenseKey]);
+
+  const licenseKeyInput = licenseKeyDraft ?? storedLicenseKey;
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
-    setTimeout(() => setToast(null), 3400);
+    setTimeout(() => setToast(null), 3600);
   }, []);
 
+  // Listen to navbar Sign Up / Log In / My Account events + handle Polar checkout return
   useEffect(() => {
-    if (typeof window === "undefined" || autoVerifyAttemptedRef.current) return;
-    const params = new URLSearchParams(window.location.search);
-    const checkoutId = params.get("checkout_id")?.trim() ?? "";
+    if (typeof window === "undefined") return;
 
-    if (checkoutId) {
-      autoVerifyAttemptedRef.current = true;
-      fetch("/api/license", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ checkoutId }),
-      })
-        .then((r) => r.json())
-        .then((data) => {
-          if (data?.valid && data?.key) {
-            saveStoredLicenseProfile({
-              key: data.key,
-              displayKey: data.displayKey || data.key,
-              plan: data.plan,
-              planName: data.planName,
-              customerEmail: data.customerEmail,
-              customerName: data.customerName,
-              purchasedAt: data.purchasedAt,
-              expiresAt: data.expiresAt,
-              portalUrl: data.portalUrl,
-            });
-            window.dispatchEvent(new Event(LICENSE_CHANGE_EVENT));
-            const nextUrl = new URL(window.location.href);
-            nextUrl.searchParams.delete("checkout_id");
-            window.history.replaceState({}, "", nextUrl.pathname + nextUrl.search + nextUrl.hash);
-            setShowAccountModal(true);
-            showToast(data.message || "Your Pro Pass is now active!");
-          }
-        })
-        .catch(() => {
-          // Ignore transient network failures
+    const onOpenAuth = (evt: Event) => {
+      const custom = evt as CustomEvent<{ mode?: AuthModalTab }>;
+      setAuthTab(custom.detail?.mode ?? "signup");
+      setAuthError(null);
+      setUpgradeReason("");
+      setShowAuthModal(true);
+    };
+
+    const onOpenAccount = () => {
+      setShowAccountModal(true);
+    };
+
+    window.addEventListener("vaultsheet-open-auth", onOpenAuth);
+    window.addEventListener("vaultsheet-open-account", onOpenAccount);
+
+    if (!autoVerifyAttemptedRef.current) {
+      const params = new URLSearchParams(window.location.search);
+      const authParam = params.get("auth");
+      const accountParam = params.get("account");
+      if (authParam === "signup" || authParam === "login" || authParam === "key") {
+        Promise.resolve().then(() => {
+          setAuthTab(authParam);
+          setShowAuthModal(true);
         });
-      return;
+      } else if (accountParam === "1") {
+        Promise.resolve().then(() => {
+          setShowAccountModal(true);
+        });
+      }
+      const checkoutId = params.get("checkout_id")?.trim() ?? "";
+
+      if (checkoutId) {
+        autoVerifyAttemptedRef.current = true;
+        fetch("/api/license", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ checkoutId }),
+        })
+          .then((r) => r.json())
+          .then((data) => {
+            if (data?.valid && data?.key) {
+              saveStoredLicenseProfile({
+                key: data.key,
+                displayKey: data.displayKey || data.key,
+                plan: data.plan,
+                planName: data.planName,
+                customerEmail: data.customerEmail,
+                customerName: data.customerName,
+                purchasedAt: data.purchasedAt,
+                expiresAt: data.expiresAt,
+                portalUrl: data.portalUrl,
+              });
+              window.dispatchEvent(new Event(LICENSE_CHANGE_EVENT));
+              const nextUrl = new URL(window.location.href);
+              nextUrl.searchParams.delete("checkout_id");
+              window.history.replaceState(
+                {},
+                "",
+                nextUrl.pathname + nextUrl.search + nextUrl.hash
+              );
+              setShowAccountModal(true);
+              showToast(data.message || "Your Pro Pass is now active!");
+            }
+          })
+          .catch(() => {
+            // Ignore transient network errors
+          });
+      } else if (storedLicenseKey && !storedProfile) {
+        autoVerifyAttemptedRef.current = true;
+        fetch("/api/license", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ input: storedLicenseKey }),
+        })
+          .then((r) => r.json())
+          .then((data) => {
+            if (data?.valid && data?.key) {
+              saveStoredLicenseProfile({
+                key: data.key,
+                displayKey: data.displayKey || data.key,
+                plan: data.plan,
+                planName: data.planName,
+                customerEmail: data.customerEmail,
+                customerName: data.customerName,
+                purchasedAt: data.purchasedAt,
+                expiresAt: data.expiresAt,
+                portalUrl: data.portalUrl,
+              });
+              window.dispatchEvent(new Event(LICENSE_CHANGE_EVENT));
+            }
+          })
+          .catch(() => {
+            // Keep offline checksum fallback active
+          });
+      }
     }
 
-    // Upgrade any legacy pasted key in localStorage into a live Polar profile automatically
-    if (storedLicenseKey && !storedProfile) {
-      autoVerifyAttemptedRef.current = true;
-      fetch("/api/license", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input: storedLicenseKey }),
-      })
-        .then((r) => r.json())
-        .then((data) => {
-          if (data?.valid && data?.key) {
-            saveStoredLicenseProfile({
-              key: data.key,
-              displayKey: data.displayKey || data.key,
-              plan: data.plan,
-              planName: data.planName,
-              customerEmail: data.customerEmail,
-              customerName: data.customerName,
-              purchasedAt: data.purchasedAt,
-              expiresAt: data.expiresAt,
-              portalUrl: data.portalUrl,
-            });
-            window.dispatchEvent(new Event(LICENSE_CHANGE_EVENT));
-          }
-        })
-        .catch(() => {
-          // Offline fallback continues to honor checksum keys
-        });
-    }
+    return () => {
+      window.removeEventListener("vaultsheet-open-auth", onOpenAuth);
+      window.removeEventListener("vaultsheet-open-account", onOpenAccount);
+    };
   }, [storedLicenseKey, storedProfile, showToast]);
 
   const updateRowsAndReconcile = useCallback(
@@ -392,31 +528,9 @@ export default function ConverterWorkbench({
     [explicitOpening, explicitClosing]
   );
 
-  const handleLoadSample = useCallback((presetId: SamplePresetId) => {
-    setActivePreset(presetId);
-    const parsed = loadSamplePreset(presetId);
-    setResult(parsed);
-    setExplicitOpening(parsed.reconciliation.openingBalance);
-    setExplicitClosing(parsed.reconciliation.closingBalance);
-    setCategoryFilter("ALL");
-    setSearchQuery("");
-  }, []);
-
-  const handleDownloadSamplePdf = useCallback(() => {
-    const pdfBytes = generateSampleStatementPdf(activePreset);
-    const copy = new Uint8Array(pdfBytes.byteLength);
-    copy.set(pdfBytes);
-    triggerBlobDownload(
-      copy.buffer,
-      "application/pdf",
-      BANK_PRESETS[activePreset].sampleFileName
-    );
-    showToast(`Downloaded real PDF (${BANK_PRESETS[activePreset].sampleFileName}) — try dropping it back in.`);
-  }, [activePreset, showToast]);
-
   const applyCustomRulesToRows = useCallback(
     (rows: TransactionRow[]): TransactionRow[] => {
-      if (!licenseStatus.valid || customRules.length === 0) return rows;
+      if (!accountTier.isPaid || customRules.length === 0) return rows;
       return rows.map((row) => {
         const descUpper = row.description.toUpperCase();
         for (const rule of customRules) {
@@ -427,8 +541,46 @@ export default function ConverterWorkbench({
         return row;
       });
     },
-    [licenseStatus.valid, customRules]
+    [accountTier.isPaid, customRules]
   );
+
+  const handleLoadSample = useCallback((presetId: SamplePresetId) => {
+    setActivePreset(presetId);
+    const parsed = loadSamplePreset(presetId);
+    setResult(parsed);
+    setExplicitOpening(parsed.reconciliation.openingBalance);
+    setExplicitClosing(parsed.reconciliation.closingBalance);
+    setCategoryFilter("ALL");
+    setSearchQuery("");
+    setViewMode("results");
+  }, []);
+
+  const handleRestoreHistory = useCallback(
+    (entry: SavedConversionEntry) => {
+      setResult(entry.result);
+      setExplicitOpening(entry.result.reconciliation.openingBalance);
+      setExplicitClosing(entry.result.reconciliation.closingBalance);
+      setCategoryFilter("ALL");
+      setSearchQuery("");
+      setViewMode("results");
+      showToast(`Reopened "${entry.result.metadata.fileName}" from your saved history.`);
+    },
+    [showToast]
+  );
+
+  const handleDownloadSamplePdf = useCallback(() => {
+    const pdfBytes = generateSampleStatementPdf(activePreset);
+    const copy = new Uint8Array(pdfBytes.byteLength);
+    copy.set(pdfBytes);
+    triggerBlobDownload(
+      copy.buffer,
+      "application/pdf",
+      BANK_PRESETS[activePreset].sampleFileName
+    );
+    showToast(
+      `Downloaded sample PDF (${BANK_PRESETS[activePreset].sampleFileName}) — drop it here to test real extraction.`
+    );
+  }, [activePreset, showToast]);
 
   const handleFiles = useCallback(
     async (fileList: FileList | File[]) => {
@@ -442,7 +594,7 @@ export default function ConverterWorkbench({
         );
       });
       if (files.length === 0) {
-        showToast("Please drop valid .pdf, .csv, or .txt bank statement files.");
+        showToast("Please select a valid .pdf, .csv, or .txt bank statement file.");
         return;
       }
 
@@ -459,18 +611,19 @@ export default function ConverterWorkbench({
           }
         }
 
+        let finalResult: ParseResult;
         if (parsedList.length === 1) {
           const singleRaw = parsedList[0];
-          const categorizedRows = applyCustomRulesToRows(singleRaw.transactions);
-          const single = { ...singleRaw, transactions: categorizedRows };
-          setResult(single);
-          setExplicitOpening(single.reconciliation.openingBalance);
-          setExplicitClosing(single.reconciliation.closingBalance);
+          finalResult = {
+            ...singleRaw,
+            transactions: applyCustomRulesToRows(singleRaw.transactions),
+          };
+          setExplicitOpening(finalResult.reconciliation.openingBalance);
+          setExplicitClosing(finalResult.reconciliation.closingBalance);
           showToast(
-            `Parsed ${single.transactions.length} transactions locally (${single.metadata.parseMode}).`
+            `Converted ${finalResult.transactions.length} transactions locally (${finalResult.metadata.parseMode}).`
           );
         } else {
-          // Batch merge sorted chronologically so user sees consolidated table before exporting
           const mergedRows = applyCustomRulesToRows(
             parsedList
               .flatMap((p) => p.transactions)
@@ -488,10 +641,10 @@ export default function ConverterWorkbench({
           );
           setExplicitOpening(openBal);
           setExplicitClosing(closeBal);
-          setResult({
+          finalResult = {
             metadata: {
               fileName: `${files.length}-statements-merged.pdf`,
-              bankDetected: `${first.metadata.bankDetected} (Batch ${files.length} Files)`,
+              bankDetected: `${first.metadata.bankDetected} (${files.length} Files Merged)`,
               currency: first.metadata.currency,
               pageCount: parsedList.reduce((acc, p) => acc + p.metadata.pageCount, 0),
               accountLast4: first.metadata.accountLast4,
@@ -505,11 +658,17 @@ export default function ConverterWorkbench({
             reconciliation,
             warnings: parsedList.flatMap((p) => p.warnings),
             isSample: false,
-          });
-          showToast(`Merged ${files.length} files (${transactions.length} rows) locally — preview ready.`);
+          };
+          showToast(
+            `Merged ${files.length} files (${transactions.length} rows) locally.`
+          );
         }
+
+        setResult(finalResult);
+        saveConversionToHistory(finalResult);
         setCategoryFilter("ALL");
         setSearchQuery("");
+        setViewMode("results");
       } finally {
         setIsParsing(false);
       }
@@ -542,7 +701,9 @@ export default function ConverterWorkbench({
         const trimmed = value.trim();
         if (!trimmed) return { ...r, balance: null };
         const parsed = Number.parseFloat(trimmed);
-        return Number.isFinite(parsed) ? { ...r, balance: fromCents(toCents(parsed)) } : r;
+        return Number.isFinite(parsed)
+          ? { ...r, balance: fromCents(toCents(parsed)) }
+          : r;
       }
       return r;
     });
@@ -596,7 +757,7 @@ export default function ConverterWorkbench({
         accountType: nextType,
       },
     }));
-    showToast(`Statement QBO type set to ${nextType}.`);
+    showToast(`QuickBooks account type set to ${nextType}.`);
   };
 
   const handleInvertAllSigns = () => {
@@ -610,7 +771,7 @@ export default function ConverterWorkbench({
       };
     });
     updateRowsAndReconcile(flipped);
-    showToast("Inverted Debit/Credit signs across all rows (Credit Card / Statement Flip).");
+    showToast("Inverted Debit/Credit signs across all transactions.");
   };
 
   const handleRemoveDuplicates = () => {
@@ -631,46 +792,82 @@ export default function ConverterWorkbench({
       transactions: applyCustomRulesToRows(parsedRaw.transactions),
     };
     setResult(parsed);
+    saveConversionToHistory(parsed);
     setExplicitOpening(parsed.reconciliation.openingBalance);
     setExplicitClosing(parsed.reconciliation.closingBalance);
     setCategoryFilter("ALL");
     setSearchQuery("");
     setShowPasteModal(false);
+    setViewMode("results");
     showToast(`Parsed ${parsed.transactions.length} rows locally from pasted text.`);
   };
 
-  const handleExport = (format: ExportFormat, sampleSliceOnly = false) => {
+  const handleExport = (choice: WorkbenchExportChoice, sampleSliceOnly = false) => {
     if (result.transactions.length === 0) {
       showToast("No transactions loaded to export.");
       return;
     }
 
+    if (choice === "audit_pdf") {
+      if (!result.isSample && !accountTier.isPaid) {
+        setUpgradeReason(
+          "CPA Audit Certificate PDFs require a $12 7-Day Pass or Annual Pro license (or test it free on any sample statement)."
+        );
+        setAuthTab("signup");
+        setShowAuthModal(true);
+        return;
+      }
+      const bytes = exportAuditCertificatePdfBytes(result);
+      const copy = new Uint8Array(bytes.byteLength);
+      copy.set(bytes);
+      const stem =
+        result.metadata.fileName.replace(/\.pdf$/i, "").replace(/[^a-zA-Z0-9_-]+/g, "-") ||
+        "statement";
+      triggerBlobDownload(copy.buffer, "application/pdf", `${stem}-audit-certificate.pdf`);
+      showToast(`Downloaded CPA Audit Certificate (${stem}-audit-certificate.pdf) locally.`);
+      return;
+    }
+
+    const format: ExportFormat = choice;
     const isProFormat = format === "xlsx" || format === "qbo" || format === "ofx";
     const isMultiFileBatch = result.metadata.fileName.endsWith("-statements-merged.pdf");
-    const exceedsFreeRows =
-      !result.isSample && result.transactions.length > FREE_ROW_LIMIT;
+    const exceedsTierRows =
+      !result.isSample && result.transactions.length > accountTier.rowLimit;
 
     if (
       !result.isSample &&
-      !licenseStatus.valid &&
+      !accountTier.isPaid &&
       !sampleSliceOnly &&
-      (isProFormat || exceedsFreeRows || isMultiFileBatch)
+      (isProFormat || exceedsTierRows || isMultiFileBatch)
     ) {
-      setUpgradeReason(
-        isMultiFileBatch
-          ? `Multi-statement consolidated batches (${result.transactions.length} rows) require a $12 Pass or Pro license to export cleanly.`
-          : exceedsFreeRows
-            ? `Uploaded statement has ${result.transactions.length} rows (Free preview caps full downloads at ${FREE_ROW_LIMIT} rows). You can still download a 25-row sample of your file to test QuickBooks/Excel import right now.`
-            : `Full accounting exports (.xlsx 3-sheet workbook, .qbo, .ofx) on uploaded files require a $12 7-Day Pass or Pro license — or download a free 25-row sample of your file below to test the import first.`
-      );
-      setShowUpgradeModal(true);
+      if (!accountTier.isLoggedIn && exceedsTierRows && !isProFormat) {
+        setUpgradeReason(
+          `Guests can preview and export up to ${ANONYMOUS_ROW_LIMIT} CSV rows (${result.transactions.length} detected). Create a Free Account for ${FREE_ROW_LIMIT} free rows + saved history, or unlock Unlimited with a $12 Pass.`
+        );
+        setAuthTab("signup");
+      } else {
+        setUpgradeReason(
+          isMultiFileBatch
+            ? `Multi-statement merged exports (${result.transactions.length} rows) require a $12 7-Day Pass or $29/yr Pro license.`
+            : exceedsTierRows
+              ? `Your statement has ${result.transactions.length} transactions. ${
+                  accountTier.isLoggedIn
+                    ? `Free accounts allow up to ${FREE_ROW_LIMIT} rows per PDF`
+                    : `Guest preview allows up to ${ANONYMOUS_ROW_LIMIT} rows (or ${FREE_ROW_LIMIT} rows with a Free Account)`
+                }. Export Unlimited rows with a $12 Pass or test ${Math.min(accountTier.rowLimit, result.transactions.length)} rows free first.`
+              : `Full .XLSX workbooks, QuickBooks (.QBO), and .OFX files on uploaded PDFs require a $12 Pass or Annual Pro license (or test a ${accountTier.rowLimit}-row sample below first).`
+        );
+        setAuthTab("key");
+      }
+      setAuthError(null);
+      setShowAuthModal(true);
       return;
     }
 
     let exportTarget = result;
     let exportFileBase = result.metadata.fileName;
-    if (sampleSliceOnly && result.transactions.length > FREE_ROW_LIMIT) {
-      const slicedRows = result.transactions.slice(0, FREE_ROW_LIMIT);
+    if (sampleSliceOnly && result.transactions.length > accountTier.rowLimit) {
+      const slicedRows = result.transactions.slice(0, accountTier.rowLimit);
       const { transactions, reconciliation } = reconcileTransactions(
         slicedRows,
         explicitOpening,
@@ -681,7 +878,7 @@ export default function ConverterWorkbench({
         transactions,
         reconciliation,
       };
-      exportFileBase = `${result.metadata.fileName.replace(/\.[^.]+$/, "")}-sample25.pdf`;
+      exportFileBase = `${result.metadata.fileName.replace(/\.[^.]+$/, "")}-sample${accountTier.rowLimit}.pdf`;
     }
 
     const { mimeType, downloadName } = getExportMimeAndFilename(
@@ -710,8 +907,8 @@ export default function ConverterWorkbench({
 
     showToast(
       sampleSliceOnly
-        ? `Exported free 25-row test (${downloadName}) locally — verify import quality first.`
-        : `Exported ${downloadName} locally — 0 bytes sent to any server.`
+        ? `Downloaded ${accountTier.rowLimit}-row test (${downloadName}) locally.`
+        : `Downloaded ${downloadName} locally — 0 bytes sent to any server.`
     );
   };
 
@@ -739,93 +936,85 @@ export default function ConverterWorkbench({
     }));
   };
 
-  const handleActivateLicense = async (e: React.FormEvent) => {
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = licenseKey.trim();
-    if (!trimmed) {
-      setLicenseFeedback({
-        valid: false,
-        plan: "free",
-        message: "Enter your checkout email address or VS- license key.",
-      });
-      return;
-    }
+    setAuthError(null);
+    setIsSubmittingAuth(true);
 
-    setIsVerifyingLicense(true);
-    setLicenseFeedback(null);
     try {
-      const response = await fetch("/api/license", {
+      if (authTab === "key") {
+        const trimmed = licenseKeyInput.trim();
+        if (!trimmed) {
+          setAuthError("Enter your checkout email address or VS- license key.");
+          return;
+        }
+        const response = await fetch("/api/license", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ input: trimmed }),
+        });
+        const data = await response.json();
+        if (response.ok && data?.valid && data?.key) {
+          saveStoredLicenseProfile({
+            key: data.key,
+            displayKey: data.displayKey || data.key,
+            plan: data.plan,
+            planName: data.planName || "Pro Pass",
+            customerEmail: data.customerEmail,
+            customerName: data.customerName,
+            purchasedAt: data.purchasedAt,
+            expiresAt: data.expiresAt,
+            portalUrl: data.portalUrl,
+          });
+          setLicenseKeyDraft(null);
+          window.dispatchEvent(new Event(LICENSE_CHANGE_EVENT));
+          setShowAuthModal(false);
+          setShowAccountModal(true);
+          showToast(data.message || "License activated!");
+        } else {
+          setAuthError(data?.message || "Invalid email or license key.");
+        }
+        return;
+      }
+
+      // Signup or Login via /api/auth
+      const response = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input: trimmed }),
+        body: JSON.stringify({
+          action: authTab,
+          name: authName,
+          email: authEmail,
+          password: authPassword,
+        }),
       });
       const data = await response.json();
-
-      if (response.ok && data?.valid && data?.key) {
-        saveStoredLicenseProfile({
-          key: data.key,
-          displayKey: data.displayKey || data.key,
-          plan: data.plan,
-          planName: data.planName || "Pro Pass",
-          customerEmail: data.customerEmail,
-          customerName: data.customerName,
-          purchasedAt: data.purchasedAt,
-          expiresAt: data.expiresAt,
-          portalUrl: data.portalUrl,
-        });
-        setLicenseFeedback(null);
-        setLicenseKeyDraft(null);
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new Event(LICENSE_CHANGE_EVENT));
-        }
-        setShowUpgradeModal(false);
+      if (response.ok && data?.valid && data?.profile) {
+        saveStoredLicenseProfile(data.profile as StoredLicenseProfile);
+        setAuthPassword("");
+        window.dispatchEvent(new Event(LICENSE_CHANGE_EVENT));
+        setShowAuthModal(false);
         setShowAccountModal(true);
-        showToast(data.message || "Account verified and activated.");
+        showToast(data.message || "Signed in!");
       } else {
-        setLicenseFeedback({
-          valid: false,
-          plan: "free",
-          message: data?.message || "Invalid email or license key.",
-        });
+        setAuthError(data?.message || "Authentication failed. Please check your details.");
       }
     } catch {
-      setLicenseFeedback({
-        valid: false,
-        plan: "free",
-        message: "Network error while verifying license. Please try again.",
-      });
+      setAuthError("Connection error. Please try again.");
     } finally {
-      setIsVerifyingLicense(false);
+      setIsSubmittingAuth(false);
     }
   };
 
   const handleSignOut = () => {
     saveStoredLicenseProfile(null);
     setLicenseKeyDraft("");
-    setLicenseFeedback(null);
+    setAuthError(null);
     if (typeof window !== "undefined") {
       window.dispatchEvent(new Event(LICENSE_CHANGE_EVENT));
     }
     setShowAccountModal(false);
-    showToast("Signed out of VaultSheet Pro on this browser.");
-  };
-
-  const handleDownloadAuditPdf = () => {
-    if (!result.isSample && !licenseStatus.valid) {
-      setUpgradeReason(
-        "Downloadable CPA Reconciliation & Audit Certificate PDFs require a $12 7-Day Pass or Annual Pro license (or test it free on any sample preset above)."
-      );
-      setShowUpgradeModal(true);
-      return;
-    }
-    const bytes = exportAuditCertificatePdfBytes(result);
-    const copy = new Uint8Array(bytes.byteLength);
-    copy.set(bytes);
-    const stem =
-      result.metadata.fileName.replace(/\.pdf$/i, "").replace(/[^a-zA-Z0-9_-]+/g, "-") ||
-      "statement";
-    triggerBlobDownload(copy.buffer, "application/pdf", `${stem}-audit-certificate.pdf`);
-    showToast(`Downloaded CPA Audit Certificate (${stem}-audit-certificate.pdf) locally.`);
+    showToast("Signed out of VaultSheet on this browser.");
   };
 
   const persistCustomRules = (nextRules: CustomCategoryRule[]) => {
@@ -836,13 +1025,6 @@ export default function ConverterWorkbench({
 
   const handleAddCustomRule = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!result.isSample && !licenseStatus.valid) {
-      setUpgradeReason(
-        "Custom Auto-Categorization Rules require a $12 7-Day Pass or Annual Pro license."
-      );
-      setShowUpgradeModal(true);
-      return;
-    }
     const kw = newRuleKeyword.trim();
     if (!kw) return;
     const nextRules: CustomCategoryRule[] = [
@@ -851,7 +1033,7 @@ export default function ConverterWorkbench({
     ];
     persistCustomRules(nextRules);
     setNewRuleKeyword("");
-    showToast(`Saved auto-category rule: "${kw.toUpperCase()}" -> ${newRuleCategory}`);
+    showToast(`Saved rule: "${kw.toUpperCase()}" -> ${newRuleCategory}`);
   };
 
   const handleDeleteCustomRule = (ruleId: string) => {
@@ -859,13 +1041,6 @@ export default function ConverterWorkbench({
   };
 
   const handleApplyCustomRules = () => {
-    if (!result.isSample && !licenseStatus.valid) {
-      setUpgradeReason(
-        "Applying Custom Auto-Categorization Rules on uploaded statements requires a $12 Pass or Annual Pro license."
-      );
-      setShowUpgradeModal(true);
-      return;
-    }
     let updatedCount = 0;
     const nextRows = result.transactions.map((row) => {
       const descUpper = row.description.toUpperCase();
@@ -883,8 +1058,8 @@ export default function ConverterWorkbench({
     updateRowsAndReconcile(nextRows);
     showToast(
       updatedCount > 0
-        ? `Auto-categorized ${updatedCount} transaction${updatedCount === 1 ? "" : "s"} using your rules.`
-        : "All matching transactions already match your category rules."
+        ? `Auto-categorized ${updatedCount} transaction${updatedCount === 1 ? "" : "s"}.`
+        : "All matching rows already follow your rules."
     );
   };
 
@@ -910,697 +1085,652 @@ export default function ConverterWorkbench({
   }, [result.transactions]);
 
   const { reconciliation, metadata } = result;
+  const passCheckoutHref = getCheckoutUrlWithEmail(
+    CHECKOUT_URLS.pass7Day,
+    storedProfile?.customerEmail
+  );
+  const proCheckoutHref = getCheckoutUrlWithEmail(
+    CHECKOUT_URLS.proMonthly,
+    storedProfile?.customerEmail
+  );
 
   return (
-    <div className="w-full overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[0_20px_50px_-12px_rgba(15,23,42,0.08)]">
-      {/* Top Application Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/80 px-4 py-3 sm:px-6">
-        <div className="flex flex-wrap items-center gap-3 text-xs">
-          <div className="flex items-center gap-2 font-semibold text-slate-900">
-            <ShieldCheck className="h-4 w-4 text-blue-600" />
-            <span>Bank Statement Ledger</span>
-            {contextBankName && (
-              <span className="font-normal text-slate-500">&middot; {contextBankName}</span>
-            )}
-          </div>
-          <span className="hidden h-3.5 w-px bg-slate-300 sm:inline-block" />
-          <span className="hidden items-center gap-1.5 text-[11px] font-medium text-slate-500 sm:inline-flex">
-            <Lock className="h-3 w-3 text-emerald-600" />
-            Local Browser Mode &mdash; Zero Server Uploads
+    <div className="w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_20px_50px_-12px_rgba(15,23,42,0.08)]">
+      {/* Hidden shared file input so both Upload Mode & Replace PDF work identically */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf,.csv,.txt,application/pdf,text/csv,text/plain"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files?.length) {
+            void handleFiles(e.target.files);
+            e.target.value = "";
+          }
+        }}
+      />
+
+      {/* Clean 3-Step Progress Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/90 px-4 py-3 sm:px-6">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {viewMode === "results" && (
+            <button
+              type="button"
+              onClick={() => setViewMode("upload")}
+              className="mr-1 inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1 font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-100 hover:text-slate-900"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              New PDF
+            </button>
+          )}
+          <span
+            className={`font-semibold ${
+              viewMode === "upload" ? "text-blue-600" : "text-emerald-700"
+            }`}
+          >
+            {viewMode === "upload" ? "1. Select Bank PDF" : "✓ 1. PDF Loaded"}
           </span>
+          <span className="text-slate-300">&rarr;</span>
+          <span
+            className={`font-semibold ${
+              viewMode === "results" ? "text-blue-600" : "text-slate-500"
+            }`}
+          >
+            2. Verify Balance &amp; Download
+          </span>
+          {contextBankName && (
+            <span className="hidden text-slate-500 sm:inline">
+              &middot; <strong className="text-slate-700">{contextBankName}</strong>
+            </span>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={handleDownloadSamplePdf}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:text-slate-900"
-          >
-            <FileText className="h-3.5 w-3.5 text-slate-500" />
-            Download Sample PDF
-          </button>
-          {licenseStatus.valid ? (
+          {accountTier.isLoggedIn ? (
             <button
               type="button"
               onClick={() => setShowAccountModal(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 shadow-2xs transition hover:border-emerald-300 hover:bg-emerald-100"
-            >
-              <UserCheck className="h-3.5 w-3.5 text-emerald-700" />
-              <span>
-                {licenseStatus.plan === "pass_7d" ? "7-Day Audit Pass" : "Annual Pro"}
-              </span>
-              {(storedProfile?.customerEmail || storedProfile?.displayKey) && (
-                <span className="hidden font-normal text-emerald-700 sm:inline">
-                  &middot; {storedProfile.customerEmail || storedProfile.displayKey}
-                </span>
-              )}
-              <ChevronDown className="h-3.5 w-3.5 opacity-75" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                setUpgradeReason("");
-                setShowUpgradeModal(true);
-              }}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:border-blue-300 hover:bg-slate-50 hover:text-slate-900"
-            >
-              <KeyRound className="h-3.5 w-3.5 text-blue-600" />
-              Sign In / License Key
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Streamlined Upload Dropzone & Sample Preset Switcher */}
-      <div className="border-b border-slate-200 bg-white p-4 sm:p-5">
-        <div
-          onDragOver={(e) => {
-            e.preventDefault();
-            setIsDragging(true);
-          }}
-          onDragLeave={() => setIsDragging(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setIsDragging(false);
-            if (e.dataTransfer.files?.length) {
-              void handleFiles(e.dataTransfer.files);
-            }
-          }}
-          onClick={() => fileInputRef.current?.click()}
-          className={`flex cursor-pointer flex-col items-start justify-between gap-4 rounded-xl border-2 border-dashed p-5 transition sm:flex-row sm:items-center ${
-            isDragging
-              ? "border-blue-500 bg-blue-50/80"
-              : "border-blue-200 bg-blue-50/30 hover:border-blue-400 hover:bg-blue-50/55"
-          }`}
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf,.csv,.txt,application/pdf,text/csv,text/plain"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files?.length) {
-                void handleFiles(e.target.files);
-                e.target.value = "";
-              }
-            }}
-          />
-
-          <div className="flex items-start gap-4 sm:items-center">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-xs">
-              <Upload className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-slate-900 sm:text-base">
-                {isParsing
-                  ? "Reading your statement securely inside browser RAM..."
-                  : "Drop your PDF bank statement here, or click to browse"}
-              </p>
-              <p className="mt-0.5 text-xs text-slate-500">
-                Supports single or multi-page PDFs from Chase, Wells Fargo, BofA, Wise, Mercury, Revolut &amp; 60+ banks
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                fileInputRef.current?.click();
-              }}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-2xs transition hover:bg-slate-800"
-            >
-              <Upload className="h-3.5 w-3.5" />
-              Choose PDF File
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowPasteModal(true);
-              }}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:text-slate-900"
-            >
-              <FileText className="h-3.5 w-3.5 text-slate-500" />
-              Paste Scanned / OCR Text
-            </button>
-          </div>
-        </div>
-
-        {/* Horizontal Instant Demo Preset Switcher */}
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3.5">
-          <span className="text-xs font-medium text-slate-500">
-            Instant live demo preset (unlimited free test exports):
-          </span>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {(Object.keys(BANK_PRESETS) as SamplePresetId[]).map((id) => {
-              const p = BANK_PRESETS[id];
-              const active = result.isSample && activePreset === id;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => handleLoadSample(id)}
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs transition ${
-                    active
-                      ? "bg-slate-900 font-semibold text-white shadow-2xs"
-                      : "bg-slate-100 font-medium text-slate-700 hover:bg-slate-200/80 hover:text-slate-900"
-                  }`}
-                >
-                  <span>{p.label}</span>
-                  <span
-                    className={`mono-nums text-[10px] ${
-                      active ? "text-slate-300" : "text-slate-500"
-                    }`}
-                  >
-                    {p.currency}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Reconciliation Summary, Export Controls & 4 Financial KPI Cards */}
-      <div className="border-b border-slate-200 bg-slate-50/70 px-4 py-4 sm:px-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0 space-y-1.5">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <h2 className="text-base font-bold text-slate-900 truncate">
-                {metadata.bankDetected}
-              </h2>
-              {reconciliation.isFullyReconciled ? (
-                <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  Reconciled ($0.00 diff &middot; {reconciliation.matchedRows}/{result.transactions.length})
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
-                  <AlertTriangle className="h-3.5 w-3.5" />
-                  Review Needed ({reconciliation.mismatchRows} mismatch &middot;{" "}
-                  {formatMoney(reconciliation.discrepancy, metadata.currency)})
-                </span>
-              )}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-              <span className="mono-nums font-medium text-slate-700">
-                Acct ****{metadata.accountLast4}
-              </span>
-              <span>&middot;</span>
-              <span className="mono-nums font-medium text-slate-700">{metadata.currency}</span>
-              <span>&middot;</span>
-              <span className="mono-nums">
-                {metadata.periodStart ?? "—"} to {metadata.periodEnd ?? "—"}
-              </span>
-              <span>&middot;</span>
-              <span>{result.transactions.length} transactions</span>
-              {reconciliation.stitchedLineCount > 0 && (
-                <>
-                  <span>&middot;</span>
-                  <span className="text-blue-700 font-medium">
-                    {reconciliation.stitchedLineCount} wrapped memos stitched
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Primary Export Hierarchy */}
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => handleExport("xlsx")}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-blue-700"
-            >
-              <FileSpreadsheet className="h-4 w-4" />
-              Download Excel (.xlsx)
-              {!result.isSample && !licenseStatus.valid && <Lock className="h-3 w-3 opacity-85" />}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleExport("qbo")}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-slate-800"
-            >
-              <Download className="h-3.5 w-3.5" />
-              Download QuickBooks (.QBO)
-              {!result.isSample && !licenseStatus.valid && <Lock className="h-3 w-3 opacity-85" />}
-            </button>
-
-            <div className="inline-flex items-center rounded-lg border border-slate-300 bg-white p-0.5 shadow-2xs">
-              <select
-                value={secondaryFormat}
-                onChange={(e) => setSecondaryFormat(e.target.value as ExportFormat)}
-                aria-label="Additional accounting export format"
-                className="bg-transparent px-2 py-1 text-xs font-medium text-slate-700 focus:outline-none"
-              >
-                <option value="quickbooks_csv">QB CSV (4-Col)</option>
-                <option value="quickbooks_3col_csv">QB CSV (3-Col)</option>
-                <option value="xero_csv">Xero CSV</option>
-                <option value="csv">Standard CSV</option>
-                <option value="ofx">OFX (.ofx)</option>
-                <option value="json">JSON</option>
-              </select>
-              <button
-                type="button"
-                onClick={() => handleExport(secondaryFormat)}
-                className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-800 transition hover:bg-slate-200"
-              >
-                Export
-              </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setShowSettings((prev) => !prev)}
-              aria-expanded={showSettings}
-              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium shadow-2xs transition ${
-                showSettings
-                  ? "border-blue-500 bg-blue-50 text-blue-700"
-                  : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold shadow-2xs transition ${
+                accountTier.isPaid
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                  : "border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100"
               }`}
             >
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              Settings
+              <UserCheck className="h-3.5 w-3.5" />
+              <span className="max-w-[150px] truncate">
+                {storedProfile?.customerName || storedProfile?.customerEmail || "Account"}
+              </span>
+              <span className="opacity-75">
+                &middot; {accountTier.isPaid ? "Pro" : "Free (25 rows)"}
+              </span>
+              <ChevronDown className="h-3 w-3 opacity-75" />
             </button>
-          </div>
-        </div>
-
-        {/* 4 Clean Financial KPI Metric Cards */}
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 shadow-2xs">
-            <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-              Opening Balance
-            </span>
-            <span className="mono-nums mt-0.5 block text-sm font-bold text-slate-900 sm:text-base">
-              {formatMoney(reconciliation.openingBalance, metadata.currency)}
-            </span>
-          </div>
-
-          <div className="rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 shadow-2xs">
-            <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-              + Total Deposits
-            </span>
-            <span className="mono-nums mt-0.5 block text-sm font-bold text-emerald-700 sm:text-base">
-              +{formatMoney(reconciliation.totalCredits, metadata.currency)}
-            </span>
-          </div>
-
-          <div className="rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 shadow-2xs">
-            <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-              &minus; Total Withdrawals
-            </span>
-            <span className="mono-nums mt-0.5 block text-sm font-bold text-slate-900 sm:text-base">
-              -{formatMoney(reconciliation.totalDebits, metadata.currency)}
-            </span>
-          </div>
-
-          <div className="rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 shadow-2xs">
-            <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-              = Closing Balance
-            </span>
-            <span
-              className={`mono-nums mt-0.5 block text-sm font-bold sm:text-base ${
-                reconciliation.isFullyReconciled ? "text-slate-900" : "text-amber-700"
-              }`}
-            >
-              {formatMoney(
-                reconciliation.closingBalance ?? reconciliation.calculatedClosingBalance,
-                metadata.currency
-              )}
-            </span>
-          </div>
-        </div>
-
-        {/* Collapsible Balance & QuickBooks Account Settings Drawer */}
-        {showSettings && (
-          <div className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xs sm:grid-cols-2 lg:grid-cols-6">
-            <div>
-              <label
-                htmlFor="opening-balance-input"
-                className="block text-[11px] font-medium text-slate-600"
-              >
-                Opening Balance
-              </label>
-              <input
-                id="opening-balance-input"
-                type="number"
-                step="0.01"
-                value={explicitOpening ?? ""}
-                placeholder={
-                  reconciliation.openingBalance !== null
-                    ? reconciliation.openingBalance.toFixed(2)
-                    : "Auto / Enter"
-                }
-                onChange={(e) => handleExplicitBalanceChange("opening", e.target.value)}
-                className="mono-nums mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="closing-balance-input"
-                className="block text-[11px] font-medium text-slate-600"
-              >
-                Statement Closing
-              </label>
-              <input
-                id="closing-balance-input"
-                type="number"
-                step="0.01"
-                value={explicitClosing ?? ""}
-                placeholder={
-                  reconciliation.closingBalance !== null
-                    ? reconciliation.closingBalance.toFixed(2)
-                    : "Auto / Enter"
-                }
-                onChange={(e) => handleExplicitBalanceChange("closing", e.target.value)}
-                className="mono-nums mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="qbo-account-type"
-                className="block text-[11px] font-medium text-slate-600"
-              >
-                QuickBooks Account Type
-              </label>
-              <select
-                id="qbo-account-type"
-                value={metadata.accountType}
-                onChange={(e) => handleAccountTypeChange(e.target.value as AccountType)}
-                aria-label="Statement account type for QuickBooks export"
-                className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-800 focus:border-blue-500 focus:bg-white focus:outline-none"
-              >
-                <option value="CHECKING">Checking (.qbo)</option>
-                <option value="SAVINGS">Savings (.qbo)</option>
-                <option value="CREDITCARD">Credit Card (.qbo)</option>
-              </select>
-            </div>
-
-            <div>
-              <label
-                htmlFor="statement-currency"
-                className="block text-[11px] font-medium text-slate-600"
-              >
-                Currency
-              </label>
-              <select
-                id="statement-currency"
-                value={metadata.currency}
-                onChange={(e) => handleMetadataField("currency", e.target.value)}
-                aria-label="Statement currency"
-                className="mono-nums mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none"
-              >
-                <option value="USD">USD</option>
-                <option value="EUR">EUR</option>
-                <option value="GBP">GBP</option>
-                <option value="CAD">CAD</option>
-                <option value="AUD">AUD</option>
-              </select>
-            </div>
-
-            <div>
-              <label
-                htmlFor="account-last4"
-                className="block text-[11px] font-medium text-slate-600"
-              >
-                Account Last 4 Digits
-              </label>
-              <input
-                id="account-last4"
-                type="text"
-                maxLength={4}
-                value={metadata.accountLast4}
-                onChange={(e) => handleMetadataField("accountLast4", e.target.value)}
-                aria-label="Account last 4 digits"
-                className="mono-nums mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none"
-              />
-            </div>
-
-            <div className="flex items-end">
-              <button
-                type="button"
-                onClick={handleInvertAllSigns}
-                title="Invert all Debit/Credit signs (useful for Credit Card PDFs)"
-                className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
-              >
-                <ArrowLeftRight className="h-3.5 w-3.5 text-blue-600" />
-                Flip All +/- Signs
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Pro Bookkeeper Toolkit Bar */}
-      <div
-        className={`flex flex-wrap items-center justify-between gap-3 border-b px-4 py-2.5 sm:px-6 ${
-          licenseStatus.valid
-            ? "border-emerald-200 bg-emerald-50/60"
-            : "border-slate-200 bg-slate-50/90"
-        }`}
-      >
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          {licenseStatus.valid ? (
-            <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-800">
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700" />
-              PRO WORKSPACE ACTIVE: Unlimited Rows &middot; Batch PDF Merge &middot; .XLSX / .QBO / Audit PDF / Auto-Rules Unlocked
-            </span>
           ) : (
-            <span className="text-slate-600">
-              <strong className="font-semibold text-slate-800">FREE PREVIEW:</strong> Max {FREE_ROW_LIMIT} rows/PDF &middot;{" "}
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => {
+                  setAuthTab("login");
+                  setAuthError(null);
                   setUpgradeReason("");
-                  setShowUpgradeModal(true);
+                  setShowAuthModal(true);
                 }}
-                className="font-semibold text-blue-600 underline underline-offset-2 hover:text-blue-700"
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50"
               >
-                Sign in or get a $12 Pass
-              </button>{" "}
-              to unlock .XLSX, .QBO, CPA Audit PDF &amp; Auto-Rules
-            </span>
+                <KeyRound className="h-3 w-3 text-slate-500" />
+                Log In / Key
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthTab("signup");
+                  setAuthError(null);
+                  setUpgradeReason("");
+                  setShowAuthModal(true);
+                }}
+                className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-2xs transition hover:bg-slate-800"
+              >
+                <User className="h-3 w-3" />
+                Sign Up Free (25 Rows)
+              </button>
+            </div>
           )}
         </div>
+      </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={handleDownloadAuditPdf}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-2xs transition hover:border-blue-400 hover:bg-blue-50/40"
-          >
-            <FileCheck2 className="h-3.5 w-3.5 text-blue-600" />
-            Download Audit Certificate (.PDF)
-            {!result.isSample && !licenseStatus.valid && <Lock className="h-3 w-3 opacity-70" />}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowRulesDrawer((prev) => !prev)}
-            aria-expanded={showRulesDrawer}
-            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold shadow-2xs transition ${
-              showRulesDrawer
-                ? "border-blue-500 bg-blue-50 text-blue-700"
-                : "border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
+      {/* =========================================================================
+          STAGE 1: UPLOAD MODE (Simple, Zero-Clutter Entry Point)
+         ========================================================================= */}
+      {viewMode === "upload" && (
+        <div className="p-5 sm:p-10">
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setIsDragging(false);
+              if (e.dataTransfer.files?.length) {
+                void handleFiles(e.dataTransfer.files);
+              }
+            }}
+            onClick={() => fileInputRef.current?.click()}
+            className={`mx-auto flex max-w-3xl cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-12 text-center transition ${
+              isDragging
+                ? "border-blue-600 bg-blue-50/90"
+                : "border-blue-200 bg-blue-50/30 hover:border-blue-400 hover:bg-blue-50/60"
             }`}
           >
-            <Tag className="h-3.5 w-3.5 text-blue-600" />
-            Auto-Category Rules ({customRules.length})
-          </button>
-        </div>
-      </div>
-
-      {/* Custom Auto-Categorization Rules Drawer */}
-      {showRulesDrawer && (
-        <div className="border-b border-slate-200 bg-slate-50/60 px-4 py-4 sm:px-6">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                Custom Keyword Auto-Categorization Rules
-              </h3>
-              <p className="mt-0.5 text-xs text-slate-500">
-                Automatically assign QuickBooks/Xero accounting categories whenever merchant descriptions match these keywords.
-              </p>
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-md shadow-blue-600/20">
+              <Upload className="h-6 w-6" />
             </div>
-            <button
-              type="button"
-              onClick={handleApplyCustomRules}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-2xs transition hover:bg-slate-800"
-            >
-              <Check className="h-3.5 w-3.5" />
-              Apply Rules to Statement ({result.transactions.length} rows)
-            </button>
-          </div>
 
-          <div className="mt-3 flex flex-wrap gap-2">
-            {customRules.map((rule) => (
-              <div
-                key={rule.id}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs shadow-2xs"
+            <h2 className="mt-5 text-xl font-bold text-slate-900 sm:text-2xl">
+              {isParsing
+                ? "Reading and reconciling your PDF safely on this device..."
+                : "Drop your PDF bank statement here"}
+            </h2>
+
+            <p className="mt-2 max-w-lg text-sm text-slate-500">
+              Works with digital PDFs from Chase, Wells Fargo, BofA, Wise, Mercury, Revolut &amp;
+              60+ banks. Nothing leaves your computer.
+            </p>
+
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  fileInputRef.current?.click();
+                }}
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-7 py-3.5 text-sm font-bold text-white shadow-md shadow-blue-600/20 transition hover:bg-blue-700"
               >
-                <span className="mono-nums font-semibold text-slate-900">
-                  &ldquo;{rule.keyword}&rdquo;
-                </span>
-                <span className="text-slate-400">&rarr;</span>
-                <span className="font-medium text-blue-700">{rule.category}</span>
-                <button
-                  type="button"
-                  onClick={() => handleDeleteCustomRule(rule.id)}
-                  title="Delete rule"
-                  className="ml-1 rounded p-0.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            ))}
+                <Upload className="h-4 w-4" />
+                Select PDF Statement
+              </button>
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowPasteModal(true);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50"
+              >
+                <FileText className="h-4 w-4 text-slate-500" />
+                Or Paste OCR / Table Text
+              </button>
+            </div>
           </div>
 
-          <form onSubmit={handleAddCustomRule} className="mt-3 flex flex-wrap items-center gap-2">
-            <input
-              type="text"
-              value={newRuleKeyword}
-              onChange={(e) => setNewRuleKeyword(e.target.value)}
-              placeholder="Merchant keyword (e.g. VERCEL, FIGMA, UBER)..."
-              className="w-64 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none"
-            />
-            <select
-              value={newRuleCategory}
-              onChange={(e) => setNewRuleCategory(e.target.value as CategoryName)}
-              aria-label="Target category for keyword rule"
-              className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-blue-500 focus:outline-none"
-            >
-              {CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-            <button
-              type="submit"
-              className="inline-flex items-center gap-1 rounded-lg border border-blue-600 bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add Rule
-            </button>
-          </form>
-        </div>
-      )}
+          {/* 1-Click Live Demo Bar */}
+          <div className="mx-auto mt-6 flex max-w-3xl flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium text-slate-600">
+                No PDF handy? Try an instant live sample:
+              </span>
+              {(Object.keys(BANK_PRESETS) as SamplePresetId[]).map((id) => {
+                const p = BANK_PRESETS[id];
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => handleLoadSample(id)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-800 shadow-2xs transition hover:border-blue-400 hover:text-blue-600"
+                  >
+                    <span>{p.label}</span>
+                    <span className="mono-nums text-[10px] font-normal text-slate-400">
+                      {p.currency}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
 
-      {/* Search, Category Filter & Row Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search merchant, date, or memo..."
-              className="w-60 rounded-lg border border-slate-200 bg-slate-50 py-1.5 pl-8 pr-3 text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none"
-            />
-          </div>
-
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            aria-label="Filter transactions by category"
-            className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-700 focus:border-blue-500 focus:bg-white focus:outline-none"
-          >
-            <option value="ALL">All Categories ({result.transactions.length})</option>
-            {Array.from(categoryCounts.entries()).map(([cat, count]) => (
-              <option key={cat} value={cat}>
-                {cat} ({count})
-              </option>
-            ))}
-          </select>
-
-          <button
-            type="button"
-            onClick={handleAddRow}
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-900"
-          >
-            <Plus className="h-3.5 w-3.5 text-slate-500" />
-            Add Row
-          </button>
-
-          {reconciliation.duplicateRows > 0 && (
             <button
               type="button"
-              onClick={handleRemoveDuplicates}
-              className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-100"
+              onClick={handleDownloadSamplePdf}
+              className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline"
             >
-              <Trash2 className="h-3.5 w-3.5" />
-              Remove {reconciliation.duplicateRows} Duplicates
+              Download Sample PDF
             </button>
+          </div>
+
+          {/* Saved Recent Statements (Retention Hook) */}
+          {savedHistory.length > 0 && (
+            <div className="mx-auto mt-6 max-w-3xl">
+              <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
+                <span className="inline-flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 text-blue-600" />
+                  Your Recent Statements (Saved Locally)
+                </span>
+              </div>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {savedHistory.slice(0, 4).map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleRestoreHistory(item)}
+                    className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-left text-xs shadow-2xs transition hover:border-blue-400 hover:bg-blue-50/30"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-slate-900">
+                        {item.result.metadata.fileName}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-slate-500">
+                        {item.result.transactions.length} rows &middot;{" "}
+                        {item.result.metadata.currency}
+                      </p>
+                    </div>
+                    <span className="shrink-0 font-semibold text-blue-600">
+                      Open &rarr;
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
         </div>
-
-        <span className="text-xs text-slate-500">
-          Click any cell to edit inline &middot; Balances recalculate automatically
-        </span>
-      </div>
-
-      {/* Warnings if any */}
-      {result.warnings.length > 0 && (
-        <div className="border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800 sm:px-6">
-          {result.warnings.join(" ")}
-        </div>
       )}
 
-      {/* Interactive Financial Spreadsheet Table */}
-      <div className="max-h-[440px] overflow-auto bg-white">
-        <table className="w-full border-collapse text-left text-xs">
-          <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-            <tr>
-              <th className="px-3.5 py-2.5">Date</th>
-              <th className="px-3.5 py-2.5">Description</th>
-              <th className="px-3.5 py-2.5">Category</th>
-              <th className="px-3.5 py-2.5 text-right">Amount ({metadata.currency})</th>
-              <th className="px-3.5 py-2.5 text-right">Balance</th>
-              <th className="px-3.5 py-2.5 text-center">Audit</th>
-              <th className="px-3.5 py-2.5 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {filteredRows.map((row) => (
-              <tr
-                key={row.id}
-                className={`transition hover:bg-blue-50/40 ${
-                  row.balanceStatus === "mismatch" ? "bg-amber-50/60" : ""
+      {/* =========================================================================
+          STAGE 2: RESULTS MODE (Reconciled Summary + Big Downloads + Clean Table)
+         ========================================================================= */}
+      {viewMode === "results" && (
+        <>
+          {/* Summary + Primary Export Buttons */}
+          <div className="border-b border-slate-200 bg-white px-4 py-5 sm:px-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0 space-y-1">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <h2 className="text-lg font-bold text-slate-900 truncate">
+                    {metadata.bankDetected}
+                  </h2>
+                  {reconciliation.isFullyReconciled ? (
+                    <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Balance Verified ($0.00 diff)
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      Review Needed ({reconciliation.mismatchRows} mismatch &middot;{" "}
+                      {formatMoney(reconciliation.discrepancy, metadata.currency)})
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-xs text-slate-500">
+                  <span className="mono-nums font-medium text-slate-700">
+                    Acct ****{metadata.accountLast4}
+                  </span>{" "}
+                  &middot; {metadata.currency} &middot; {metadata.periodStart ?? "—"} to{" "}
+                  {metadata.periodEnd ?? "—"} &middot; {result.transactions.length} transactions
+                </p>
+              </div>
+
+              {/* Unmistakable Primary Download Buttons */}
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleExport("xlsx")}
+                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700"
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                  Download Excel (.xlsx)
+                  {!result.isSample && !accountTier.isPaid && (
+                    <Lock className="h-3 w-3 opacity-85" />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleExport("qbo")}
+                  className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-slate-800"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Download QuickBooks (.QBO)
+                  {!result.isSample && !accountTier.isPaid && (
+                    <Lock className="h-3 w-3 opacity-85" />
+                  )}
+                </button>
+
+                <div className="inline-flex items-center rounded-xl border border-slate-300 bg-white p-0.5 shadow-2xs">
+                  <select
+                    value={secondaryFormat}
+                    onChange={(e) =>
+                      setSecondaryFormat(e.target.value as WorkbenchExportChoice)
+                    }
+                    aria-label="Additional export format"
+                    className="bg-transparent px-2.5 py-1.5 text-xs font-medium text-slate-700 focus:outline-none"
+                  >
+                    <option value="quickbooks_csv">QB CSV (4-Col)</option>
+                    <option value="quickbooks_3col_csv">QB CSV (3-Col)</option>
+                    <option value="xero_csv">Xero CSV</option>
+                    <option value="csv">Standard CSV</option>
+                    <option value="ofx">OFX (.ofx)</option>
+                    <option value="audit_pdf">CPA Audit Certificate (.pdf)</option>
+                    <option value="json">JSON</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => handleExport(secondaryFormat)}
+                    className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-800 transition hover:bg-slate-200"
+                  >
+                    Download
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* 4 Clean KPI Cards */}
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-2.5">
+                <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  Opening Balance
+                </span>
+                <span className="mono-nums mt-0.5 block text-sm font-bold text-slate-900 sm:text-base">
+                  {formatMoney(reconciliation.openingBalance, metadata.currency)}
+                </span>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-2.5">
+                <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  + Total Deposits
+                </span>
+                <span className="mono-nums mt-0.5 block text-sm font-bold text-emerald-700 sm:text-base">
+                  +{formatMoney(reconciliation.totalCredits, metadata.currency)}
+                </span>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-2.5">
+                <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  &minus; Total Withdrawals
+                </span>
+                <span className="mono-nums mt-0.5 block text-sm font-bold text-slate-900 sm:text-base">
+                  -{formatMoney(reconciliation.totalDebits, metadata.currency)}
+                </span>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-2.5">
+                <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  = Closing Balance
+                </span>
+                <span
+                  className={`mono-nums mt-0.5 block text-sm font-bold sm:text-base ${
+                    reconciliation.isFullyReconciled ? "text-slate-900" : "text-amber-700"
+                  }`}
+                >
+                  {formatMoney(
+                    reconciliation.closingBalance ??
+                      reconciliation.calculatedClosingBalance,
+                    metadata.currency
+                  )}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Search + Single Collapsible "Edit & Advanced Tools" Toggle */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/50 px-4 py-2.5 sm:px-6">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search merchant or date..."
+                  className="w-52 rounded-lg border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                aria-label="Filter transactions by category"
+                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:border-blue-500 focus:outline-none"
+              >
+                <option value="ALL">All Categories ({result.transactions.length})</option>
+                {Array.from(categoryCounts.entries()).map(([cat, count]) => (
+                  <option key={cat} value={cat}>
+                    {cat} ({count})
+                  </option>
+                ))}
+              </select>
+
+              {reconciliation.duplicateRows > 0 && (
+                <button
+                  type="button"
+                  onClick={handleRemoveDuplicates}
+                  className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Remove {reconciliation.duplicateRows} Duplicates
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleExport("audit_pdf")}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs transition hover:border-blue-300 hover:text-blue-600"
+              >
+                <FileCheck2 className="h-3.5 w-3.5 text-blue-600" />
+                CPA Audit PDF
+                {!result.isSample && !accountTier.isPaid && (
+                  <Lock className="h-3 w-3 opacity-60" />
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowAdvancedTools((prev) => !prev)}
+                aria-expanded={showAdvancedTools}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold shadow-2xs transition ${
+                  showAdvancedTools
+                    ? "border-blue-500 bg-blue-50 text-blue-700"
+                    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
                 }`}
               >
-                <td className="px-3.5 py-2 align-top">
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                Edit &amp; Advanced Tools
+                <ChevronDown
+                  className={`h-3 w-3 transition-transform ${
+                    showAdvancedTools ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          {/* Progressive Disclosure Drawer: Balance Settings + Custom Auto-Rules + Row Tools */}
+          {showAdvancedTools && (
+            <div className="space-y-4 border-b border-slate-200 bg-slate-50/90 px-4 py-4 sm:px-6">
+              {/* Row 1: Balance & QBO Settings */}
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+                <div>
+                  <label
+                    htmlFor="opening-balance-input"
+                    className="block text-[11px] font-medium text-slate-600"
+                  >
+                    Opening Balance
+                  </label>
                   <input
-                    type="text"
-                    value={row.date}
-                    onChange={(e) => handleCellChange(row.id, "date", e.target.value)}
-                    aria-label="Transaction date"
-                    className="mono-nums w-24 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-slate-700 focus:border-blue-500 focus:bg-white focus:outline-none"
+                    id="opening-balance-input"
+                    type="number"
+                    step="0.01"
+                    value={explicitOpening ?? ""}
+                    placeholder={
+                      reconciliation.openingBalance !== null
+                        ? reconciliation.openingBalance.toFixed(2)
+                        : "Auto / Enter"
+                    }
+                    onChange={(e) => handleExplicitBalanceChange("opening", e.target.value)}
+                    className="mono-nums mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-900 focus:border-blue-500 focus:outline-none"
                   />
-                </td>
-                <td className="min-w-[260px] px-3.5 py-2 align-top">
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="closing-balance-input"
+                    className="block text-[11px] font-medium text-slate-600"
+                  >
+                    Statement Closing
+                  </label>
                   <input
-                    type="text"
-                    value={row.description}
-                    onChange={(e) => handleCellChange(row.id, "description", e.target.value)}
-                    aria-label="Transaction description"
-                    className="w-full rounded border border-transparent bg-transparent px-1.5 py-0.5 font-medium text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none"
+                    id="closing-balance-input"
+                    type="number"
+                    step="0.01"
+                    value={explicitClosing ?? ""}
+                    placeholder={
+                      reconciliation.closingBalance !== null
+                        ? reconciliation.closingBalance.toFixed(2)
+                        : "Auto / Enter"
+                    }
+                    onChange={(e) => handleExplicitBalanceChange("closing", e.target.value)}
+                    className="mono-nums mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-900 focus:border-blue-500 focus:outline-none"
                   />
-                </td>
-                <td className="px-3.5 py-2 align-top">
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="qbo-account-type"
+                    className="block text-[11px] font-medium text-slate-600"
+                  >
+                    QuickBooks Type
+                  </label>
                   <select
-                    value={row.category}
-                    onChange={(e) => handleCellChange(row.id, "category", e.target.value)}
-                    aria-label="Transaction category"
-                    className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 hover:border-slate-300 focus:border-blue-500 focus:outline-none"
+                    id="qbo-account-type"
+                    value={metadata.accountType}
+                    onChange={(e) =>
+                      handleAccountTypeChange(e.target.value as AccountType)
+                    }
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="CHECKING">Checking (.qbo)</option>
+                    <option value="SAVINGS">Savings (.qbo)</option>
+                    <option value="CREDITCARD">Credit Card (.qbo)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="statement-currency"
+                    className="block text-[11px] font-medium text-slate-600"
+                  >
+                    Currency
+                  </label>
+                  <select
+                    id="statement-currency"
+                    value={metadata.currency}
+                    onChange={(e) => handleMetadataField("currency", e.target.value)}
+                    className="mono-nums mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-900 focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                    <option value="GBP">GBP</option>
+                    <option value="CAD">CAD</option>
+                    <option value="AUD">AUD</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="account-last4"
+                    className="block text-[11px] font-medium text-slate-600"
+                  >
+                    Account Last 4
+                  </label>
+                  <input
+                    id="account-last4"
+                    type="text"
+                    maxLength={4}
+                    value={metadata.accountLast4}
+                    onChange={(e) => handleMetadataField("accountLast4", e.target.value)}
+                    className="mono-nums mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-900 focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex items-end gap-2">
+                  <button
+                    type="button"
+                    onClick={handleInvertAllSigns}
+                    title="Invert all Debit/Credit signs"
+                    className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                  >
+                    <ArrowLeftRight className="h-3.5 w-3.5 text-blue-600" />
+                    Flip +/-
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddRow}
+                    className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Row
+                  </button>
+                </div>
+              </div>
+
+              {/* Row 2: Custom Auto-Categorization Rules */}
+              <div className="rounded-xl border border-slate-200 bg-white p-3.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+                    <Tag className="h-3.5 w-3.5 text-blue-600" />
+                    <span>Auto-Category Keyword Rules ({customRules.length})</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleApplyCustomRules}
+                    className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800"
+                  >
+                    <Check className="h-3 w-3" />
+                    Apply Rules Now
+                  </button>
+                </div>
+
+                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                  {customRules.map((rule) => (
+                    <div
+                      key={rule.id}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs"
+                    >
+                      <span className="mono-nums font-semibold text-slate-900">
+                        &ldquo;{rule.keyword}&rdquo;
+                      </span>
+                      <span className="text-slate-400">&rarr;</span>
+                      <span className="font-medium text-blue-700">{rule.category}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCustomRule(rule.id)}
+                        className="ml-0.5 rounded p-0.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <form
+                  onSubmit={handleAddCustomRule}
+                  className="mt-2.5 flex flex-wrap items-center gap-2"
+                >
+                  <input
+                    type="text"
+                    value={newRuleKeyword}
+                    onChange={(e) => setNewRuleKeyword(e.target.value)}
+                    placeholder="Keyword (e.g. VERCEL, UBER)..."
+                    className="w-48 rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1 text-xs text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none"
+                  />
+                  <select
+                    value={newRuleCategory}
+                    onChange={(e) => setNewRuleCategory(e.target.value as CategoryName)}
+                    className="rounded-lg border border-slate-300 bg-slate-50 px-2 py-1 text-xs text-slate-800 focus:border-blue-500 focus:outline-none"
                   >
                     {CATEGORIES.map((c) => (
                       <option key={c} value={c}>
@@ -1608,144 +1738,223 @@ export default function ConverterWorkbench({
                       </option>
                     ))}
                   </select>
-                </td>
-                <td className="px-3.5 py-2 text-right align-top">
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={row.amount}
-                    onChange={(e) => handleCellChange(row.id, "amount", e.target.value)}
-                    aria-label="Transaction amount"
-                    className={`mono-nums w-24 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-right font-semibold focus:border-blue-500 focus:bg-white focus:outline-none ${
-                      row.amount >= 0 ? "text-emerald-700" : "text-slate-900"
-                    }`}
-                  />
-                </td>
-                <td className="px-3.5 py-2 text-right align-top">
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={row.balance ?? ""}
-                    onChange={(e) => handleCellChange(row.id, "balance", e.target.value)}
-                    aria-label="Running balance"
-                    className="mono-nums w-24 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-right text-slate-600 focus:border-blue-500 focus:bg-white focus:outline-none"
-                  />
-                </td>
-                <td className="px-3.5 py-2 text-center align-top">
-                  <div className="inline-flex items-center gap-1">
-                    {row.balanceStatus === "matched" ? (
-                      <span className="inline-flex items-center rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
-                        Matched
-                      </span>
-                    ) : row.balanceStatus === "mismatch" ? (
-                      <span className="inline-flex items-center rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
-                        Diff
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-slate-400">—</span>
-                    )}
-                    {row.isDuplicate && (
-                      <span
-                        title="Potential duplicate from overlapping statements"
-                        className="inline-flex items-center rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700"
-                      >
-                        DUP
-                      </span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-3.5 py-2 text-right align-top">
-                  <div className="inline-flex items-center gap-1">
-                    <button
-                      type="button"
-                      title="Flip Debit / Credit Sign"
-                      onClick={() => handleFlipSign(row.id)}
-                      className="rounded border border-slate-200 p-1 text-slate-500 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
-                    >
-                      <ArrowLeftRight className="h-3 w-3" />
-                    </button>
-                    <button
-                      type="button"
-                      title="Delete row"
-                      onClick={() => handleDeleteRow(row.id)}
-                      className="rounded border border-slate-200 p-1 text-slate-500 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {filteredRows.length === 0 && (
-              <tr>
-                <td colSpan={7} className="px-4 py-12 text-center text-sm text-slate-500">
-                  No matching transactions found.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Clean Footer Status & Quick CSV Export Strip */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3.5 sm:px-6">
-        <div className="text-xs text-slate-600">
-          {result.isSample ? (
-            <span className="font-medium text-emerald-700">
-              Sample mode: All 8 export formats are unlocked so you can verify import formatting first.
-            </span>
-          ) : licenseStatus.valid ? (
-            <span className="font-medium text-emerald-700">
-              License active: Unlimited rows, batch PDFs &amp; all accounting feeds unlocked.
-            </span>
-          ) : (
-            <span>
-              Uploaded PDFs: Free up to {FREE_ROW_LIMIT} rows in CSV/JSON &middot; Full Excel/QBO/OFX require{" "}
-              <button
-                type="button"
-                onClick={() => setShowUpgradeModal(true)}
-                className="font-semibold text-blue-600 underline underline-offset-2 hover:text-blue-700"
-              >
-                $12 Pass or Annual Pro
-              </button>
-            </span>
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+                  >
+                    + Add Rule
+                  </button>
+                </form>
+              </div>
+            </div>
           )}
-        </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => handleExport("csv")}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:bg-slate-100 hover:text-slate-900"
-          >
-            <Download className="h-3.5 w-3.5 text-slate-500" />
-            Download CSV
-          </button>
-          <button
-            type="button"
-            onClick={() => handleExport("xero_csv")}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:bg-slate-100 hover:text-slate-900"
-          >
-            <Download className="h-3.5 w-3.5 text-slate-500" />
-            Xero CSV
-          </button>
-        </div>
-      </div>
+          {/* Warnings if any */}
+          {result.warnings.length > 0 && (
+            <div className="border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800 sm:px-6">
+              {result.warnings.join(" ")}
+            </div>
+          )}
 
-      {/* License & Upgrade Modal */}
-      {showUpgradeModal && (
+          {/* Interactive Ledger Table */}
+          <div className="max-h-[430px] overflow-auto bg-white">
+            <table className="w-full border-collapse text-left text-xs">
+              <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <tr>
+                  <th className="px-3.5 py-2.5">Date</th>
+                  <th className="px-3.5 py-2.5">Description</th>
+                  <th className="px-3.5 py-2.5">Category</th>
+                  <th className="px-3.5 py-2.5 text-right">Amount ({metadata.currency})</th>
+                  <th className="px-3.5 py-2.5 text-right">Balance</th>
+                  <th className="px-3.5 py-2.5 text-center">Audit</th>
+                  <th className="px-3.5 py-2.5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredRows.map((row) => (
+                  <tr
+                    key={row.id}
+                    className={`transition hover:bg-blue-50/40 ${
+                      row.balanceStatus === "mismatch" ? "bg-amber-50/60" : ""
+                    }`}
+                  >
+                    <td className="px-3.5 py-2 align-top">
+                      <input
+                        type="text"
+                        value={row.date}
+                        onChange={(e) => handleCellChange(row.id, "date", e.target.value)}
+                        aria-label="Transaction date"
+                        className="mono-nums w-24 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-slate-700 focus:border-blue-500 focus:bg-white focus:outline-none"
+                      />
+                    </td>
+                    <td className="min-w-[260px] px-3.5 py-2 align-top">
+                      <input
+                        type="text"
+                        value={row.description}
+                        onChange={(e) =>
+                          handleCellChange(row.id, "description", e.target.value)
+                        }
+                        aria-label="Transaction description"
+                        className="w-full rounded border border-transparent bg-transparent px-1.5 py-0.5 font-medium text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none"
+                      />
+                    </td>
+                    <td className="px-3.5 py-2 align-top">
+                      <select
+                        value={row.category}
+                        onChange={(e) =>
+                          handleCellChange(row.id, "category", e.target.value)
+                        }
+                        aria-label="Transaction category"
+                        className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 hover:border-slate-300 focus:border-blue-500 focus:outline-none"
+                      >
+                        {CATEGORIES.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-3.5 py-2 text-right align-top">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={row.amount}
+                        onChange={(e) => handleCellChange(row.id, "amount", e.target.value)}
+                        aria-label="Transaction amount"
+                        className={`mono-nums w-24 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-right font-semibold focus:border-blue-500 focus:bg-white focus:outline-none ${
+                          row.amount >= 0 ? "text-emerald-700" : "text-slate-900"
+                        }`}
+                      />
+                    </td>
+                    <td className="px-3.5 py-2 text-right align-top">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={row.balance ?? ""}
+                        onChange={(e) => handleCellChange(row.id, "balance", e.target.value)}
+                        aria-label="Running balance"
+                        className="mono-nums w-24 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-right text-slate-600 focus:border-blue-500 focus:bg-white focus:outline-none"
+                      />
+                    </td>
+                    <td className="px-3.5 py-2 text-center align-top">
+                      <div className="inline-flex items-center gap-1">
+                        {row.balanceStatus === "matched" ? (
+                          <span className="inline-flex items-center rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+                            Matched
+                          </span>
+                        ) : row.balanceStatus === "mismatch" ? (
+                          <span className="inline-flex items-center rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                            Diff
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-slate-400">—</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3.5 py-2 text-right align-top">
+                      <div className="inline-flex items-center gap-1">
+                        <button
+                          type="button"
+                          title="Flip Debit / Credit Sign"
+                          onClick={() => handleFlipSign(row.id)}
+                          className="rounded border border-slate-200 p-1 text-slate-500 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+                        >
+                          <ArrowLeftRight className="h-3 w-3" />
+                        </button>
+                        <button
+                          type="button"
+                          title="Delete row"
+                          onClick={() => handleDeleteRow(row.id)}
+                          className="rounded border border-slate-200 p-1 text-slate-500 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {filteredRows.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-12 text-center text-sm text-slate-500">
+                      No matching transactions found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Tier & Account Status Strip */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs sm:px-6">
+            <div>
+              {result.isSample ? (
+                <span className="font-medium text-emerald-700">
+                  Interactive sample mode: Test all 8 export formats free before uploading your own statement.
+                </span>
+              ) : accountTier.isPaid ? (
+                <span className="font-medium text-emerald-700">
+                  {accountTier.planName} active: Unlimited rows, batch PDF merge &amp; all formats unlocked.
+                </span>
+              ) : accountTier.isLoggedIn ? (
+                <span className="text-slate-600">
+                  Free Account: Up to {FREE_ROW_LIMIT} CSV rows unlocked &middot;{" "}
+                  <a
+                    href={passCheckoutHref}
+                    className="font-semibold text-blue-600 underline underline-offset-2"
+                  >
+                    Upgrade to 7-Day Pass ($12)
+                  </a>{" "}
+                  for Unlimited rows &amp; .XLSX / .QBO
+                </span>
+              ) : (
+                <span className="text-slate-600">
+                  Guest limit: {ANONYMOUS_ROW_LIMIT} CSV rows &middot;{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthTab("signup");
+                      setShowAuthModal(true);
+                    }}
+                    className="font-semibold text-blue-600 underline underline-offset-2"
+                  >
+                    Sign Up Free for {FREE_ROW_LIMIT} rows + saved history
+                  </button>
+                </span>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleExport("csv")}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-100"
+            >
+              <Download className="h-3.5 w-3.5 text-slate-500" />
+              Quick CSV
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* =========================================================================
+          AUTH & UPGRADE MODAL (Sign Up Free / Log In / License Key + Checkout)
+         ========================================================================= */}
+      {showAuthModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-xs">
           <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-blue-600" />
                 <h3 className="text-base font-bold text-slate-900">
-                  Unlock Unlimited &amp; Accounting Exports
+                  {authTab === "signup"
+                    ? "Create Your Free VaultSheet Account"
+                    : authTab === "login"
+                      ? "Log In to VaultSheet"
+                      : "Activate Pro License Key"}
                 </h3>
               </div>
               <button
                 type="button"
-                onClick={() => setShowUpgradeModal(false)}
+                onClick={() => setShowAuthModal(false)}
                 className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
               >
                 <X className="h-4 w-4" />
@@ -1758,11 +1967,147 @@ export default function ConverterWorkbench({
               </p>
             )}
 
+            {/* 3-Tab Switcher */}
+            <div className="mt-4 grid grid-cols-3 rounded-xl bg-slate-100 p-1 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthTab("signup");
+                  setAuthError(null);
+                }}
+                className={`rounded-lg py-1.5 transition ${
+                  authTab === "signup"
+                    ? "bg-white text-slate-900 shadow-2xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                Sign Up Free
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthTab("login");
+                  setAuthError(null);
+                }}
+                className={`rounded-lg py-1.5 transition ${
+                  authTab === "login"
+                    ? "bg-white text-slate-900 shadow-2xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                Log In
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthTab("key");
+                  setAuthError(null);
+                }}
+                className={`rounded-lg py-1.5 transition ${
+                  authTab === "key"
+                    ? "bg-white text-slate-900 shadow-2xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                License Key
+              </button>
+            </div>
+
+            <form onSubmit={handleAuthSubmit} className="mt-4 space-y-3">
+              {authTab === "signup" && (
+                <>
+                  <p className="text-xs text-slate-600">
+                    Unlock <strong>{FREE_ROW_LIMIT} free rows/PDF</strong>, saved statement
+                    history, and seamless Pro upgrades.
+                  </p>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700">
+                      Full Name
+                    </label>
+                    <input
+                      type="text"
+                      value={authName}
+                      onChange={(e) => setAuthName(e.target.value)}
+                      placeholder="Alex Morgan"
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none"
+                    />
+                  </div>
+                </>
+              )}
+
+              {(authTab === "signup" || authTab === "login") && (
+                <>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700">
+                      Email Address
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={authEmail}
+                      onChange={(e) => setAuthEmail(e.target.value)}
+                      placeholder="you@company.com"
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700">
+                      Password (min. 6 characters)
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      minLength={6}
+                      value={authPassword}
+                      onChange={(e) => setAuthPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none"
+                    />
+                  </div>
+                </>
+              )}
+
+              {authTab === "key" && (
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700">
+                    Polar Checkout Email OR VS- License Key
+                  </label>
+                  <input
+                    type="text"
+                    value={licenseKeyInput}
+                    onChange={(e) => {
+                      setLicenseKeyDraft(e.target.value);
+                      if (authError) setAuthError(null);
+                    }}
+                    placeholder="you@example.com or VS-XXXX-XXXX-XXXX"
+                    className="mono-nums mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none"
+                  />
+                </div>
+              )}
+
+              {authError && <p className="text-xs font-medium text-rose-600">{authError}</p>}
+
+              <button
+                type="submit"
+                disabled={isSubmittingAuth}
+                className="w-full rounded-xl bg-slate-900 py-2.5 text-xs font-bold text-white shadow-xs transition hover:bg-slate-800 disabled:opacity-60"
+              >
+                {isSubmittingAuth
+                  ? "Verifying..."
+                  : authTab === "signup"
+                    ? "Create Free Account"
+                    : authTab === "login"
+                      ? "Log In"
+                      : "Verify & Activate"}
+              </button>
+            </form>
+
+            {/* Test Sample Export or Direct Paid Passes */}
             {!result.isSample && result.transactions.length > 0 && (
-              <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <p className="text-[11px] font-medium text-slate-700">
-                  Want to verify format compatibility before purchasing? Export the first{" "}
-                  {Math.min(FREE_ROW_LIMIT, result.transactions.length)} rows of your statement free:
+                  Or download your first {Math.min(accountTier.rowLimit, result.transactions.length)}{" "}
+                  rows free right now to test QuickBooks/CSV import:
                 </p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   <button
@@ -1770,96 +2115,79 @@ export default function ConverterWorkbench({
                     onClick={() => handleExport("qbo", true)}
                     className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
                   >
-                    Download Free 25-Row .QBO Sample
+                    Free .QBO Test
                   </button>
                   <button
                     type="button"
                     onClick={() => handleExport("csv", true)}
                     className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
                   >
-                    Download Free 25-Row .CSV Sample
+                    Free .CSV Test
                   </button>
                 </div>
               </div>
             )}
 
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <a
-                href={CHECKOUT_URLS.pass7Day}
-                onClick={() => {
-                  if (CHECKOUT_URLS.pass7Day === "#pricing") setShowUpgradeModal(false);
-                }}
-                className="flex flex-col rounded-xl border border-slate-200 bg-slate-50 p-3.5 transition hover:border-blue-400 hover:bg-blue-50/40"
-              >
-                <span className="text-xs font-semibold text-slate-700">7-Day Audit Pass</span>
-                <span className="mono-nums mt-1 text-xl font-bold text-slate-900">$12</span>
-                <span className="mt-1 text-[11px] text-slate-500">One-time &middot; No renewal</span>
-              </a>
-
-              <a
-                href={CHECKOUT_URLS.proMonthly}
-                onClick={() => {
-                  if (CHECKOUT_URLS.proMonthly === "#pricing") setShowUpgradeModal(false);
-                }}
-                className="flex flex-col rounded-xl border-2 border-blue-600 bg-blue-50/40 p-3.5 transition hover:bg-blue-50/80"
-              >
-                <span className="text-xs font-semibold text-blue-700">Annual Pro Bookkeeper</span>
-                <span className="mono-nums mt-1 text-xl font-bold text-slate-900">$29 / year</span>
-                <span className="mt-1 text-[11px] text-slate-600">One-time pass, no renewal</span>
-              </a>
-            </div>
-
-            <form onSubmit={handleActivateLicense} className="mt-5 border-t border-slate-200 pt-4">
-              <label className="block text-xs font-semibold text-slate-800">
-                Already purchased? Sign in with your Polar checkout Email OR License Key:
-              </label>
-              <p className="mt-0.5 text-[11px] text-slate-500">
-                Verified directly with Polar.sh — no password needed.
+            <div className="mt-4 border-t border-slate-200 pt-4">
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Or Unlock Unlimited Pro Exports Immediately
               </p>
-              <div className="mt-2 flex gap-2">
-                <input
-                  type="text"
-                  value={licenseKey}
-                  onChange={(e) => {
-                    setLicenseKeyDraft(e.target.value);
-                    if (licenseFeedback) setLicenseFeedback(null);
+              <div className="grid grid-cols-2 gap-2.5">
+                <a
+                  href={passCheckoutHref}
+                  onClick={() => {
+                    if (passCheckoutHref === "#pricing") setShowAuthModal(false);
                   }}
-                  placeholder="you@example.com or VS-XXXX-XXXX-XXXX"
-                  disabled={isVerifyingLicense}
-                  className="mono-nums flex-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none disabled:opacity-60"
-                />
-                <button
-                  type="submit"
-                  disabled={isVerifyingLicense}
-                  className="rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                  className="flex flex-col rounded-xl border border-slate-200 bg-slate-50 p-3 transition hover:border-blue-400 hover:bg-blue-50/40"
                 >
-                  {isVerifyingLicense ? "Verifying..." : "Verify & Sign In"}
-                </button>
+                  <span className="text-xs font-semibold text-slate-700">7-Day Pass</span>
+                  <span className="mono-nums mt-0.5 text-lg font-bold text-slate-900">$12</span>
+                  <span className="text-[10px] text-slate-500">One-time &middot; Unlimited rows</span>
+                </a>
+                <a
+                  href={proCheckoutHref}
+                  onClick={() => {
+                    if (proCheckoutHref === "#pricing") setShowAuthModal(false);
+                  }}
+                  className="flex flex-col rounded-xl border-2 border-blue-600 bg-blue-50/40 p-3 transition hover:bg-blue-50/80"
+                >
+                  <span className="text-xs font-semibold text-blue-700">Annual Pro</span>
+                  <span className="mono-nums mt-0.5 text-lg font-bold text-slate-900">$29/yr</span>
+                  <span className="text-[10px] text-slate-600">Full year &middot; No renewal</span>
+                </a>
               </div>
-              {licenseStatus.message && !licenseStatus.valid && (
-                <p className="mt-1.5 text-xs text-rose-600">{licenseStatus.message}</p>
-              )}
-            </form>
+            </div>
           </div>
         </div>
       )}
 
-      {/* My Pro Account & Polar License Modal */}
-      {showAccountModal && licenseStatus.valid && (
+      {/* =========================================================================
+          MY ACCOUNT DASHBOARD MODAL
+         ========================================================================= */}
+      {showAccountModal && accountTier.isLoggedIn && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-xs">
           <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+                <div
+                  className={`flex h-9 w-9 items-center justify-center rounded-xl ${
+                    accountTier.isPaid
+                      ? "bg-emerald-100 text-emerald-700"
+                      : "bg-blue-100 text-blue-700"
+                  }`}
+                >
                   <UserCheck className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">VaultSheet Pro Account</h3>
-                  <p className="text-xs text-emerald-700 font-medium">
-                    {storedProfile?.planName ||
-                      (licenseStatus.plan === "pass_7d"
-                        ? "7-Day Tax & Audit Pass"
-                        : "Annual Pro Bookkeeper Pass")}
+                  <h3 className="text-base font-bold text-slate-900">
+                    {storedProfile?.customerName || "VaultSheet Account"}
+                  </h3>
+                  <p
+                    className={`text-xs font-semibold ${
+                      accountTier.isPaid ? "text-emerald-700" : "text-blue-700"
+                    }`}
+                  >
+                    {accountTier.planName}
                   </p>
                 </div>
               </div>
@@ -1872,80 +2200,113 @@ export default function ConverterWorkbench({
               </button>
             </div>
 
-            <div className="mt-4 space-y-2.5 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs">
+            <div className="mt-4 space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs">
               {storedProfile?.customerEmail && (
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-slate-500">Account Email:</span>
+                  <span className="text-slate-500">Email:</span>
                   <span className="font-semibold text-slate-900">
-                    {storedProfile.customerName
-                      ? `${storedProfile.customerName} (${storedProfile.customerEmail})`
-                      : storedProfile.customerEmail}
+                    {storedProfile.customerEmail}
                   </span>
                 </div>
               )}
 
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-slate-500">License Key:</span>
-                <div className="flex items-center gap-1.5">
-                  <span className="mono-nums font-semibold text-slate-900">
-                    {storedProfile?.displayKey ||
-                      (storedLicenseKey ? `VS-****-${storedLicenseKey.slice(-6)}` : "Active")}
+              {accountTier.isPaid ? (
+                <>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-slate-500">License Key:</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="mono-nums font-semibold text-slate-900">
+                        {storedProfile?.displayKey ||
+                          (storedLicenseKey
+                            ? `VS-****-${storedLicenseKey.slice(-6)}`
+                            : "Active")}
+                      </span>
+                      {(storedProfile?.key || storedLicenseKey) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const fullKey = storedProfile?.key || storedLicenseKey;
+                            if (typeof navigator !== "undefined" && fullKey) {
+                              void navigator.clipboard.writeText(fullKey);
+                              setCopiedKey(true);
+                              setTimeout(() => setCopiedKey(false), 1800);
+                            }
+                          }}
+                          className="rounded border border-slate-300 bg-white p-1 text-slate-600 hover:bg-slate-100"
+                        >
+                          {copiedKey ? (
+                            <Check className="h-3 w-3 text-emerald-600" />
+                          ) : (
+                            <Copy className="h-3 w-3" />
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-slate-500">Valid Until:</span>
+                    <span className="mono-nums font-semibold text-slate-900">
+                      {formatExpiryShort(storedProfile?.expiresAt)}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-slate-500">Export Limit:</span>
+                  <span className="font-semibold text-slate-900">
+                    Up to {FREE_ROW_LIMIT} CSV rows / PDF
                   </span>
-                  {(storedProfile?.key || storedLicenseKey) && (
+                </div>
+              )}
+            </div>
+
+            {!accountTier.isPaid && (
+              <div className="mt-4 grid grid-cols-2 gap-2.5">
+                <a
+                  href={passCheckoutHref}
+                  className="flex flex-col rounded-xl border border-slate-200 bg-slate-50 p-3 transition hover:border-blue-400"
+                >
+                  <span className="text-xs font-semibold text-slate-800">Upgrade 7-Day Pass</span>
+                  <span className="mono-nums mt-0.5 text-lg font-bold text-slate-900">$12</span>
+                  <span className="text-[10px] text-slate-500">Unlimited + .XLSX/.QBO</span>
+                </a>
+                <a
+                  href={proCheckoutHref}
+                  className="flex flex-col rounded-xl border-2 border-blue-600 bg-blue-50/40 p-3 transition hover:bg-blue-50"
+                >
+                  <span className="text-xs font-semibold text-blue-700">Upgrade Annual Pro</span>
+                  <span className="mono-nums mt-0.5 text-lg font-bold text-slate-900">$29/yr</span>
+                  <span className="text-[10px] text-slate-600">Full year unlimited</span>
+                </a>
+              </div>
+            )}
+
+            {savedHistory.length > 0 && (
+              <div className="mt-4">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  Recent Saved Statements
+                </p>
+                <div className="mt-2 space-y-1.5">
+                  {savedHistory.slice(0, 3).map((item) => (
                     <button
+                      key={item.id}
                       type="button"
                       onClick={() => {
-                        const fullKey = storedProfile?.key || storedLicenseKey;
-                        if (typeof navigator !== "undefined" && fullKey) {
-                          void navigator.clipboard.writeText(fullKey);
-                          setCopiedKey(true);
-                          setTimeout(() => setCopiedKey(false), 1800);
-                        }
+                        setShowAccountModal(false);
+                        handleRestoreHistory(item);
                       }}
-                      title="Copy full license key"
-                      className="rounded border border-slate-300 bg-white p-1 text-slate-600 hover:bg-slate-100"
+                      className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs hover:border-blue-400"
                     >
-                      {copiedKey ? (
-                        <Check className="h-3 w-3 text-emerald-600" />
-                      ) : (
-                        <Copy className="h-3 w-3" />
-                      )}
+                      <span className="truncate font-medium text-slate-800">
+                        {item.result.metadata.fileName}
+                      </span>
+                      <span className="shrink-0 font-semibold text-blue-600">Open</span>
                     </button>
-                  )}
+                  ))}
                 </div>
               </div>
-
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-slate-500">Valid Until:</span>
-                <span className="mono-nums font-semibold text-slate-900">
-                  {formatExpiryShort(storedProfile?.expiresAt)}
-                </span>
-              </div>
-            </div>
-
-            <div className="mt-4">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Unlocked Pro Capabilities
-              </p>
-              <ul className="mt-2 space-y-1.5 text-xs text-slate-700">
-                <li className="flex items-center gap-2">
-                  <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                  Unlimited rows &amp; multi-PDF statement batch merge
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                  Full Excel (.xlsx 3-sheet), QuickBooks (.qbo), Xero CSV &amp; OFX exports
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                  Downloadable CPA Reconciliation &amp; Audit Certificate (.pdf)
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                  Custom Keyword Auto-Categorization Rules
-                </li>
-              </ul>
-            </div>
+            )}
 
             <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-4">
               <a
@@ -1955,7 +2316,7 @@ export default function ConverterWorkbench({
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
               >
                 <ExternalLink className="h-3.5 w-3.5 text-blue-600" />
-                Billing &amp; Receipts (Polar)
+                Billing Portal
               </a>
 
               <button

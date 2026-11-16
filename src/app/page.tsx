@@ -11,8 +11,42 @@ import {
   X,
 } from "lucide-react";
 import ConverterWorkbench from "@/components/ConverterWorkbench";
-import { CHECKOUT_URLS, FREE_ROW_LIMIT } from "@/lib/licensing";
+import NavbarAuthButtons from "@/components/NavbarAuthButtons";
+import { ANONYMOUS_ROW_LIMIT, CHECKOUT_URLS, FREE_ROW_LIMIT } from "@/lib/licensing";
 import { SEO_BANKS } from "@/lib/seoCatalog";
+
+const HOME_FAQS = [
+  {
+    question: "Are my PDF bank statements ever uploaded to a server?",
+    answer:
+      "Never. VaultSheet runs pdfjs-dist extraction, coordinate alignment, and balance reconciliation strictly inside your local browser memory (RAM). You can disconnect Wi-Fi or inspect Chrome DevTools -> Network tab to confirm zero bytes leave your computer.",
+  },
+  {
+    question: "What is the difference between Guest Preview, Free Account, and Paid Pro?",
+    answer:
+      "Guests can parse unlimited PDFs locally and export up to 10 CSV rows per statement with no sign-up. Creating a Free Account unlocks 25 free rows per PDF plus saved conversion history. Upgrading to the $12 7-Day Pass or $29/year Pro Pass unlocks unlimited rows, multi-PDF merging, 3-sheet Excel (.xlsx), QuickBooks (.qbo), and CPA Audit Certificate PDFs.",
+  },
+  {
+    question: "How does VaultSheet prevent missing transactions or OCR math errors?",
+    answer:
+      "Every parsed statement runs through deterministic cent-level reconciliation: Opening Balance + Deposits - Withdrawals = Closing Balance. Multi-line wrapped descriptions are stitched automatically and any cent discrepancy is highlighted inline.",
+  },
+  {
+    question: "Which accounting software formats are supported?",
+    answer:
+      "VaultSheet exports 3-sheet Excel workbooks (.xlsx), QuickBooks Desktop Web Connect (.qbo) for Checking, Savings, and Credit Card accounts (without OL-222 errors), QuickBooks Online 3-Column & 4-Column CSVs, Xero Bank Feed CSVs, OFX, JSON, and downloadable CPA Audit Certificate PDFs.",
+  },
+  {
+    question: "Does VaultSheet work with European, UK, Canadian, and US banks?",
+    answer:
+      "Yes. VaultSheet supports 64+ bank and format profiles including Chase, Bank of America, Wells Fargo, Mercury, Wise (EUR/GBP/USD), Revolut, Monzo, N26, HSBC, RBC, and CommBank—automatically normalizing MM/DD/YYYY, DD/MM/YYYY, DD MMM YYYY dates, comma decimals, and CR/DR columns.",
+  },
+  {
+    question: "What if a credit card or scanned PDF statement shows reversed signs or weird text?",
+    answer:
+      "Inside Edit & Advanced Tools you can flip all +/- debit/credit signs in one click, edit any cell inline with live balance recalculation, or paste raw OCR / banking portal tables directly using Paste Scanned / OCR Text.",
+  },
+];
 
 const FEATURED_SLUGS = [
   "chase-pdf-to-excel",
@@ -46,8 +80,51 @@ export default function HomePage() {
   const proCheckout =
     CHECKOUT_URLS.proMonthly === "#pricing" ? "#workbench" : CHECKOUT_URLS.proMonthly;
 
+  const homeSchemas = [
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      mainEntity: HOME_FAQS.map((item) => ({
+        "@type": "Question",
+        name: item.question,
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: item.answer,
+        },
+      })),
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "HowTo",
+      name: "How to Convert a PDF Bank Statement to Excel or QuickBooks Locally",
+      description:
+        "Convert PDF bank statements to clean Excel (.xlsx), QuickBooks (.qbo), and Xero CSV files inside your browser with zero server uploads.",
+      step: [
+        {
+          "@type": "HowToStep",
+          name: "Select or drop your PDF statement",
+          text: "Click Select PDF Statement (or test an instant Chase, Wise, Mercury, or Revolut sample). Single or multiple monthly PDFs run strictly inside local browser RAM.",
+        },
+        {
+          "@type": "HowToStep",
+          name: "Verify cent-level reconciliation",
+          text: "VaultSheet stitches wrapped transaction memos and confirms Opening Balance + Deposits - Withdrawals = Closing Balance with $0.00 diff.",
+        },
+        {
+          "@type": "HowToStep",
+          name: "Download Excel (.xlsx), QuickBooks (.qbo), or CSV",
+          text: "Export clean spreadsheets, QuickBooks Web Connect (.qbo), Xero CSV, or CPA Audit Certificate PDFs in one click.",
+        },
+      ],
+    },
+  ];
+
   return (
     <div className="min-h-screen flex flex-col bg-[#f8fafc] text-slate-900">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(homeSchemas) }}
+      />
       {/* Clean White Sticky Header */}
       <header className="sticky top-0 z-40 border-b border-slate-200/90 bg-white/90 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6 lg:px-8">
@@ -60,44 +137,32 @@ export default function HomePage() {
             </span>
           </Link>
 
-          <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-slate-600">
+          <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600">
             <a href="#workbench" className="hover:text-slate-900 transition-colors">
               Converter
             </a>
             <Link href="/convert" className="hover:text-slate-900 transition-colors">
-              {SEO_BANKS.length} Supported Banks
+              {SEO_BANKS.length} Banks
             </Link>
             <a href="#security" className="hover:text-slate-900 transition-colors">
-              Security &amp; Proof
+              Privacy Proof
             </a>
             <a href="#pricing" className="hover:text-slate-900 transition-colors">
               Pricing
             </a>
-            <a href="#extension" className="hover:text-slate-900 transition-colors">
-              Chrome Extension
+            <a href="#faq" className="hover:text-slate-900 transition-colors">
+              FAQ
             </a>
           </nav>
 
-          <div className="flex items-center gap-3">
-            <Link
-              href="/convert"
-              className="hidden sm:inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition-colors"
-            >
-              Browse {SEO_BANKS.length} Banks
-            </Link>
-            <a
-              href="#workbench"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800 transition-colors"
-            >
-              Convert PDF Now
-              <ArrowRight className="h-3.5 w-3.5" />
-            </a>
+          <div className="flex items-center gap-2.5">
+            <NavbarAuthButtons />
           </div>
         </div>
       </header>
 
       <main className="flex-1">
-        {/* Daylight Editorial Hero + Embedded Workbench */}
+        {/* Daylight Editorial Hero + Embedded 2-Stage Workbench */}
         <section className="relative overflow-hidden border-b border-slate-200 grid-backdrop">
           <div className="mx-auto max-w-7xl px-4 pt-10 pb-12 sm:px-6 lg:px-8 lg:pt-14">
             <div className="mx-auto max-w-3xl text-center">
@@ -110,19 +175,64 @@ export default function HomePage() {
               </h1>
 
               <p className="mt-4 text-base text-slate-600 sm:text-lg leading-relaxed">
-                Drop any bank or credit card PDF below. VaultSheet stitches wrapped memos,
-                verifies every running balance to the exact cent, and exports accounting-ready files
+                Drop any bank or credit card PDF below. VaultSheet extracts every transaction,
+                verifies your running balance to the exact cent, and exports accounting-ready files
                 strictly inside your browser.
               </p>
 
               <p className="mt-3 text-xs font-medium text-slate-500">
-                Opening + Deposits &minus; Withdrawals = Closing Reconciled &nbsp;&middot;&nbsp; 8 Accounting Formats &nbsp;&middot;&nbsp; No Sign-Up ({FREE_ROW_LIMIT} Free Rows)
+                Cent-Reconciled Math &nbsp;&middot;&nbsp; 8 Accounting Formats &nbsp;&middot;&nbsp;{" "}
+                {ANONYMOUS_ROW_LIMIT} Free Guest Rows / {FREE_ROW_LIMIT} Rows with Free Account
               </p>
             </div>
 
             {/* Live Interactive Workbench Right in Hero */}
             <div id="workbench" className="mt-8 scroll-mt-20">
               <ConverterWorkbench defaultPreset="chase" />
+            </div>
+          </div>
+        </section>
+
+        {/* How VaultSheet Works in 3 Steps */}
+        <section id="how-it-works" className="border-b border-slate-200 bg-[#f8fafc] py-12">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="grid gap-5 md:grid-cols-3">
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-2xs">
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-xs font-bold text-white">
+                  1
+                </span>
+                <h2 className="mt-3 text-base font-bold text-slate-900">
+                  1. Select Your Bank PDF
+                </h2>
+                <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">
+                  Drop single or multi-month PDFs from 64+ supported banks (or paste OCR text).
+                  Zero files are ever sent over the network.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-2xs">
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-xs font-bold text-white">
+                  2
+                </span>
+                <h2 className="mt-3 text-base font-bold text-slate-900">
+                  2. Confirm $0.00 Balance Diff
+                </h2>
+                <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">
+                  See Opening, Deposits, Withdrawals, and Closing totals checked row-by-row before
+                  you export a single line.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-2xs">
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-xs font-bold text-white">
+                  3
+                </span>
+                <h2 className="mt-3 text-base font-bold text-slate-900">
+                  3. Export Excel, .QBO or Xero
+                </h2>
+                <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">
+                  Download clean Excel (.xlsx) workbooks, QuickBooks Web Connect (.qbo), Xero CSV,
+                  or CPA Audit Certificate PDFs in one click.
+                </p>
+              </div>
             </div>
           </div>
         </section>
@@ -310,9 +420,9 @@ OUT  chase-oct-2026.qbo ->  Local Blob Download`}
               <div className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-7 shadow-2xs">
                 <div>
                   <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-bold text-slate-900">Free Preview</h3>
+                    <h3 className="text-lg font-bold text-slate-900">Free Account</h3>
                     <span className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-600">
-                      No Sign-Up
+                      $0 Forever
                     </span>
                   </div>
                   <div className="mt-4 flex items-baseline gap-1">
@@ -320,7 +430,7 @@ OUT  chase-oct-2026.qbo ->  Local Blob Download`}
                     <span className="text-sm text-slate-500">forever</span>
                   </div>
                   <p className="mt-2 text-sm text-slate-600">
-                    Verify extraction accuracy on your own statement before paying a cent.
+                    Test {ANONYMOUS_ROW_LIMIT} rows as guest, or sign up free for {FREE_ROW_LIMIT} rows/PDF &amp; history.
                   </p>
                   <ul className="mt-6 space-y-3 text-sm text-slate-700">
                     <li className="flex items-center gap-2">
@@ -329,11 +439,11 @@ OUT  chase-oct-2026.qbo ->  Local Blob Download`}
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-600 shrink-0" />
-                      Export up to {FREE_ROW_LIMIT} rows per file
+                      Export {ANONYMOUS_ROW_LIMIT} CSV rows (guest) / {FREE_ROW_LIMIT} rows (free account)
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-600 shrink-0" />
-                      All 4 interactive sample PDF statements
+                      Saved recent conversion history locally
                     </li>
                   </ul>
                 </div>
@@ -575,6 +685,30 @@ OUT  chase-oct-2026.qbo ->  Local Blob Download`}
                     {bank.metaDescription}
                   </p>
                 </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Homepage SEO FAQ Section */}
+        <section id="faq" className="border-t border-slate-200 bg-[#f8fafc] py-16 scroll-mt-20">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="mx-auto max-w-2xl text-center">
+              <p className="text-xs font-bold uppercase tracking-widest text-blue-600">FAQ</p>
+              <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+                Frequently Asked Questions
+              </h2>
+            </div>
+
+            <div className="mt-10 grid gap-5 md:grid-cols-2">
+              {HOME_FAQS.map((faq) => (
+                <div
+                  key={faq.question}
+                  className="rounded-2xl border border-slate-200 bg-white p-6 shadow-2xs"
+                >
+                  <h3 className="text-sm font-bold text-slate-900">{faq.question}</h3>
+                  <p className="mt-2 text-xs text-slate-600 leading-relaxed">{faq.answer}</p>
+                </div>
               ))}
             </div>
           </div>
