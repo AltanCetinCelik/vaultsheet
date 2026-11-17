@@ -10,16 +10,20 @@ import React, {
 } from "react";
 import {
   Award,
+  Bell,
   Check,
   CheckCircle2,
   ClipboardCheck,
   Copy,
   Download,
   ExternalLink,
+  Flame,
   Lock,
   LogOut,
   Radar,
   RefreshCw,
+  Send,
+  ShieldAlert,
   SlidersHorizontal,
   Sparkles,
   Target,
@@ -39,16 +43,21 @@ import {
   type StoredLicenseProfile,
 } from "@/lib/licensing";
 import {
+  assessDerivativesSqueeze,
   buildCoinRadarRow,
+  buildFallbackDerivativesPulse,
   generateFallbackCandles,
   optimizeStrategyConfig,
   runStrategyBacktest,
   runStrategyTournament,
   type BacktestResult,
   type CoinRadarRow,
+  type DerivativesPulse,
   type OHLCVCandle,
+  type SignalState,
   type StrategyId,
   type TimeframeId,
+  type TradeDirectionMode,
 } from "@/lib/quantBacktester";
 
 export interface MarketRiskTerminalProps {
@@ -166,6 +175,84 @@ function formatUsd(val: number): string {
   }).format(val);
 }
 
+const ALERT_STORAGE_KEY = "vaultsheet_alert_config_v1";
+const ALERT_CHANGE_EVENT = "vaultsheet-alert-config-changed";
+
+interface SavedAlertConfig {
+  channel: "discord" | "telegram" | "webhook";
+  webhookUrl: string;
+  telegramBotToken: string;
+  telegramChatId: string;
+}
+
+function subscribeAlertStorage(onStoreChange: () => void) {
+  if (typeof window === "undefined") return () => {};
+  const handler = () => onStoreChange();
+  window.addEventListener("storage", handler);
+  window.addEventListener(ALERT_CHANGE_EVENT, handler);
+  return () => {
+    window.removeEventListener("storage", handler);
+    window.removeEventListener(ALERT_CHANGE_EVENT, handler);
+  };
+}
+
+function loadRawAlertJson(): string {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(ALERT_STORAGE_KEY) ?? "";
+}
+
+function formatCompactUsd(val: number): string {
+  if (!Number.isFinite(val) || val <= 0) return "$0";
+  if (val >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
+  if (val >= 1e6) return `$${(val / 1e6).toFixed(1)}M`;
+  return formatUsd(val);
+}
+
+function signalBadgeText(sig: SignalState, lang: AppLang): string {
+  if (sig === "ENTRY_NOW") return lang === "tr" ? "YENİ AL" : "BUY NOW";
+  if (sig === "SHORT_NOW") return lang === "tr" ? "YENİ SHORT" : "SHORT NOW";
+  if (sig === "LONG") return "LONG";
+  if (sig === "SHORT") return "SHORT";
+  return lang === "tr" ? "BEKLE" : "FLAT";
+}
+
+function signalBadgeClass(sig: SignalState): string {
+  if (sig === "ENTRY_NOW") return "bg-emerald-400 text-slate-950";
+  if (sig === "SHORT_NOW") return "bg-fuchsia-400 text-slate-950";
+  if (sig === "LONG") return "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30";
+  if (sig === "SHORT") return "bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30";
+  return "bg-slate-800 text-slate-400";
+}
+
+function playAlertTone(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+    for (const [offset, freq] of [
+      [0, 587.33],
+      [0.14, 880],
+    ]) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, now + offset);
+      gain.gain.setValueAtTime(0.08, now + offset);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.16);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + offset);
+      osc.stop(now + offset + 0.17);
+    }
+  } catch {
+    // Ignore browser audio autoplay restrictions
+  }
+}
+
 function formatShortDate(ms: number): string {
   const d = new Date(ms);
   const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -188,11 +275,11 @@ function formatExpiryShort(iso?: string): string {
 
 function buildInitialRadar(): CoinRadarRow[] {
   return ASSETS.map((a) => {
-    const c = generateFallbackCandles(a.symbol, "4h", 160);
+    const c = generateFallbackCandles(a.symbol, "4h", 200);
     const first = c[0]?.close ?? 1;
     const last = c[c.length - 1]?.close ?? 1;
     const chg = Math.round(((last - first) / first) * 10000) / 100;
-    return buildCoinRadarRow(a.symbol, a.label, c, chg, a.proOnly);
+    return buildCoinRadarRow(a.symbol, a.label, c, chg, a.proOnly, 0, "both");
   });
 }
 
@@ -202,6 +289,27 @@ interface Binance24hDto {
   priceChangePercent: string;
 }
 
+interface BinancePremiumIndexDto {
+  symbol: string;
+  markPrice: string;
+  indexPrice: string;
+  lastFundingRate: string;
+}
+
+interface BinanceOiDto {
+  openInterest: string;
+}
+
+interface BinanceLongShortDto {
+  longAccount: string;
+  shortAccount: string;
+  longShortRatio: string;
+}
+
+interface BinanceTakerDto {
+  buySellRatio: string;
+}
+
 export default function MarketRiskTerminal({
   lang,
   isPaid: isPaidProp,
@@ -209,13 +317,19 @@ export default function MarketRiskTerminal({
 }: MarketRiskTerminalProps) {
   const [symbol, setSymbol] = useState<string>("BTCUSDT");
   const [timeframe, setTimeframe] = useState<TimeframeId>("4h");
+  const [directionMode, setDirectionMode] = useState<TradeDirectionMode>("both");
   const [candles, setCandles] = useState<OHLCVCandle[]>(() =>
     generateFallbackCandles("BTCUSDT", "4h", 300)
   );
   const [feedMode, setFeedMode] = useState<"live" | "simulated">("simulated");
   const [isLoadingFeed, setIsLoadingFeed] = useState<boolean>(false);
 
-  // 12-Coin Alpha Radar State
+  // Live Perpetual Futures Derivatives Pulse (Funding / OI / Whale Ratio / Squeeze)
+  const [derivativesPulse, setDerivativesPulse] = useState<DerivativesPulse>(() =>
+    buildFallbackDerivativesPulse("BTCUSDT", generateFallbackCandles("BTCUSDT", "4h", 300), "FLAT")
+  );
+
+  // 12-Coin Alpha & Futures Radar State
   const [radarRows, setRadarRows] = useState<CoinRadarRow[]>(() => buildInitialRadar());
   const [radarFilter, setRadarFilter] = useState<"all" | "active" | "high_wr">("all");
   const [isScanningRadar, setIsScanningRadar] = useState<boolean>(false);
@@ -234,6 +348,19 @@ export default function MarketRiskTerminal({
   const [optMessage, setOptMessage] = useState<string | null>(null);
   const [copiedTicket, setCopiedTicket] = useState<boolean>(false);
 
+  // Webhook Alert Bridge & 60s Live Sentinel State
+  const [alertChannelDraft, setAlertChannelDraft] = useState<
+    "discord" | "telegram" | "webhook" | null
+  >(null);
+  const [alertWebhookDraft, setAlertWebhookDraft] = useState<string | null>(null);
+  const [telegramTokenDraft, setTelegramTokenDraft] = useState<string | null>(null);
+  const [telegramChatDraft, setTelegramChatDraft] = useState<string | null>(null);
+  const [isSendingAlert, setIsSendingAlert] = useState<boolean>(false);
+  const [alertStatus, setAlertStatus] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [sentinelEnabled, setSentinelEnabled] = useState<boolean>(false);
+  const [lastSentinelScan, setLastSentinelScan] = useState<string | null>(null);
+  const lastDispatchedSigRef = useRef<string>("");
+
   // Self-Contained Quant Auth & Polar Checkout Modal State
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [authTab, setAuthTab] = useState<AuthModalTab>("signup");
@@ -248,6 +375,12 @@ export default function MarketRiskTerminal({
   const [copiedKey, setCopiedKey] = useState<boolean>(false);
   const [toast, setToast] = useState<string | null>(null);
   const autoVerifyRef = useRef(false);
+
+  const rawAlertJson = useSyncExternalStore(
+    subscribeAlertStorage,
+    loadRawAlertJson,
+    getEmptySnapshot
+  );
 
   const storedLicenseKey = useSyncExternalStore(
     subscribeLicenseStorage,
@@ -311,6 +444,37 @@ export default function MarketRiskTerminal({
 
   const isPaid = accountTier.isPaid;
   const licenseKeyInput = licenseKeyDraft ?? storedLicenseKey;
+
+  const savedAlertConfig = useMemo<SavedAlertConfig>(() => {
+    let parsed: Partial<SavedAlertConfig> = {};
+    if (rawAlertJson) {
+      try {
+        parsed = JSON.parse(rawAlertJson) as Partial<SavedAlertConfig>;
+      } catch {
+        parsed = {};
+      }
+    }
+    return {
+      channel: parsed.channel ?? storedProfile?.alertChannel ?? "discord",
+      webhookUrl: parsed.webhookUrl ?? storedProfile?.alertWebhookUrl ?? "",
+      telegramBotToken: parsed.telegramBotToken ?? "",
+      telegramChatId: parsed.telegramChatId ?? storedProfile?.telegramChatId ?? "",
+    };
+  }, [rawAlertJson, storedProfile]);
+
+  const alertChannel = alertChannelDraft ?? savedAlertConfig.channel;
+  const alertWebhookUrl = alertWebhookDraft ?? savedAlertConfig.webhookUrl;
+  const telegramBotToken = telegramTokenDraft ?? savedAlertConfig.telegramBotToken;
+  const telegramChatId = telegramChatDraft ?? savedAlertConfig.telegramChatId;
+
+  const persistAlertConfigLocal = useCallback(
+    (next: SavedAlertConfig) => {
+      if (typeof window === "undefined") return;
+      window.localStorage.setItem(ALERT_STORAGE_KEY, JSON.stringify(next));
+      window.dispatchEvent(new Event(ALERT_CHANGE_EVENT));
+    },
+    []
+  );
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -411,63 +575,167 @@ export default function MarketRiskTerminal({
     };
   }, [showToast]);
 
-  const loadCandles = useCallback(async (sym: string, tf: TimeframeId) => {
-    setIsLoadingFeed(true);
-    try {
-      const res = await fetch(
-        `https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(sym)}&interval=${encodeURIComponent(tf)}&limit=300`,
-        { cache: "no-store" }
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const raw = (await res.json()) as unknown[][];
-      if (!Array.isArray(raw) || raw.length < 50) throw new Error("Insufficient bars");
+  const loadDerivativesPulse = useCallback(
+    async (sym: string, tf: TimeframeId, refCandles: OHLCVCandle[]) => {
+      const fb = buildFallbackDerivativesPulse(sym, refCandles, "FLAT");
+      try {
+        const [premRes, oiRes, whaleRes, takerRes] = await Promise.all([
+          fetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${encodeURIComponent(sym)}`, {
+            cache: "no-store",
+          }),
+          fetch(`https://fapi.binance.com/fapi/v1/openInterest?symbol=${encodeURIComponent(sym)}`, {
+            cache: "no-store",
+          }),
+          fetch(
+            `https://fapi.binance.com/futures/data/topLongShortPositionRatio?symbol=${encodeURIComponent(sym)}&period=${encodeURIComponent(tf)}&limit=1`,
+            { cache: "no-store" }
+          ),
+          fetch(
+            `https://fapi.binance.com/futures/data/takerlongshortRatio?symbol=${encodeURIComponent(sym)}&period=${encodeURIComponent(tf)}&limit=1`,
+            { cache: "no-store" }
+          ),
+        ]);
 
-      const parsed: OHLCVCandle[] = raw.map((row) => ({
-        time: Number(row[0]),
-        open: Number.parseFloat(String(row[1])),
-        high: Number.parseFloat(String(row[2])),
-        low: Number.parseFloat(String(row[3])),
-        close: Number.parseFloat(String(row[4])),
-        volume: Number.parseFloat(String(row[5])),
-      }));
+        if (!premRes.ok || !oiRes.ok) throw new Error("Futures API unavailable");
+        const prem = (await premRes.json()) as BinancePremiumIndexDto;
+        const oi = (await oiRes.json()) as BinanceOiDto;
+        const whaleList = whaleRes.ok ? ((await whaleRes.json()) as BinanceLongShortDto[]) : [];
+        const takerList = takerRes.ok ? ((await takerRes.json()) as BinanceTakerDto[]) : [];
 
-      setCandles(parsed);
-      setFeedMode("live");
-    } catch {
-      setCandles(generateFallbackCandles(sym, tf, 300));
-      setFeedMode("simulated");
-    } finally {
-      setIsLoadingFeed(false);
-    }
-  }, []);
+        const markPrice = Number.parseFloat(prem.markPrice) || fb.markPrice;
+        const indexPrice = Number.parseFloat(prem.indexPrice) || fb.indexPrice;
+        const fundingRatePct =
+          Math.round((Number.parseFloat(prem.lastFundingRate) || 0) * 100 * 10000) / 10000;
+        const basisPct =
+          indexPrice > 0
+            ? Math.round(((markPrice - indexPrice) / indexPrice) * 100 * 10000) / 10000
+            : 0;
+        const openInterestCoins = Number.parseFloat(oi.openInterest) || 0;
+        const openInterestUsd = Math.round(openInterestCoins * markPrice);
 
-  // Refresh live 24h prices & scan all 12 assets cleanly
-  const refreshAlphaRadar = useCallback(async (tf: TimeframeId) => {
-    setIsScanningRadar(true);
-    try {
-      const tickerRes = await fetch(
-        `https://api.binance.com/api/v3/ticker/24hr?symbols=${RADAR_SYMBOLS_QUERY}`,
-        { cache: "no-store" }
-      );
-      if (!tickerRes.ok) throw new Error(`HTTP ${tickerRes.status}`);
-      const dtoList = (await tickerRes.json()) as Binance24hDto[];
-      const priceMap = new Map<string, { price: number; chg: number }>();
-      for (const item of dtoList) {
-        priceMap.set(item.symbol, {
-          price: Number.parseFloat(item.lastPrice),
-          chg: Number.parseFloat(item.priceChangePercent),
+        const whaleTop = whaleList[0];
+        const whaleLongPct = whaleTop
+          ? Math.round(Number.parseFloat(whaleTop.longAccount) * 1000) / 10
+          : fb.whaleLongPct;
+        const whaleShortPct = Math.round((100 - whaleLongPct) * 10) / 10;
+        const whaleRatio = whaleTop
+          ? Math.round(Number.parseFloat(whaleTop.longShortRatio) * 100) / 100
+          : fb.whaleRatio;
+        const takerBuySellRatio = takerList[0]
+          ? Math.round(Number.parseFloat(takerList[0].buySellRatio) * 100) / 100
+          : fb.takerBuySellRatio;
+
+        const squeeze = assessDerivativesSqueeze(
+          fundingRatePct,
+          whaleLongPct,
+          takerBuySellRatio,
+          "LONG"
+        );
+
+        setDerivativesPulse({
+          symbol: sym,
+          fundingRatePct,
+          markPrice,
+          indexPrice,
+          basisPct,
+          openInterestUsd,
+          whaleLongPct,
+          whaleShortPct,
+          whaleRatio,
+          takerBuySellRatio,
+          ...squeeze,
+          isLiveDerivatives: true,
         });
+      } catch {
+        setDerivativesPulse(fb);
       }
+    },
+    []
+  );
 
-      // Fetch real klines in parallel for top 5 visible radar assets, anchored fallback for remaining
-      const nextRows = await Promise.all(
-        ASSETS.map(async (asset, idx) => {
-          const live24 = priceMap.get(asset.symbol);
-          let series: OHLCVCandle[] | null = null;
-          if (idx < 5) {
+  const loadCandles = useCallback(
+    async (sym: string, tf: TimeframeId): Promise<OHLCVCandle[]> => {
+      setIsLoadingFeed(true);
+      try {
+        const res = await fetch(
+          `https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(sym)}&interval=${encodeURIComponent(tf)}&limit=300`,
+          { cache: "no-store" }
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const raw = (await res.json()) as unknown[][];
+        if (!Array.isArray(raw) || raw.length < 50) throw new Error("Insufficient bars");
+
+        const parsed: OHLCVCandle[] = raw.map((row) => ({
+          time: Number(row[0]),
+          open: Number.parseFloat(String(row[1])),
+          high: Number.parseFloat(String(row[2])),
+          low: Number.parseFloat(String(row[3])),
+          close: Number.parseFloat(String(row[4])),
+          volume: Number.parseFloat(String(row[5])),
+        }));
+
+        setCandles(parsed);
+        setFeedMode("live");
+        void loadDerivativesPulse(sym, tf, parsed);
+        return parsed;
+      } catch {
+        const fb = generateFallbackCandles(sym, tf, 300);
+        setCandles(fb);
+        setFeedMode("simulated");
+        void loadDerivativesPulse(sym, tf, fb);
+        return fb;
+      } finally {
+        setIsLoadingFeed(false);
+      }
+    },
+    [loadDerivativesPulse]
+  );
+
+  // Refresh live 24h prices, futures funding & REAL klines for ALL 12 assets
+  const refreshAlphaRadar = useCallback(
+    async (tf: TimeframeId, dir: TradeDirectionMode) => {
+      setIsScanningRadar(true);
+      try {
+        const [tickerRes, premRes] = await Promise.all([
+          fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${RADAR_SYMBOLS_QUERY}`, {
+            cache: "no-store",
+          }),
+          fetch(`https://fapi.binance.com/fapi/v1/premiumIndex`, { cache: "no-store" }).catch(
+            () => null
+          ),
+        ]);
+
+        if (!tickerRes.ok) throw new Error(`HTTP ${tickerRes.status}`);
+        const dtoList = (await tickerRes.json()) as Binance24hDto[];
+        const priceMap = new Map<string, { price: number; chg: number }>();
+        for (const item of dtoList) {
+          priceMap.set(item.symbol, {
+            price: Number.parseFloat(item.lastPrice),
+            chg: Number.parseFloat(item.priceChangePercent),
+          });
+        }
+
+        const fundingMap = new Map<string, number>();
+        if (premRes && premRes.ok) {
+          const premList = (await premRes.json()) as BinancePremiumIndexDto[];
+          if (Array.isArray(premList)) {
+            for (const p of premList) {
+              const ratePct =
+                Math.round((Number.parseFloat(p.lastFundingRate) || 0) * 100 * 10000) / 10000;
+              fundingMap.set(p.symbol, ratePct);
+            }
+          }
+        }
+
+        // Fetch real Binance OHLCV klines in parallel for ALL 12 assets (Free + Pro)
+        const nextRows = await Promise.all(
+          ASSETS.map(async (asset) => {
+            const live24 = priceMap.get(asset.symbol);
+            const fundingPct = fundingMap.get(asset.symbol) ?? 0;
+            let series: OHLCVCandle[] | null = null;
             try {
               const kRes = await fetch(
-                `https://api.binance.com/api/v3/klines?symbol=${asset.symbol}&interval=${tf}&limit=160`,
+                `https://api.binance.com/api/v3/klines?symbol=${asset.symbol}&interval=${tf}&limit=200`,
                 { cache: "no-store" }
               );
               if (kRes.ok) {
@@ -484,51 +752,63 @@ export default function MarketRiskTerminal({
                 }
               }
             } catch {
-              // fallback below
+              // fallback below if network error
             }
-          }
 
-          if (!series) {
-            const fb = generateFallbackCandles(asset.symbol, tf, 160);
-            if (live24 && Number.isFinite(live24.price) && live24.price > 0) {
-              const lastClose = fb[fb.length - 1]?.close || 1;
-              const scale = live24.price / lastClose;
-              series = fb.map((bar) => ({
-                ...bar,
-                open: bar.open * scale,
-                high: bar.high * scale,
-                low: bar.low * scale,
-                close: bar.close * scale,
-              }));
-            } else {
-              series = fb;
+            if (!series) {
+              const fb = generateFallbackCandles(asset.symbol, tf, 200);
+              if (live24 && Number.isFinite(live24.price) && live24.price > 0) {
+                const lastClose = fb[fb.length - 1]?.close || 1;
+                const scale = live24.price / lastClose;
+                series = fb.map((bar) => ({
+                  ...bar,
+                  open: bar.open * scale,
+                  high: bar.high * scale,
+                  low: bar.low * scale,
+                  close: bar.close * scale,
+                }));
+              } else {
+                series = fb;
+              }
             }
-          }
 
-          const chg = live24?.chg ?? 0;
-          return buildCoinRadarRow(asset.symbol, asset.label, series, chg, asset.proOnly);
-        })
-      );
+            const chg = live24?.chg ?? 0;
+            return buildCoinRadarRow(
+              asset.symbol,
+              asset.label,
+              series,
+              chg,
+              asset.proOnly,
+              fundingPct,
+              dir
+            );
+          })
+        );
 
-      setRadarRows(nextRows);
-    } catch {
-      // keep existing deterministic radar rows
-    } finally {
-      setIsScanningRadar(false);
-    }
-  }, []);
+        setRadarRows(nextRows);
+      } catch {
+        // keep existing deterministic radar rows
+      } finally {
+        setIsScanningRadar(false);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     let active = true;
     const init = async () => {
       if (!active) return;
-      await Promise.all([loadCandles(symbol, timeframe), refreshAlphaRadar(timeframe)]);
+      await Promise.all([
+        loadCandles(symbol, timeframe),
+        refreshAlphaRadar(timeframe, directionMode),
+      ]);
     };
     void init();
     return () => {
       active = false;
     };
-  }, [symbol, timeframe, loadCandles, refreshAlphaRadar]);
+  }, [symbol, timeframe, directionMode, loadCandles, refreshAlphaRadar]);
 
   const tournament = useMemo<BacktestResult[]>(() => {
     return runStrategyTournament(candles, {
@@ -541,8 +821,18 @@ export default function MarketRiskTerminal({
       slowPeriod,
       rsiOversold: 32,
       rsiOverbought: 70,
+      direction: directionMode,
     });
-  }, [candles, capital, leverage, stopLossPct, takeProfitPct, fastPeriod, slowPeriod]);
+  }, [
+    candles,
+    capital,
+    leverage,
+    stopLossPct,
+    takeProfitPct,
+    fastPeriod,
+    slowPeriod,
+    directionMode,
+  ]);
 
   const activeStrategyId: StrategyId = hasPickedStrategyManually
     ? selectedStrategyId
@@ -562,6 +852,7 @@ export default function MarketRiskTerminal({
       slowPeriod,
       rsiOversold: 32,
       rsiOverbought: 70,
+      direction: directionMode,
     });
   }, [
     tournament,
@@ -573,6 +864,7 @@ export default function MarketRiskTerminal({
     takeProfitPct,
     fastPeriod,
     slowPeriod,
+    directionMode,
   ]);
 
   const handleSelectAsset = (assetSym: string, label: string, proOnly?: boolean) => {
@@ -613,7 +905,12 @@ export default function MarketRiskTerminal({
       return;
     }
 
-    const { best, testedCount } = optimizeStrategyConfig(candles, capital, leverage);
+    const { best, testedCount } = optimizeStrategyConfig(
+      candles,
+      capital,
+      leverage,
+      directionMode
+    );
     setSelectedStrategyId(best.strategyId);
     setHasPickedStrategyManually(true);
     setStopLossPct(best.config.stopLossPct);
@@ -628,8 +925,8 @@ export default function MarketRiskTerminal({
 
     setOptMessage(
       lang === "tr"
-        ? `${testedCount} kombinasyon tarandı → Kazanan: ${best.nameTr} (SL %${best.config.stopLossPct} / TP %${best.config.takeProfitPct} → %${best.netProfitPct >= 0 ? "+" : ""}${best.netProfitPct})`
-        : `Swept ${testedCount} setups → Winner: ${best.nameEn} (SL ${best.config.stopLossPct}% / TP ${best.config.takeProfitPct}% → ${best.netProfitPct >= 0 ? "+" : ""}${best.netProfitPct}%)`
+        ? `${testedCount} kombinasyon tarandı → Kazanan: ${best.nameTr} (Genel %${best.netProfitPct >= 0 ? "+" : ""}${best.netProfitPct} · OOS %30: %${best.outOfSampleReturnPct >= 0 ? "+" : ""}${best.outOfSampleReturnPct})`
+        : `Swept ${testedCount} setups → Winner: ${best.nameEn} (Net ${best.netProfitPct >= 0 ? "+" : ""}${best.netProfitPct}% · OOS 30%: ${best.outOfSampleReturnPct >= 0 ? "+" : ""}${best.outOfSampleReturnPct}%)`
     );
   };
 
@@ -644,6 +941,7 @@ export default function MarketRiskTerminal({
     }
     const headers = [
       "Trade#",
+      "Side",
       "EntryTime",
       "ExitTime",
       "EntryPrice",
@@ -656,6 +954,7 @@ export default function MarketRiskTerminal({
     const lines = activeResult.trades.map((t) =>
       [
         t.id,
+        t.side,
         new Date(t.entryTime).toISOString(),
         new Date(t.exitTime).toISOString(),
         t.entryPrice,
@@ -823,12 +1122,195 @@ export default function MarketRiskTerminal({
     };
   }, [activeResult]);
 
+  const liveSqueeze = useMemo(
+    () =>
+      assessDerivativesSqueeze(
+        derivativesPulse.fundingRatePct,
+        derivativesPulse.whaleLongPct,
+        derivativesPulse.takerBuySellRatio,
+        activeResult.currentSignal
+      ),
+    [derivativesPulse, activeResult.currentSignal]
+  );
+
   const lastClose = candles[candles.length - 1]?.close ?? 0;
   const ticketEntry = activeResult.activeEntryPrice ?? lastClose;
+  const ticketSide = activeResult.activeSide;
   const ticketNotional = capital * leverage;
   const ticketUnits = ticketEntry > 0 ? ticketNotional / ticketEntry : 0;
   const ticketRiskUsd = Math.round(ticketNotional * (stopLossPct / 100));
   const ticketRewardUsd = Math.round(ticketNotional * (takeProfitPct / 100));
+
+  const handleDispatchAlert = useCallback(
+    async (autoTriggered = false) => {
+      const nextCfg: SavedAlertConfig = {
+        channel: alertChannel,
+        webhookUrl: alertWebhookUrl.trim(),
+        telegramBotToken: telegramBotToken.trim(),
+        telegramChatId: telegramChatId.trim(),
+      };
+      persistAlertConfigLocal(nextCfg);
+
+      if (storedProfile?.customerId && storedProfile?.customerEmail) {
+        void fetch("/api/auth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "save_settings",
+            email: storedProfile.customerEmail,
+            customerId: storedProfile.customerId,
+            alertChannel: nextCfg.channel,
+            alertWebhookUrl: nextCfg.webhookUrl,
+            telegramChatId: nextCfg.telegramChatId,
+          }),
+        }).catch(() => {
+          // Non-blocking cloud sync
+        });
+      }
+
+      if (!autoTriggered) {
+        setIsSendingAlert(true);
+        setAlertStatus(null);
+      }
+
+      try {
+        const res = await fetch("/api/alerts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            channel: nextCfg.channel,
+            webhookUrl: nextCfg.webhookUrl,
+            telegramBotToken: nextCfg.telegramBotToken,
+            telegramChatId: nextCfg.telegramChatId,
+            signal: {
+              symbol,
+              timeframe,
+              strategyName: activeResult.nameEn,
+              signal: activeResult.currentSignal,
+              side: ticketSide,
+              entryPrice: formatPrice(ticketEntry),
+              stopLoss: formatPrice(activeResult.suggestedStopPrice),
+              takeProfit: formatPrice(activeResult.suggestedTargetPrice),
+              liquidationPrice:
+                activeResult.estimatedLiquidationPrice > 0
+                  ? formatPrice(activeResult.estimatedLiquidationPrice)
+                  : undefined,
+              leverage,
+              positionUsd: formatUsd(ticketNotional),
+              netReturnPct: activeResult.netProfitPct,
+              outOfSampleReturnPct: activeResult.outOfSampleReturnPct,
+              winRatePct: activeResult.winRatePct,
+              fundingRatePct: derivativesPulse.fundingRatePct,
+              squeezeLabel: liveSqueeze.squeezeLabelEn,
+            },
+          }),
+        });
+        const data = (await res.json()) as { ok?: boolean; message?: string };
+        if (res.ok && data?.ok) {
+          setAlertStatus({ ok: true, msg: data.message || "Signal delivered!" });
+          if (!autoTriggered) showToast(data.message || "Webhook dispatched!");
+        } else {
+          setAlertStatus({
+            ok: false,
+            msg: data?.message || "Webhook dispatch failed.",
+          });
+        }
+      } catch {
+        setAlertStatus({
+          ok: false,
+          msg: lang === "tr" ? "Ağ hatası, webhook gönderilemedi." : "Network error sending alert.",
+        });
+      } finally {
+        if (!autoTriggered) setIsSendingAlert(false);
+      }
+    },
+    [
+      alertChannel,
+      alertWebhookUrl,
+      telegramBotToken,
+      telegramChatId,
+      persistAlertConfigLocal,
+      storedProfile,
+      symbol,
+      timeframe,
+      activeResult,
+      ticketSide,
+      ticketEntry,
+      leverage,
+      ticketNotional,
+      derivativesPulse.fundingRatePct,
+      liveSqueeze.squeezeLabelEn,
+      showToast,
+      lang,
+    ]
+  );
+
+  // 60-Second Live Signal Sentinel (refreshes bars + radar & alerts on fresh bar signals)
+  useEffect(() => {
+    if (!sentinelEnabled) return;
+    const timer = window.setInterval(() => {
+      void (async () => {
+        const freshBars = await loadCandles(symbol, timeframe);
+        await refreshAlphaRadar(timeframe, directionMode);
+        const nowStr = new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        });
+        setLastSentinelScan(nowStr);
+
+        const freshEval = runStrategyBacktest(freshBars, {
+          strategyId: activeStrategyId,
+          capital,
+          leverage,
+          stopLossPct,
+          takeProfitPct,
+          feePct: 0.08,
+          fastPeriod,
+          slowPeriod,
+          rsiOversold: 32,
+          rsiOverbought: 70,
+          direction: directionMode,
+        });
+
+        const isFreshBarSignal =
+          freshEval.currentSignal === "ENTRY_NOW" || freshEval.currentSignal === "SHORT_NOW";
+        const latestBarTime = freshBars[freshBars.length - 1]?.time ?? 0;
+        const sigKey = `${symbol}:${timeframe}:${activeStrategyId}:${freshEval.currentSignal}:${latestBarTime}`;
+
+        if (isFreshBarSignal && lastDispatchedSigRef.current !== sigKey) {
+          lastDispatchedSigRef.current = sigKey;
+          playAlertTone();
+          showToast(
+            `${symbol} ${freshEval.currentSignal} (${formatPrice(freshEval.activeEntryPrice ?? 0)})`
+          );
+          if (alertWebhookUrl.trim() || telegramBotToken.trim()) {
+            void handleDispatchAlert(true);
+          }
+        }
+      })();
+    }, 60000);
+
+    return () => window.clearInterval(timer);
+  }, [
+    sentinelEnabled,
+    symbol,
+    timeframe,
+    directionMode,
+    activeStrategyId,
+    capital,
+    leverage,
+    stopLossPct,
+    takeProfitPct,
+    fastPeriod,
+    slowPeriod,
+    alertWebhookUrl,
+    telegramBotToken,
+    loadCandles,
+    refreshAlphaRadar,
+    handleDispatchAlert,
+    showToast,
+  ]);
 
   const passCheckoutHref = getCheckoutUrlWithEmail(
     CHECKOUT_URLS.pass7Day,
@@ -841,15 +1323,15 @@ export default function MarketRiskTerminal({
 
   return (
     <div className="w-full overflow-hidden rounded-2xl border border-slate-800 bg-[#070B14] text-slate-100 shadow-[0_28px_70px_-15px_rgba(2,6,23,0.75)]">
-      {/* 1. LIVE 12-COIN ALPHA SCANNER STRIP */}
+      {/* 1. LIVE 12-COIN ALPHA & PERPETUAL FUTURES RADAR */}
       <div className="border-b border-slate-800/90 bg-[#0B1120] p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Radar className="h-4 w-4 text-emerald-400" />
             <h2 className="text-xs font-bold uppercase tracking-wider text-white sm:text-sm">
               {lang === "tr"
-                ? `Canlı 12 Parite Alpha Tarayıcısı (${timeframe.toUpperCase()})`
-                : `Live 12-Asset Alpha Scanner (${timeframe.toUpperCase()})`}
+                ? `Canlı 12 Parite Alpha & Futures Tarayıcısı (${timeframe.toUpperCase()})`
+                : `Live 12-Pair Alpha & Futures Radar (${timeframe.toUpperCase()})`}
             </h2>
             <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-300 border border-emerald-500/30">
               {radarRows.filter((r) => r.currentSignal !== "FLAT").length}{" "}
@@ -860,8 +1342,8 @@ export default function MarketRiskTerminal({
           <div className="flex flex-wrap items-center gap-1.5">
             {[
               { id: "all", label: lang === "tr" ? "Tümü (En Kârlı)" : "All (Top PnL)" },
-              { id: "active", label: lang === "tr" ? "Sadece Aktif AL" : "Active Signals Only" },
-              { id: "high_wr", label: lang === "tr" ? "En Yüksek Win %" : "Highest Win Rate" },
+              { id: "active", label: lang === "tr" ? "Aktif Long / Short" : "Active Signals" },
+              { id: "high_wr", label: lang === "tr" ? "En Yüksek Win %" : "Highest Win %" },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -879,19 +1361,19 @@ export default function MarketRiskTerminal({
 
             <button
               type="button"
-              onClick={() => void refreshAlphaRadar(timeframe)}
+              onClick={() => void refreshAlphaRadar(timeframe, directionMode)}
               disabled={isScanningRadar}
               className="ml-1 inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-[11px] font-semibold text-slate-200 hover:bg-slate-800 cursor-pointer disabled:opacity-50"
             >
               <RefreshCw className={`h-3 w-3 ${isScanningRadar ? "animate-spin" : ""}`} />
-              <span>{lang === "tr" ? "Tara" : "Scan"}</span>
+              <span>{lang === "tr" ? "Tümünü Tara" : "Scan All 12"}</span>
             </button>
           </div>
         </div>
 
-        {/* Horizontal 12-Card Scanner Strip */}
+        {/* Full 12-Coin Scanner Grid */}
         <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
-          {filteredRadar.slice(0, 6).map((row) => {
+          {filteredRadar.map((row) => {
             const isSelected = symbol === row.symbol;
             const locked = row.proOnly && !isPaid;
             return (
@@ -911,23 +1393,11 @@ export default function MarketRiskTerminal({
                     {locked && <Lock className="h-2.5 w-2.5 text-slate-500" />}
                   </span>
                   <span
-                    className={`rounded px-1.5 py-0.5 text-[9px] font-extrabold uppercase ${
-                      row.currentSignal === "ENTRY_NOW"
-                        ? "bg-emerald-400 text-slate-950"
-                        : row.currentSignal === "LONG"
-                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                          : "bg-slate-800 text-slate-400"
-                    }`}
+                    className={`rounded px-1.5 py-0.5 text-[9px] font-extrabold uppercase ${signalBadgeClass(
+                      row.currentSignal
+                    )}`}
                   >
-                    {row.currentSignal === "ENTRY_NOW"
-                      ? lang === "tr"
-                        ? "YENİ AL"
-                        : "BUY NOW"
-                      : row.currentSignal === "LONG"
-                        ? "LONG"
-                        : lang === "tr"
-                          ? "BEKLE"
-                          : "FLAT"}
+                    {signalBadgeText(row.currentSignal, lang)}
                   </span>
                 </div>
 
@@ -946,11 +1416,22 @@ export default function MarketRiskTerminal({
                 </div>
 
                 <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
-                  <span className="truncate max-w-[90px]">
-                    {lang === "tr" ? row.bestStrategyNameTr : row.bestStrategyNameEn}
+                  <span
+                    className={`mono-nums font-semibold ${
+                      row.outOfSampleReturnPct >= 0 ? "text-sky-300" : "text-amber-400"
+                    }`}
+                  >
+                    OOS {row.outOfSampleReturnPct >= 0 ? "+" : ""}
+                    {row.outOfSampleReturnPct}%
                   </span>
-                  <span className="mono-nums font-semibold text-slate-300">
-                    {row.winRatePct}%W
+                  <span
+                    className={`mono-nums font-semibold ${
+                      row.fundingRatePct < 0 ? "text-emerald-300" : "text-slate-300"
+                    }`}
+                  >
+                    {row.squeezeState === "SHORT_SQUEEZE"
+                      ? "SQZ↑"
+                      : `F:${row.fundingRatePct >= 0 ? "+" : ""}${row.fundingRatePct.toFixed(3)}%`}
                   </span>
                 </div>
               </button>
@@ -961,8 +1442,8 @@ export default function MarketRiskTerminal({
 
       {/* Main Terminal Content */}
       <div className="p-4 sm:p-6 space-y-5">
-        {/* Top Asset Pill Row + Timeframe + Auto-Optimizer */}
-        <div className="flex flex-col gap-3 border-b border-slate-800/90 pb-4 lg:flex-row lg:items-center lg:justify-between">
+        {/* Top Asset Pill Row + Direction Toggle + Timeframe + Auto-Optimizer */}
+        <div className="flex flex-col gap-3 border-b border-slate-800/90 pb-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex flex-wrap items-center gap-1.5">
             {ASSETS.map((a) => {
               const selected = symbol === a.symbol;
@@ -985,6 +1466,35 @@ export default function MarketRiskTerminal({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {/* Direction Mode Selector (Long + Short / Long / Short) */}
+            <div className="inline-flex rounded-lg border border-slate-800 bg-slate-900 p-0.5 text-[11px] font-bold">
+              {(
+                [
+                  { id: "both", label: lang === "tr" ? "LONG+SHORT" : "BOTH" },
+                  { id: "long", label: "LONG" },
+                  { id: "short", label: "SHORT" },
+                ] as { id: TradeDirectionMode; label: string }[]
+              ).map((dirOpt) => (
+                <button
+                  key={dirOpt.id}
+                  type="button"
+                  onClick={() => {
+                    setDirectionMode(dirOpt.id);
+                    setHasPickedStrategyManually(false);
+                  }}
+                  className={`rounded-md px-2 py-1 transition cursor-pointer ${
+                    directionMode === dirOpt.id
+                      ? dirOpt.id === "short"
+                        ? "bg-fuchsia-600 text-white"
+                        : "bg-emerald-500 text-slate-950"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  {dirOpt.label}
+                </button>
+              ))}
+            </div>
+
             <div className="inline-flex rounded-lg border border-slate-800 bg-slate-900 p-0.5 text-xs font-bold">
               {TIMEFRAMES.map((tf) => {
                 const selected = timeframe === tf.id;
@@ -1019,8 +1529,8 @@ export default function MarketRiskTerminal({
                     ? "Canlı Akış"
                     : "Live Feed"
                   : lang === "tr"
-                    ? "Örnek Mumlar"
-                    : "Sample Bars"}
+                    ? "Simülasyon"
+                    : "Simulated"}
               </span>
             </button>
 
@@ -1044,6 +1554,96 @@ export default function MarketRiskTerminal({
           </div>
         </div>
 
+        {/* Live Binance Futures Derivatives & Squeeze Bar */}
+        <div className="grid grid-cols-2 gap-2.5 rounded-xl border border-slate-800/90 bg-[#050811] p-3 lg:grid-cols-4">
+          <div className="rounded-lg bg-slate-900/70 px-3 py-2 border border-slate-800/80">
+            <div className="flex items-center justify-between text-[10px] text-slate-400">
+              <span>{lang === "tr" ? "Fonlama (8s) & Mark" : "Funding (8h) & Mark"}</span>
+              <span
+                className={`rounded px-1 text-[9px] font-bold ${
+                  derivativesPulse.isLiveDerivatives
+                    ? "bg-emerald-500/15 text-emerald-300"
+                    : "bg-slate-800 text-slate-400"
+                }`}
+              >
+                {derivativesPulse.isLiveDerivatives ? "PERP LIVE" : "EST"}
+              </span>
+            </div>
+            <div className="mt-1 flex items-baseline justify-between">
+              <span
+                className={`mono-nums text-sm font-extrabold ${
+                  derivativesPulse.fundingRatePct < 0
+                    ? "text-emerald-400"
+                    : derivativesPulse.fundingRatePct >= 0.015
+                      ? "text-rose-400"
+                      : "text-white"
+                }`}
+              >
+                {derivativesPulse.fundingRatePct >= 0 ? "+" : ""}
+                {derivativesPulse.fundingRatePct.toFixed(4)}%
+              </span>
+              <span className="mono-nums text-[11px] text-slate-400">
+                Basis {derivativesPulse.basisPct >= 0 ? "+" : ""}
+                {derivativesPulse.basisPct.toFixed(3)}%
+              </span>
+            </div>
+          </div>
+
+          <div className="rounded-lg bg-slate-900/70 px-3 py-2 border border-slate-800/80">
+            <span className="block text-[10px] text-slate-400">
+              {lang === "tr" ? "Açık Pozisyon (Open Interest)" : "Perp Open Interest"}
+            </span>
+            <span className="mono-nums mt-1 block text-sm font-extrabold text-white">
+              {formatCompactUsd(derivativesPulse.openInterestUsd)}
+            </span>
+            <span className="mono-nums text-[10px] text-slate-400">
+              Mark {formatPrice(derivativesPulse.markPrice)}
+            </span>
+          </div>
+
+          <div className="rounded-lg bg-slate-900/70 px-3 py-2 border border-slate-800/80">
+            <div className="flex items-center justify-between text-[10px] text-slate-400">
+              <span>{lang === "tr" ? "Balina Long / Short" : "Whale Long / Short"}</span>
+              <span className="mono-nums font-bold text-white">
+                {derivativesPulse.whaleRatio}x
+              </span>
+            </div>
+            <div className="mt-1.5 flex h-2 w-full overflow-hidden rounded-full bg-rose-500/50">
+              <div
+                className="h-full bg-emerald-400 transition-all"
+                style={{ width: `${derivativesPulse.whaleLongPct}%` }}
+              />
+            </div>
+            <div className="mt-1 flex justify-between text-[10px] mono-nums">
+              <span className="text-emerald-300">L {derivativesPulse.whaleLongPct}%</span>
+              <span className="text-rose-300">S {derivativesPulse.whaleShortPct}%</span>
+            </div>
+          </div>
+
+          <div
+            className={`rounded-lg px-3 py-2 border ${
+              liveSqueeze.squeezeState === "SHORT_SQUEEZE"
+                ? "border-emerald-500/40 bg-emerald-500/10"
+                : liveSqueeze.squeezeState === "LONG_SQUEEZE"
+                  ? "border-rose-500/40 bg-rose-500/10"
+                  : "border-slate-800/80 bg-slate-900/70"
+            }`}
+          >
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="inline-flex items-center gap-1 font-bold text-slate-300">
+                <Flame className="h-3 w-3 text-amber-400" />
+                {lang === "tr" ? liveSqueeze.squeezeLabelTr : liveSqueeze.squeezeLabelEn}
+              </span>
+              <span className="mono-nums text-[10px] font-bold text-slate-300">
+                Taker {derivativesPulse.takerBuySellRatio}x
+              </span>
+            </div>
+            <p className="mt-1 text-[10px] leading-snug text-slate-300 line-clamp-2">
+              {lang === "tr" ? liveSqueeze.squeezeDetailTr : liveSqueeze.squeezeDetailEn}
+            </p>
+          </div>
+        </div>
+
         {/* Auto-Optimize Notification Banner */}
         {optMessage && (
           <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2.5 text-xs font-semibold text-emerald-300">
@@ -1064,9 +1664,26 @@ export default function MarketRiskTerminal({
         {/* 4 Quant KPI Cards */}
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
-            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              {lang === "tr" ? "Net Strateji Getirisi" : "Net Strategy Return"}
-            </span>
+            <div className="flex items-center justify-between gap-1">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                {lang === "tr" ? "Net Getiri & OOS %30" : "Net Return & 30% OOS"}
+              </span>
+              <span
+                className={`rounded px-1.5 py-0.5 text-[9px] font-extrabold ${
+                  activeResult.isRobustOos
+                    ? "bg-sky-500/20 text-sky-300 border border-sky-500/30"
+                    : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                }`}
+              >
+                {activeResult.isRobustOos
+                  ? lang === "tr"
+                    ? "OOS DOĞRULANDI"
+                    : "OOS VERIFIED"
+                  : lang === "tr"
+                    ? "OVERFIT UYARI"
+                    : "LOW OOS"}
+              </span>
+            </div>
             <span
               className={`mono-nums mt-1 block text-xl font-extrabold sm:text-2xl ${
                 activeResult.netProfitPct >= 0 ? "text-emerald-400" : "text-rose-400"
@@ -1080,15 +1697,17 @@ export default function MarketRiskTerminal({
               </span>
             </span>
             <span className="mt-1 block text-[11px] text-slate-400">
-              {lang === "tr" ? "Al-Tut'a Farkı (Alpha):" : "Alpha vs Hold:"}{" "}
+              {lang === "tr" ? "Son %30 Canlı Test:" : "Unseen 30% OOS:"}{" "}
               <strong
                 className={
-                  activeResult.alphaPct >= 0 ? "text-emerald-300" : "text-rose-300"
+                  activeResult.outOfSampleReturnPct >= 0 ? "text-sky-300" : "text-rose-300"
                 }
               >
-                {activeResult.alphaPct >= 0 ? "+" : ""}
-                {activeResult.alphaPct}%
-              </strong>
+                {activeResult.outOfSampleReturnPct >= 0 ? "+" : ""}
+                {activeResult.outOfSampleReturnPct}%
+              </strong>{" "}
+              &middot; Alpha {activeResult.alphaPct >= 0 ? "+" : ""}
+              {activeResult.alphaPct}%
             </span>
           </div>
 
@@ -1105,8 +1724,8 @@ export default function MarketRiskTerminal({
             <span className="mt-1 block text-[11px] text-slate-400">
               {activeResult.totalTrades}{" "}
               {lang === "tr"
-                ? `işlem · ${leverage}x Kaldıraç`
-                : `trades · ${leverage}x Lev`}
+                ? `işlem (${directionMode.toUpperCase()}) · ${leverage}x`
+                : `trades (${directionMode.toUpperCase()}) · ${leverage}x`}
             </span>
           </div>
 
@@ -1130,7 +1749,9 @@ export default function MarketRiskTerminal({
             className={`rounded-xl border p-4 ${
               activeResult.currentSignal === "FLAT"
                 ? "border-slate-800 bg-slate-900/70"
-                : "border-emerald-500/50 bg-emerald-500/10"
+                : activeResult.activeSide === "SHORT"
+                  ? "border-fuchsia-500/50 bg-fuchsia-500/10"
+                  : "border-emerald-500/50 bg-emerald-500/10"
             }`}
           >
             <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -1138,20 +1759,14 @@ export default function MarketRiskTerminal({
             </span>
             <span
               className={`mt-1 block text-lg font-extrabold sm:text-xl ${
-                activeResult.currentSignal === "FLAT" ? "text-slate-300" : "text-emerald-400"
+                activeResult.currentSignal === "FLAT"
+                  ? "text-slate-300"
+                  : activeResult.activeSide === "SHORT"
+                    ? "text-fuchsia-300"
+                    : "text-emerald-400"
               }`}
             >
-              {activeResult.currentSignal === "ENTRY_NOW"
-                ? lang === "tr"
-                  ? "YENİ AL SİNYALİ"
-                  : "FRESH BUY SIGNAL"
-                : activeResult.currentSignal === "LONG"
-                  ? lang === "tr"
-                    ? "AÇIK LONG"
-                    : "ACTIVE LONG"
-                  : lang === "tr"
-                    ? "SİNYAL BEKLENİYOR"
-                    : "WAIT / FLAT"}
+              {signalBadgeText(activeResult.currentSignal, lang)}
             </span>
             <span className="mono-nums mt-1 block text-[11px] text-slate-300">
               SL {formatPrice(activeResult.suggestedStopPrice)} &middot; TP{" "}
@@ -1162,7 +1777,7 @@ export default function MarketRiskTerminal({
 
         {/* Main 12-Column Interactive Stage */}
         <div className="grid gap-5 lg:grid-cols-12">
-          {/* Left 8 Cols: Interactive Candlestick Chart + Equity Curve */}
+          {/* Left 8 Cols: Interactive Candlestick Chart + Equity Curve + Webhook Bridge */}
           <div className="lg:col-span-8 space-y-4">
             <QuantCandlestickChart
               symbol={symbol}
@@ -1248,6 +1863,137 @@ export default function MarketRiskTerminal({
                 </svg>
               </div>
             </div>
+
+            {/* Live Webhook & 60s Sentinel Alert Dispatcher */}
+            <div className="rounded-xl border border-slate-800 bg-[#050811] p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <Bell className="h-4 w-4 text-sky-400" />
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-white">
+                    {lang === "tr"
+                      ? "Canlı Sinyal Alarmı & Webhook Bot Köprüsü"
+                      : "Live Signal Alerts & Webhook Bot Bridge"}
+                  </h3>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSentinelEnabled((prev) => !prev)}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-bold transition cursor-pointer ${
+                    sentinelEnabled
+                      ? "bg-emerald-400 text-slate-950"
+                      : "border border-slate-700 bg-slate-900 text-slate-300 hover:text-white"
+                  }`}
+                >
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      sentinelEnabled ? "bg-slate-950 animate-ping" : "bg-slate-500"
+                    }`}
+                  />
+                  <span>
+                    {sentinelEnabled
+                      ? lang === "tr"
+                        ? `60sn Nöbetçi AÇIK${lastSentinelScan ? ` (${lastSentinelScan})` : ""}`
+                        : `60s Sentinel ON${lastSentinelScan ? ` (${lastSentinelScan})` : ""}`
+                      : lang === "tr"
+                        ? "60sn Canlı Nöbetçiyi Aç"
+                        : "Enable 60s Live Sentinel"}
+                  </span>
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {(
+                  [
+                    { id: "discord", label: "Discord Webhook" },
+                    { id: "telegram", label: "Telegram Bot" },
+                    { id: "webhook", label: "Custom JSON Bot" },
+                  ] as const
+                ).map((ch) => (
+                  <button
+                    key={ch.id}
+                    type="button"
+                    onClick={() => setAlertChannelDraft(ch.id)}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                      alertChannel === ch.id
+                        ? "bg-sky-500 text-slate-950 font-bold"
+                        : "border border-slate-800 bg-slate-900 text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    {ch.label}
+                  </button>
+                ))}
+              </div>
+
+              {alertChannel === "telegram" ? (
+                <div className="grid gap-2.5 sm:grid-cols-2">
+                  <input
+                    type="password"
+                    value={telegramBotToken}
+                    onChange={(e) => setTelegramTokenDraft(e.target.value)}
+                    placeholder="Bot Token (123456789:AAH...)"
+                    className="mono-nums rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white focus:border-sky-400 focus:outline-none"
+                  />
+                  <input
+                    type="text"
+                    value={telegramChatId}
+                    onChange={(e) => setTelegramChatDraft(e.target.value)}
+                    placeholder="Chat ID (-100... or @channel)"
+                    className="mono-nums rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white focus:border-sky-400 focus:outline-none"
+                  />
+                </div>
+              ) : (
+                <input
+                  type="url"
+                  value={alertWebhookUrl}
+                  onChange={(e) => setAlertWebhookDraft(e.target.value)}
+                  placeholder={
+                    alertChannel === "discord"
+                      ? "https://discord.com/api/webhooks/..."
+                      : "https://your-bot-endpoint.com/webhook"
+                  }
+                  className="mono-nums w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white focus:border-sky-400 focus:outline-none"
+                />
+              )}
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-[11px] text-slate-400">
+                  {lang === "tr"
+                    ? "Giriş, SL, TP, Tahmini Likidasyon, OOS %30 ve Fonlama Oranı anında gönderilir."
+                    : "Sends Entry, SL, TP, Est. Liq, 30% OOS & Live Funding directly to your channel."}
+                </span>
+
+                <button
+                  type="button"
+                  disabled={isSendingAlert}
+                  onClick={() => void handleDispatchAlert(false)}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-sky-500 px-4 py-2 text-xs font-bold text-slate-950 transition hover:bg-sky-400 disabled:opacity-50 cursor-pointer shrink-0"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  <span>
+                    {isSendingAlert
+                      ? lang === "tr"
+                        ? "Gönderiliyor..."
+                        : "Sending..."
+                      : lang === "tr"
+                        ? "Emri Şimdi Webhook'a Gönder"
+                        : "Dispatch Signal Now"}
+                  </span>
+                </button>
+              </div>
+
+              {alertStatus && (
+                <div
+                  className={`rounded-lg border px-3 py-2 text-xs font-semibold ${
+                    alertStatus.ok
+                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                      : "border-rose-500/40 bg-rose-500/10 text-rose-300"
+                  }`}
+                >
+                  {alertStatus.msg}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Right 4 Cols: 6-Strategy Leaderboard + Sliders + Live Execution Ticket */}
@@ -1261,7 +2007,7 @@ export default function MarketRiskTerminal({
                     {lang === "tr" ? "6-Strateji Performans Ligi" : "6-Strategy Tournament"}
                   </h3>
                 </div>
-                <span className="text-[10px] text-slate-400">300 Bars</span>
+                <span className="text-[10px] text-slate-400">OOS 70/30</span>
               </div>
 
               <div className="mt-2.5 space-y-1.5">
@@ -1302,7 +2048,15 @@ export default function MarketRiskTerminal({
                       </div>
                       <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
                         <span>
-                          Win {strat.winRatePct}% &middot; PF {strat.profitFactor}
+                          Win {strat.winRatePct}% &middot;{" "}
+                          <strong
+                            className={
+                              strat.outOfSampleReturnPct >= 0 ? "text-sky-300" : "text-amber-300"
+                            }
+                          >
+                            OOS {strat.outOfSampleReturnPct >= 0 ? "+" : ""}
+                            {strat.outOfSampleReturnPct}%
+                          </strong>
                         </span>
                         <span>
                           {strat.totalTrades} {lang === "tr" ? "işlem" : "trades"} &middot; DD -
@@ -1435,15 +2189,25 @@ export default function MarketRiskTerminal({
               </div>
             </div>
 
-            {/* Live Order & Position Sizing Ticket */}
-            <div className="rounded-xl border border-emerald-500/30 bg-[#050811] p-4 space-y-3">
+            {/* Live Order & Position Sizing Ticket + Liquidation */}
+            <div
+              className={`rounded-xl border bg-[#050811] p-4 space-y-3 ${
+                ticketSide === "SHORT" ? "border-fuchsia-500/40" : "border-emerald-500/30"
+              }`}
+            >
               <div className="flex items-center justify-between">
                 <span className="inline-flex items-center gap-1.5 text-xs font-bold text-white">
                   <Target className="h-3.5 w-3.5 text-emerald-400" />
                   {lang === "tr" ? "Canlı Emir & Kasa Planı" : "Actionable Order Ticket"}
                 </span>
-                <span className="mono-nums text-[10px] font-bold text-slate-400">
-                  {symbol} · {leverage}x
+                <span
+                  className={`mono-nums rounded px-1.5 py-0.5 text-[10px] font-extrabold ${
+                    ticketSide === "SHORT"
+                      ? "bg-fuchsia-500/20 text-fuchsia-300"
+                      : "bg-emerald-500/20 text-emerald-300"
+                  }`}
+                >
+                  {ticketSide} &middot; {leverage}x
                 </span>
               </div>
 
@@ -1473,10 +2237,24 @@ export default function MarketRiskTerminal({
                 </div>
               </div>
 
+              <div className="flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-[11px]">
+                <span className="inline-flex items-center gap-1.5 font-semibold text-amber-200">
+                  <ShieldAlert className="h-3.5 w-3.5 text-amber-400" />
+                  {lang === "tr" ? "Tahmini Likidasyon:" : "Est. Liquidation:"}
+                </span>
+                <span className="mono-nums font-extrabold text-amber-300">
+                  {activeResult.estimatedLiquidationPrice > 0
+                    ? `${formatPrice(activeResult.estimatedLiquidationPrice)} (${leverage}x)`
+                    : lang === "tr"
+                      ? "Yok (1x Spot)"
+                      : "None (1x Spot)"}
+                </span>
+              </div>
+
               <button
                 type="button"
                 onClick={() => {
-                  const planText = `${symbol} (${timeframe.toUpperCase()}) | Strategy: ${activeResult.nameEn}\nSignal: ${activeResult.currentSignal} | Leverage: ${leverage}x\nEntry: ${formatPrice(ticketEntry)} | Size: ${ticketUnits.toFixed(4)} (${formatUsd(ticketNotional)})\nStop-Loss (-${stopLossPct}%): ${formatPrice(activeResult.suggestedStopPrice)} (-${formatUsd(ticketRiskUsd)})\nTake-Profit (+${takeProfitPct}%): ${formatPrice(activeResult.suggestedTargetPrice)} (+${formatUsd(ticketRewardUsd)})`;
+                  const planText = `${symbol} (${timeframe.toUpperCase()}) | Strategy: ${activeResult.nameEn}\nSide: ${ticketSide} (${activeResult.currentSignal}) | Leverage: ${leverage}x\nEntry: ${formatPrice(ticketEntry)} | Size: ${ticketUnits.toFixed(4)} (${formatUsd(ticketNotional)})\nStop-Loss (-${stopLossPct}%): ${formatPrice(activeResult.suggestedStopPrice)} (-${formatUsd(ticketRiskUsd)})\nTake-Profit (+${takeProfitPct}%): ${formatPrice(activeResult.suggestedTargetPrice)} (+${formatUsd(ticketRewardUsd)})\nEst. Liquidation: ${activeResult.estimatedLiquidationPrice > 0 ? formatPrice(activeResult.estimatedLiquidationPrice) : "1x Spot"}\nWalk-Forward OOS 30%: ${activeResult.outOfSampleReturnPct >= 0 ? "+" : ""}${activeResult.outOfSampleReturnPct}%`;
                   if (typeof navigator !== "undefined") {
                     void navigator.clipboard.writeText(planText);
                     setCopiedTicket(true);
@@ -1531,6 +2309,7 @@ export default function MarketRiskTerminal({
               <thead className="sticky top-0 border-b border-slate-800 bg-slate-900 text-[10px] font-bold uppercase text-slate-400">
                 <tr>
                   <th className="px-4 py-2.5">#</th>
+                  <th className="px-4 py-2.5">{lang === "tr" ? "Yön" : "Side"}</th>
                   <th className="px-4 py-2.5">{lang === "tr" ? "Giriş Zamanı" : "Entry Time"}</th>
                   <th className="px-4 py-2.5 text-right">{lang === "tr" ? "Giriş" : "Entry"}</th>
                   <th className="px-4 py-2.5 text-right">{lang === "tr" ? "Çıkış" : "Exit"}</th>
@@ -1544,6 +2323,17 @@ export default function MarketRiskTerminal({
                 {[...activeResult.trades].reverse().slice(0, 25).map((t) => (
                   <tr key={t.id} className="hover:bg-slate-900/70">
                     <td className="mono-nums px-4 py-2 text-slate-500">#{t.id}</td>
+                    <td className="px-4 py-2">
+                      <span
+                        className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-extrabold ${
+                          t.side === "SHORT"
+                            ? "bg-fuchsia-500/20 text-fuchsia-300"
+                            : "bg-emerald-500/20 text-emerald-300"
+                        }`}
+                      >
+                        {t.side}
+                      </span>
+                    </td>
                     <td className="mono-nums px-4 py-2 text-slate-300">
                       {formatShortDate(t.entryTime)}
                     </td>
@@ -1591,7 +2381,7 @@ export default function MarketRiskTerminal({
                 ))}
                 {activeResult.trades.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                    <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
                       {lang === "tr"
                         ? "Seçili parametrelerde işlem oluşmadı — Stop/TP veya periyodu gevşet."
                         : "No trades triggered with current parameters — adjust Fast/Slow or SL/TP sliders."}

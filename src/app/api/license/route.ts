@@ -54,7 +54,7 @@ function derivePlanFromOrder(
   if (order?.product_id === PASS_7D_PRODUCT_ID) {
     return {
       plan: "pass_7d" as const,
-      planName: "7-Day Tax & Audit Pass",
+      planName: "7-Day Quant Pro Pass",
       purchasedAt: order.created_at,
       expiresAt: new Date(baseDateMs + 7 * 86_400_000).toISOString(),
     };
@@ -63,7 +63,7 @@ function derivePlanFromOrder(
   if (order?.product_id === PRO_ANNUAL_PRODUCT_ID) {
     return {
       plan: "pro_monthly" as const,
-      planName: "Annual Pro Bookkeeper Pass",
+      planName: "Annual Quant Pro Pass",
       purchasedAt: order.created_at,
       expiresAt: new Date(baseDateMs + 365 * 86_400_000).toISOString(),
     };
@@ -71,7 +71,7 @@ function derivePlanFromOrder(
 
   return {
     plan: "pro_monthly" as const,
-    planName: order?.product?.name || "VaultSheet Pro Pass",
+    planName: order?.product?.name || "VaultSheet Quant Pro",
     purchasedAt: order?.created_at || keyCreatedAt,
     expiresAt:
       keyExpiresAt || new Date(baseDateMs + 365 * 86_400_000).toISOString(),
@@ -136,8 +136,8 @@ export async function POST(request: Request) {
           plan: localCheck.plan,
           planName:
             localCheck.plan === "pass_7d"
-              ? "7-Day Tax & Audit Pass"
-              : "Annual Pro Bookkeeper Pass",
+              ? "7-Day Quant Pro Pass"
+              : "Annual Quant Pro Pass",
           key: rawInput.toUpperCase(),
           displayKey: rawInput.toUpperCase(),
           portalUrl: POLAR_PORTAL_URL,
@@ -159,7 +159,7 @@ export async function POST(request: Request) {
           return NextResponse.json({
             valid: true,
             plan: fallback.plan,
-            planName: "Annual Pro Bookkeeper Pass",
+            planName: "Annual Quant Pro Pass",
             key: rawInput.toUpperCase(),
             displayKey: maskLicenseKey(rawInput.toUpperCase()),
             portalUrl: POLAR_PORTAL_URL,

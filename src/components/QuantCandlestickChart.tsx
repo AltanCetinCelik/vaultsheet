@@ -141,7 +141,7 @@ export default function QuantCandlestickChart({
     const tradeMarkers: {
       x: number;
       y: number;
-      kind: "buy" | "tp" | "sl" | "sig";
+      kind: "buy" | "short" | "tp" | "sl" | "sig";
       trade: TradeExecution;
     }[] = [];
 
@@ -155,10 +155,13 @@ export default function QuantCandlestickChart({
         const localE = t.entryIndex - startIdx;
         const c = slicedCandles[localE];
         if (c) {
+          const isShort = t.side === "SHORT";
           tradeMarkers.push({
             x: toX(localE),
-            y: Math.min(padTop + priceAreaH - 4, toY(c.low) + 12),
-            kind: "buy",
+            y: isShort
+              ? Math.max(padTop + 10, toY(c.high) - 10)
+              : Math.min(padTop + priceAreaH - 4, toY(c.low) + 12),
+            kind: isShort ? "short" : "buy",
             trade: t,
           });
           tradeByLocalIdx.set(localE, { type: "ENTRY", trade: t });
@@ -172,7 +175,10 @@ export default function QuantCandlestickChart({
             t.exitReason === "TP" ? "tp" : t.exitReason === "SL" ? "sl" : "sig";
           tradeMarkers.push({
             x: toX(localX),
-            y: Math.max(padTop + 10, toY(c.high) - 10),
+            y:
+              t.side === "SHORT"
+                ? Math.min(padTop + priceAreaH - 4, toY(c.low) + 12)
+                : Math.max(padTop + 10, toY(c.high) - 10),
             kind,
             trade: t,
           });
@@ -180,6 +186,19 @@ export default function QuantCandlestickChart({
         }
       }
     }
+
+    const oosLocalIdx = result.oosSplitIndex - startIdx;
+    const oosX =
+      result.oosSplitIndex > 0 &&
+      oosLocalIdx > 2 &&
+      oosLocalIdx < slicedCandles.length - 2
+        ? toX(oosLocalIdx)
+        : null;
+
+    const liqInView =
+      result.estimatedLiquidationPrice > minP && result.estimatedLiquidationPrice < maxP
+        ? toY(result.estimatedLiquidationPrice)
+        : null;
 
     return {
       startIdx,
@@ -195,6 +214,8 @@ export default function QuantCandlestickChart({
       xTicks,
       tradeMarkers,
       tradeByLocalIdx,
+      oosX,
+      liqY: liqInView,
       stopY: result.suggestedStopPrice > 0 ? toY(result.suggestedStopPrice) : null,
       targetY: result.suggestedTargetPrice > 0 ? toY(result.suggestedTargetPrice) : null,
     };
@@ -246,14 +267,16 @@ export default function QuantCandlestickChart({
             <span
               className={`rounded px-2 py-0.5 text-[10px] font-extrabold ${
                 activeTradeEvent.type === "ENTRY"
-                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                  ? activeTradeEvent.trade.side === "SHORT"
+                    ? "bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/40"
+                    : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
                   : activeTradeEvent.type === "TP"
                     ? "bg-amber-400/20 text-amber-300 border border-amber-400/40"
                     : "bg-rose-500/20 text-rose-300 border border-rose-500/40"
               }`}
             >
               {activeTradeEvent.type === "ENTRY"
-                ? `BUY #${activeTradeEvent.trade.id} @ ${formatAxisPrice(activeTradeEvent.trade.entryPrice)}`
+                ? `${activeTradeEvent.trade.side} #${activeTradeEvent.trade.id} @ ${formatAxisPrice(activeTradeEvent.trade.entryPrice)}`
                 : `${activeTradeEvent.type} #${activeTradeEvent.trade.id} (${activeTradeEvent.trade.netReturnPct >= 0 ? "+" : ""}${activeTradeEvent.trade.netReturnPct}%)`}
             </span>
           )}
@@ -446,6 +469,77 @@ export default function QuantCandlestickChart({
             </g>
           )}
 
+          {/* Walk-Forward Train vs Unseen OOS Boundary */}
+          {chartModel.oosX !== null && (
+            <g pointerEvents="none">
+              <line
+                x1={chartModel.oosX}
+                y1={padTop}
+                x2={chartModel.oosX}
+                y2={H - padBottom}
+                stroke="#38bdf8"
+                strokeDasharray="3 3"
+                strokeWidth="1.2"
+                opacity="0.7"
+              />
+              <rect
+                x={Math.min(W - padRight - 142, Math.max(padLeft + 4, chartModel.oosX - 68))}
+                y={padTop - 12}
+                width="138"
+                height="13"
+                rx="3"
+                fill="#0c4a6e"
+                stroke="#38bdf8"
+                strokeWidth="0.6"
+              />
+              <text
+                x={Math.min(W - padRight - 73, Math.max(padLeft + 73, chartModel.oosX + 1))}
+                y={padTop - 3}
+                textAnchor="middle"
+                fill="#7dd3fc"
+                fontSize="8"
+                fontWeight="bold"
+                fontFamily="monospace"
+              >
+                {lang === "tr" ? "%70 Eğitim | %30 Canlı OOS" : "70% Train | 30% Unseen OOS"}
+              </text>
+            </g>
+          )}
+
+          {/* Optional Liquidation Reference Line when within visible price window */}
+          {chartModel.liqY !== null && (
+            <g pointerEvents="none">
+              <line
+                x1={padLeft}
+                y1={chartModel.liqY}
+                x2={W - padRight}
+                y2={chartModel.liqY}
+                stroke="#f59e0b"
+                strokeDasharray="2 3"
+                strokeWidth="1"
+                opacity="0.65"
+              />
+              <rect
+                x={W - padRight + 2}
+                y={chartModel.liqY - 7}
+                width="68"
+                height="14"
+                rx="3"
+                fill="#451a03"
+              />
+              <text
+                x={W - padRight + 6}
+                y={chartModel.liqY + 3}
+                fill="#fcd34d"
+                fontSize="8.5"
+                fontWeight="bold"
+                fontFamily="monospace"
+              >
+                LIQ {formatAxisPrice(result.estimatedLiquidationPrice)}
+              </text>
+            </g>
+          )}
+
           {/* Indicator Overlay Bands */}
           {chartModel.upperPath && (
             <path
@@ -504,7 +598,7 @@ export default function QuantCandlestickChart({
             );
           })}
 
-          {/* Executed BUY / TP / SL Markers */}
+          {/* Executed BUY / SHORT / TP / SL Markers */}
           {chartModel.tradeMarkers.map((m, idx) => {
             if (m.kind === "buy") {
               return (
@@ -512,6 +606,18 @@ export default function QuantCandlestickChart({
                   <polygon
                     points={`${m.x},${m.y - 5} ${m.x - 4.5},${m.y + 3} ${m.x + 4.5},${m.y + 3}`}
                     fill="#10b981"
+                    stroke="#020617"
+                    strokeWidth="0.9"
+                  />
+                </g>
+              );
+            }
+            if (m.kind === "short") {
+              return (
+                <g key={`m-${idx}`}>
+                  <polygon
+                    points={`${m.x},${m.y + 5} ${m.x - 4.5},${m.y - 3} ${m.x + 4.5},${m.y - 3}`}
+                    fill="#c084fc"
                     stroke="#020617"
                     strokeWidth="0.9"
                   />

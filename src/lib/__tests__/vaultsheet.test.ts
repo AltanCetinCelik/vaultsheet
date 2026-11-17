@@ -23,7 +23,9 @@ import {
   generateLegalActionNotice,
 } from "@/lib/financialForensics";
 import {
+  assessDerivativesSqueeze,
   buildCoinRadarRow,
+  buildFallbackDerivativesPulse,
   generateFallbackCandles,
   optimizeStrategyConfig,
   runStrategyBacktest,
@@ -432,16 +434,75 @@ describe("Quantitative Backtester, 6-Strategy Tournament & Auto-Optimizer", () =
     expect(best.overlayLabel.length).toBeGreaterThan(3);
     expect(best.suggestedStopPrice).toBeGreaterThan(0);
     expect(best.suggestedTargetPrice).toBeGreaterThan(best.suggestedStopPrice);
+    expect(best.oosSplitIndex).toBeGreaterThan(0);
+    expect(Number.isFinite(best.inSampleReturnPct)).toBe(true);
+    expect(Number.isFinite(best.outOfSampleReturnPct)).toBe(true);
+    expect(best.estimatedLiquidationPrice).toBeGreaterThan(0);
   });
 
-  it("builds multi-coin Alpha Radar summaries cleanly", () => {
-    const btcCandles = generateFallbackCandles("BTCUSDT", "4h", 160);
-    const radar = buildCoinRadarRow("BTCUSDT", "BTC", btcCandles, 2.45, false);
+  it("supports bi-directional Long/Short execution, Short SL/TP orientation, and OOS metrics", () => {
+    const candles = generateFallbackCandles("BTCUSDT", "4h", 300);
+    const shortRes = runStrategyBacktest(candles, {
+      strategyId: "donchian_breakout",
+      capital: 10000,
+      leverage: 3,
+      stopLossPct: 2.5,
+      takeProfitPct: 6.5,
+      feePct: 0.08,
+      fastPeriod: 9,
+      slowPeriod: 21,
+      rsiOversold: 32,
+      rsiOverbought: 70,
+      direction: "short",
+    });
 
+    expect(shortRes.activeSide).toBe("SHORT");
+    expect(shortRes.trades.length).toBeGreaterThan(0);
+    expect(shortRes.trades.every((t) => t.side === "SHORT")).toBe(true);
+    expect(shortRes.suggestedStopPrice).toBeGreaterThan(shortRes.suggestedTargetPrice);
+    expect(shortRes.estimatedLiquidationPrice).toBeGreaterThan(
+      shortRes.activeEntryPrice ?? candles[candles.length - 1].close
+    );
+
+    const bothRes = runStrategyBacktest(candles, {
+      strategyId: "donchian_breakout",
+      capital: 10000,
+      leverage: 2,
+      stopLossPct: 2.5,
+      takeProfitPct: 6.5,
+      feePct: 0.08,
+      fastPeriod: 9,
+      slowPeriod: 21,
+      rsiOversold: 32,
+      rsiOverbought: 70,
+      direction: "both",
+    });
+    expect(bothRes.trades.some((t) => t.side === "LONG")).toBe(true);
+    expect(bothRes.trades.some((t) => t.side === "SHORT")).toBe(true);
+    expect(Number.isFinite(bothRes.outOfSampleWinRatePct)).toBe(true);
+  });
+
+  it("diagnoses Short/Long Squeeze conditions and builds fallback futures telemetry", () => {
+    const shortSqz = assessDerivativesSqueeze(-0.012, 56, 1.12, "LONG");
+    expect(shortSqz.squeezeState).toBe("SHORT_SQUEEZE");
+    expect(shortSqz.squeezeScore).toBeGreaterThanOrEqual(75);
+
+    const longSqz = assessDerivativesSqueeze(0.028, 68, 0.89, "SHORT");
+    expect(longSqz.squeezeState).toBe("LONG_SQUEEZE");
+    expect(longSqz.squeezeScore).toBeGreaterThanOrEqual(74);
+
+    const btcCandles = generateFallbackCandles("BTCUSDT", "4h", 160);
+    const pulse = buildFallbackDerivativesPulse("BTCUSDT", btcCandles, "LONG");
+    expect(pulse.symbol).toBe("BTCUSDT");
+    expect(pulse.openInterestUsd).toBeGreaterThan(0);
+    expect(pulse.whaleLongPct + pulse.whaleShortPct).toBeCloseTo(100, 1);
+
+    const radar = buildCoinRadarRow("BTCUSDT", "BTC", btcCandles, 2.45, false, -0.009, "both");
     expect(radar.symbol).toBe("BTCUSDT");
     expect(radar.price).toBeGreaterThan(0);
     expect(radar.totalTrades).toBeGreaterThan(0);
     expect(radar.winRatePct).toBeGreaterThanOrEqual(0);
-    expect(radar.bestStrategyNameTr.length).toBeGreaterThan(3);
+    expect(radar.fundingRatePct).toBe(-0.009);
+    expect(Number.isFinite(radar.outOfSampleReturnPct)).toBe(true);
   });
 });

@@ -3,34 +3,34 @@ import { CHECKOUT_URLS } from "@/lib/licensing";
 
 const HOME_FAQS_EN: FaqEntry[] = [
   {
-    question: "Does this backtester use real market OHLCV candles?",
+    question: "Are all 12 Alpha Radar pairs and Futures data backed by live market feeds?",
     answer:
-      "Yes. It pulls the latest 300 real historical OHLCV candles (15m, 1H, 4H, 1D) from Binance market data, with a deterministic seeded fallback when offline.",
+      "Yes. All 12 free and Pro pairs fetch real OHLCV candles from Binance Spot along with live Binance Perpetual Futures Funding Rates, Open Interest, Whale Long/Short ratios, and Taker flow.",
   },
   {
-    question: "Why use VaultSheet Quant instead of ChatGPT or TradingView?",
+    question: "Why use VaultSheet Quant instead of TradingView or ChatGPT?",
     answer:
-      "ChatGPT cannot fetch 300 OHLCV bars and simulate intrabar High/Low Stop-Loss & Take-Profit execution deterministically. VaultSheet runs 6 proven algorithms side-by-side and sweeps 36 SL/TP combinations in under 25ms without writing Pine Script.",
+      "VaultSheet prevents curve-fitting by splitting every backtest into 70% In-Sample training and 30% unseen Out-of-Sample verification, tests bi-directional Long/Short intrabar SL/TP with liquidation levels, and dispatches alerts directly to Discord, Telegram, or custom bots without writing Pine Script.",
   },
   {
-    question: "Are exchange trading fees and intrabar SL/TP checks included?",
+    question: "Are exchange fees, Short positions, and liquidation prices modeled?",
     answer:
-      "Yes. Every simulated trade deducts round-trip exchange fees (0.08% per side x leverage) and checks each subsequent candle's low against Stop-Loss before checking high against Take-Profit.",
+      "Yes. Every trade deducts round-trip exchange fees (0.08% per side x leverage), evaluates both Long and Short intrabar Stop-Loss and Take-Profit levels chronologically, and computes your estimated leveraged liquidation price.",
   },
   {
-    question: "Do I need to enter my exchange API keys?",
+    question: "Do I need to connect exchange API keys for Discord or Telegram webhooks?",
     answer:
-      "Never. All candle fetches are read-only public market feeds and 100% of indicator math and equity curve calculations run inside local browser memory.",
+      "Never. All price and futures derivatives calls are public read-only market streams. Your optional Discord Webhook URL or Telegram Bot Token only dispatches non-custodial signal setups (Entry, SL, TP, Liq) to your own channel.",
   },
   {
-    question: "What is included Free vs. 7-Day Pass & Annual Pro?",
+    question: "What is included Free vs. $12 7-Day Pass & $29/yr Annual Pro?",
     answer:
-      "Full 6-strategy backtests on BTC, ETH, SOL, BNB, and PAXG Gold (1H & 4H) plus 1 free 36-setup Auto-Optimize sweep are free. Upgrading to the $12 7-Day Pass or $29/year Annual Pro unlocks all 12 Alpha Radar assets, 15m/1D bars, unlimited optimizations, and CSV trade exports.",
+      "Bi-directional Long/Short backtests across BTC, ETH, SOL, BNB, and PAXG Gold (1H/4H), live Perpetual Futures squeeze intelligence, 1 free 36-setup Auto-Optimize sweep, and webhook test dispatch are free. Upgrading unlocks all 12 pairs, 15m/1D bars, unlimited optimization sweeps, and CSV exports.",
   },
   {
     question: "Are there any recurring auto-renewal charges?",
     answer:
-      "No. Both the $12 7-Day Pass and $29 Annual Pro license are strictly one-time payments powered by Polar.",
+      "No. Both the $12 7-Day Pass and $29 Annual Pro license are one-time payments powered by Polar, with optional cloud account sync for your webhook setup.",
   },
 ];
 
@@ -56,24 +56,24 @@ export default function HomePage() {
     {
       "@context": "https://schema.org",
       "@type": "HowTo",
-      name: "How to Backtest & Auto-Optimize Crypto & Gold Trading Strategies on Live Candles",
+      name: "How to Backtest Long/Short Futures Strategies with Walk-Forward OOS & Webhook Alerts",
       description:
-        "Simulate 6 quantitative algorithms across 300 real OHLCV candles with intrabar Stop-Loss/Take-Profit execution, fee deduction, and 36-setup parameter sweeps.",
+        "Simulate 6 bi-directional quantitative algorithms across 12 live Spot and Perpetual Futures pairs with 70/30 Walk-Forward Out-of-Sample validation, live funding squeeze detection, and Discord/Telegram alert dispatch.",
       step: [
         {
           "@type": "HowToStep",
-          name: "Pick an asset from the 12-Asset Alpha Radar",
-          text: "Scan BTC, ETH, SOL, BNB, PAXG Gold, and Pro altcoins across 15m, 1H, 4H, or 1D real candle feeds.",
+          name: "Scan 12 pairs & live Perpetual Futures derivatives",
+          text: "Inspect real OHLCV klines, 8h Funding Rates, Open Interest, Whale Long/Short ratios, and Squeeze risk across all 12 crypto and gold pairs.",
         },
         {
           "@type": "HowToStep",
-          name: "Inspect the OHLC candlestick chart and 6-strategy tournament",
-          text: "Hover any candle for exact Buy/TP/SL markers and compare Net Profit %, Win Rate, Profit Factor, and Max Drawdown across all 6 algorithms.",
+          name: "Verify 70% Train / 30% Unseen Out-of-Sample performance",
+          text: "Switch between Long+Short, Long-Only, or Short-Only modes and inspect unseen OOS returns plus intrabar Buy/Short/TP/SL and Liquidation levels on the OHLC candlestick chart.",
         },
         {
           "@type": "HowToStep",
-          name: "Run the 36-setup Auto-Optimizer",
-          text: "Sweep 36 SL/TP and strategy pairings in under 25ms to surface optimal risk-adjusted parameters and actionable order levels.",
+          name: "Dispatch live setups to Discord, Telegram, or Webhook",
+          text: "Enable the 60s Live Sentinel or click Dispatch Signal Now to send verified Entry, SL, TP, Liquidation, and Funding context straight to your trading chat.",
         },
       ],
     },

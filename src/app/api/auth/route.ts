@@ -112,6 +112,20 @@ async function resolveCustomerEntitlements(customer: PolarCustomer, token: strin
     const durationDays = isPass7d ? 7 : 365;
     const expiresAt = new Date(orderMs + durationDays * 86_400_000).toISOString();
 
+    const rawChannel = customer.metadata?.vs_alert_channel;
+    const alertChannel =
+      rawChannel === "discord" || rawChannel === "telegram" || rawChannel === "webhook"
+        ? rawChannel
+        : undefined;
+    const alertWebhookUrl =
+      typeof customer.metadata?.vs_webhook_url === "string"
+        ? customer.metadata.vs_webhook_url
+        : undefined;
+    const telegramChatId =
+      typeof customer.metadata?.vs_tg_chat_id === "string"
+        ? customer.metadata.vs_tg_chat_id
+        : undefined;
+
     if (Date.parse(expiresAt) > Date.now()) {
       return {
         customerId: customer.id,
@@ -119,15 +133,18 @@ async function resolveCustomerEntitlements(customer: PolarCustomer, token: strin
         customerName: customer.name ?? undefined,
         plan: (isPass7d ? "pass_7d" : "pro_monthly") as "pass_7d" | "pro_monthly",
         planName: isPass7d
-          ? "7-Day Tax & Audit Pass"
+          ? "7-Day Quant Pro Pass"
           : isAnnual
-            ? "Annual Pro Bookkeeper Pass"
-            : activeOrder.product?.name || "VaultSheet Pro Pass",
+            ? "Annual Quant Pro Pass"
+            : activeOrder.product?.name || "VaultSheet Quant Pro",
         key: activeKey?.key ?? "",
         displayKey: activeKey ? maskKey(activeKey.key, activeKey.display_key) : "",
         purchasedAt: activeOrder.created_at,
         expiresAt,
         portalUrl: POLAR_PORTAL_URL,
+        alertChannel,
+        alertWebhookUrl,
+        telegramChatId,
       };
     }
   }
@@ -137,20 +154,38 @@ async function resolveCustomerEntitlements(customer: PolarCustomer, token: strin
     customerEmail: customer.email,
     customerName: customer.name ?? undefined,
     plan: "free_account" as const,
-    planName: "Free Account (25 Rows/PDF)",
+    planName: "Free Quant Starter Account",
     key: "",
     displayKey: "",
     portalUrl: POLAR_PORTAL_URL,
+    alertChannel:
+      customer.metadata?.vs_alert_channel === "discord" ||
+      customer.metadata?.vs_alert_channel === "telegram" ||
+      customer.metadata?.vs_alert_channel === "webhook"
+        ? customer.metadata.vs_alert_channel
+        : undefined,
+    alertWebhookUrl:
+      typeof customer.metadata?.vs_webhook_url === "string"
+        ? customer.metadata.vs_webhook_url
+        : undefined,
+    telegramChatId:
+      typeof customer.metadata?.vs_tg_chat_id === "string"
+        ? customer.metadata.vs_tg_chat_id
+        : undefined,
   };
 }
 
 export async function POST(request: Request) {
   try {
     const body = (await request.json().catch(() => ({}))) as {
-      action?: "signup" | "login";
+      action?: "signup" | "login" | "save_settings";
       name?: string;
       email?: string;
       password?: string;
+      customerId?: string;
+      alertChannel?: "discord" | "telegram" | "webhook";
+      alertWebhookUrl?: string;
+      telegramChatId?: string;
     };
 
     const action = body.action;
@@ -158,7 +193,7 @@ export async function POST(request: Request) {
     const password = body.password ?? "";
     const name = (body.name ?? "").trim();
 
-    if (!action || (action !== "signup" && action !== "login")) {
+    if (!action || (action !== "signup" && action !== "login" && action !== "save_settings")) {
       return NextResponse.json(
         { valid: false, message: "Invalid auth action." },
         { status: 400 }
@@ -172,7 +207,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (password.length < 6) {
+    if (action !== "save_settings" && password.length < 6) {
       return NextResponse.json(
         { valid: false, message: "Password must be at least 6 characters." },
         { status: 400 }
@@ -188,7 +223,7 @@ export async function POST(request: Request) {
     }
 
     const secret = process.env.POLAR_WEBHOOK_SECRET?.trim() || token;
-    const pwHash = hashPassword(email, password, secret);
+    const pwHash = password.length >= 6 ? hashPassword(email, password, secret) : "";
 
     // Query existing customer by exact email
     const existingRes = await polarRequest<{ items: PolarCustomer[] }>(
@@ -198,6 +233,43 @@ export async function POST(request: Request) {
     const existingCustomer = (existingRes.data?.items ?? []).find(
       (c) => c.email.toLowerCase() === email
     );
+
+    if (action === "save_settings") {
+      if (
+        !existingCustomer ||
+        !body.customerId ||
+        existingCustomer.id !== body.customerId
+      ) {
+        return NextResponse.json(
+          { valid: false, message: "Log in with your account to sync alert webhooks across devices." },
+          { status: 401 }
+        );
+      }
+
+      const patchRes = await polarRequest<PolarCustomer>(
+        `/v1/customers/${encodeURIComponent(existingCustomer.id)}`,
+        token,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            metadata: {
+              ...(existingCustomer.metadata ?? {}),
+              vs_alert_channel: body.alertChannel ?? "discord",
+              vs_webhook_url: (body.alertWebhookUrl ?? "").slice(0, 320),
+              vs_tg_chat_id: (body.telegramChatId ?? "").slice(0, 64),
+            },
+          }),
+        }
+      );
+
+      const updatedCustomer = patchRes.ok && patchRes.data ? patchRes.data : existingCustomer;
+      const profile = await resolveCustomerEntitlements(updatedCustomer, token);
+      return NextResponse.json({
+        valid: true,
+        profile,
+        message: "Alert webhook config synced to your cloud account.",
+      });
+    }
 
     let activeCustomer: PolarCustomer | null = existingCustomer ?? null;
 
@@ -271,7 +343,7 @@ export async function POST(request: Request) {
         profile,
         message:
           profile.plan === "free_account"
-            ? "Account created! You unlocked 25 free rows per PDF and saved statement history."
+            ? "Quant account created! Cloud settings & 1st 36-setup Auto-Optimize unlocked."
             : `Account linked! Your ${profile.planName} is active.`,
       });
     }

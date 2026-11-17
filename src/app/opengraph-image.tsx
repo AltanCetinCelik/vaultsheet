@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "VaultSheet — 100% Local PDF Bank Statement to Excel & QBO";
+export const alt = "VaultSheet Quant — Live Futures Squeeze & OOS Strategy Backtester";
 export const size = {
   width: 1200,
   height: 630,
@@ -19,9 +19,9 @@ export default function OpenGraphImage() {
           flexDirection: "column",
           justifyContent: "space-between",
           padding: "64px",
-          backgroundColor: "#070a0f",
+          backgroundColor: "#050811",
           backgroundImage:
-            "radial-gradient(circle at 80% 15%, rgba(16,185,129,0.22), transparent 55%)",
+            "radial-gradient(circle at 80% 15%, rgba(16,185,129,0.24), transparent 55%)",
           color: "#f8fafc",
           fontFamily: "sans-serif",
         }}
@@ -36,18 +36,20 @@ export default function OpenGraphImage() {
             fontWeight: 700,
           }}
         >
-          <span>VAULTSHEET</span>
+          <span>VAULTSHEET QUANT</span>
           <span style={{ color: "#475569" }}>•</span>
-          <span style={{ color: "#94a3b8", fontWeight: 500 }}>LOCAL RAM PARSER</span>
+          <span style={{ color: "#94a3b8", fontWeight: 500 }}>
+            LIVE PERPETUAL &amp; SPOT ENGINE
+          </span>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
-          <div style={{ fontSize: "58px", fontWeight: 800, lineHeight: 1.08 }}>
-            PDF Bank Statements to Reconciled Excel, QBO &amp; Xero
+          <div style={{ fontSize: "54px", fontWeight: 800, lineHeight: 1.08 }}>
+            Bi-Directional Quant Backtester &amp; 12-Pair Futures Squeeze Radar
           </div>
           <div style={{ fontSize: "26px", color: "#94a3b8", lineHeight: 1.35 }}>
-            0 KB uploaded to any server. Multi-line memo stitching &amp; cent-by-cent balance
-            verification for 64+ global banks.
+            70/30 Walk-Forward Out-of-Sample validation, live Binance Funding / Open Interest /
+            Whale ratios &amp; instant Discord / Telegram webhook alerts.
           </div>
         </div>
 
@@ -59,9 +61,9 @@ export default function OpenGraphImage() {
             color: "#e2e8f0",
           }}
         >
-          <span>✓ Browser PDF.js Worker</span>
-          <span>✓ Opening + Credits - Debits = Closing</span>
-          <span>✓ XLSX · CSV · QBO · OFX · Xero</span>
+          <span>✓ Long + Short + Liquidation</span>
+          <span>✓ 30% Unseen OOS Validation</span>
+          <span>✓ Funding · OI · Webhook Dispatch</span>
         </div>
       </div>
     ),

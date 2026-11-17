@@ -35,6 +35,9 @@ export interface StoredLicenseProfile {
   purchasedAt?: string;
   expiresAt?: string;
   portalUrl?: string;
+  alertChannel?: "discord" | "telegram" | "webhook";
+  alertWebhookUrl?: string;
+  telegramChatId?: string;
 }
 
 const LICENSE_STORAGE_KEY = "vaultsheet_pro_license_v1";
@@ -71,8 +74,8 @@ export function verifyLicenseKey(rawKey: string): LicenseValidationResult {
         plan: tier === "PASS" ? "pass_7d" : "pro_monthly",
         message:
           tier === "PASS"
-            ? "7-Day Tax & Audit Pass activated."
-            : "Pro Bookkeeper Monthly license activated.",
+            ? "7-Day Quant Pro Pass activated."
+            : "Annual Quant Pro Pass activated.",
       };
     }
     return {

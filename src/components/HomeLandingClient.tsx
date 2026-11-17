@@ -29,34 +29,34 @@ interface HomeLandingClientProps {
 
 const FAQS_TR: FaqEntry[] = [
   {
-    question: "Bu backtestler gerçek piyasa verisiyle mi çalışıyor?",
+    question: "12 Parite Alpha Tarayıcısı ve Vadeli (Futures) Verisi gerçek mi?",
     answer:
-      "Evet. Seçtiğin varlık ve zaman dilimi (15m, 1H, 4H, 1D) için doğrudan canlı Binance API'sinden son 300 gerçek OHLCV mumu çekilir. Ağ erişimi olmayan ortamlarda deterministik piyasa simülasyon verisi otomatik yedek olarak devreye girer.",
+      "Evet. Hem ücretsiz 5 parite hem de 7 Pro paritenin tamamı doğrudan Binance Spot OHLCV API'sinden 200–300 gerçek mum ve Binance Futures (fapi.binance.com) üzerinden canlı Fonlama Oranı (Funding Rate), Open Interest, Balina Long/Short oranı ve Taker hacim akışını çeker.",
   },
   {
     question: "TradingView veya ChatGPT'den farkı nedir?",
     answer:
-      "ChatGPT geçmiş mumları çekip mum içi High/Low Stop-Loss ve Take-Profit ihlallerini bar bazında test edemez. TradingView'da ise Pine Script yazmadan tek tıkla 6 algoritmayı aynı anda yarıştırıp 36 SL/TP kombinasyonunu tarayan bir turnuva motoru yoktur.",
+      "Standart grafiklerde geçmişe ezber (overfit) tuzaklarını göremezsiniz. VaultSheet Quant veriyi %70 Eğitim / %30 Canlı Doğrulama (Walk-Forward OOS) olarak böler, Long+Short çift yönlü mum içi SL/TP & likidasyon hesabı yapar ve bulduğu canlı sinyali Discord/Telegram botunuza tek tıkla yollar.",
   },
   {
-    question: "Motor komisyon ve mum içi Stop-Loss (SL) ihlallerini hesaba katıyor mu?",
+    question: "Long + Short, Likidasyon ve Komisyon hesaba katılıyor mu?",
     answer:
-      "Evet. Her işlemde gidiş-dönüş borsa komisyonu düşülür ve pozisyon açıldıktan sonraki her mumda önce mumun Low değerinin Stop-Loss'u, ardından High değerinin Take-Profit'i vurup vurmadığı kontrol edilir.",
+      "Evet. Her işlemde gidiş-dönüş borsa komisyonu düşülür; Long veya Short pozisyon açıldığında sonraki her mumda önce High/Low Stop-Loss ardından Take-Profit vurulup vurulmadığı kontrol edilir ve seçtiğiniz kaldıraca göre tahmini likidasyon fiyatı hesaplanır.",
   },
   {
-    question: "Borsa API anahtarımı girmem gerekiyor mu?",
+    question: "Discord / Telegram Webhook sinyalleri için borsa API şifresi gerekiyor mu?",
     answer:
-      "Kesinlikle hayır. VaultSheet salt okunur piyasa verilerini tarayıcına çeker ve tüm hesaplamaları kendi cihazının belleğinde (RAM) çalıştırır. Hiçbir cüzdan bağlantısı veya borsa API anahtarı istenmez.",
+      "Hayır. Hiçbir cüzdan veya borsa trade API anahtarı istenmez. İsterseniz Discord Webhook URL'nizi veya Telegram Bot Token'ınızı girip 60sn Canlı Nöbetçi ile yeni kırılım sinyallerini ve SL/TP emir planlarını kendi kanalınıza düşürebilirsiniz.",
   },
   {
     question: "Ücretsiz sürüm ile $12 / $29 Pro lisans arasındaki fark nedir?",
     answer:
-      "BTC, ETH, SOL, BNB ve PAXG (Altın) üzerinde 1H ve 4H zaman dilimlerinde 6-strateji backtesti, tüm risk kaydırıcıları ve 1 adet ücretsiz 36-kombinasyon Auto-Optimize taraması ücretsizdir. $12 7 Günlük Paket ve $29/yıl Pro lisans ise 12 varlıklı canlı Alpha Radar'ın tamamını (XRP, DOGE, AVAX, SUI, LINK, ADA, ARB), 15m scalping / 1D makro dilimleri, sınırsız Auto-Optimize ve CSV işlem dökümünü açar.",
+      "BTC, ETH, SOL, BNB ve PAXG (Altın) üzerinde 1H ve 4H zaman dilimlerinde Long+Short backtest, canlı Futures Funding/OI/Whale/Squeeze barı, 1 adet ücretsiz 36-kombinasyon Auto-Optimize ve webhook test gönderimi ücretsizdir. $12 7 Günlük Paket ve $29/yıl Pro lisans ise 12 varlıklı canlı Alpha Radar'ın tamamını (XRP, DOGE, AVAX, SUI, LINK, ADA, ARB), 15m/1D dilimleri, sınırsız optimizasyonu ve CSV dökümünü açar.",
   },
   {
     question: "Otomatik Yenileme (Auto-Renewal) tuzağı var mı?",
     answer:
-      "Hayır. $12 7 Günlük Paket ve $29 Yıllık Pro tamamen tek seferlik geçiştir. Süren bittiğinde kartından haberin olmadan para çekilmez.",
+      "Hayır. $12 7 Günlük Paket ve $29 Yıllık Pro tamamen tek seferlik geçiştir. Süren bittiğinde kartından haberin olmadan para çekilmez; e-posta ile açtığın hesapta webhook ayarların bulutta saklanır.",
   },
 ];
 
@@ -118,20 +118,20 @@ export default function HomeLandingClient({
               <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1 text-[11px] font-bold uppercase tracking-widest text-emerald-300">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 {lang === "tr"
-                  ? "VaultSheet Quant · 300 Canlı Mum · 6 Algoritma · 36 Otomatik Test"
-                  : "VaultSheet Quant · 300 Live Candles · 6 Algorithms · 36-Setup Sweep"}
+                  ? "VaultSheet Quant · Long+Short OOS · Canlı Vadeli Squeeze · Discord/Telegram Bot"
+                  : "VaultSheet Quant · Long+Short OOS · Live Perp Squeeze · Webhook Alerts"}
               </span>
 
               <h1 className="mt-4 text-3xl font-extrabold tracking-tight text-white sm:text-5xl sm:leading-[1.08]">
                 {lang === "tr"
-                  ? "Tahmin Etmeyi Bırak — 6 Algoritmayı Gerçek Mumlarda Saniyede Backtest Et"
-                  : "Stop Guessing — Backtest & Auto-Optimize 6 Quant Strategies on Live Candles in Seconds"}
+                  ? "Ezberi Boz — Long/Short OOS Backtest, Canlı Vadeli Squeeze & Anlık Bot Sinyali"
+                  : "Stop Overfitting — Bi-Directional OOS Backtest, Live Perp Squeeze & Webhook Alerts"}
               </h1>
 
               <p className="mx-auto mt-4 max-w-2xl text-sm text-slate-300 sm:text-base leading-relaxed">
                 {lang === "tr"
-                  ? "Canlı 300 OHLCV mum verisi üstünde Donchian, Dual EMA, Wilder RSI, Bollinger, MACD ve Hacim Kırılımı stratejilerini mum içi Stop-Loss / TP + komisyon dahil yarıştır. En kârlı SL/TP ayarını tek tıkla 25 ms'de bul."
-                  : "Compete Donchian, Dual EMA, Wilder RSI, Bollinger, MACD & Volume Spike on 300 live OHLCV bars with intrabar SL/TP and exchange fees. Sweep 36 parameter combinations in 25ms."}
+                  ? "12 paritede gerçek OHLCV mumları + Binance Futures Fonlama, Open Interest ve Balina L/S oranını tara. Stratejini %70 Eğitim / %30 Canlı OOS testinden geçir ve sinyali tek tıkla Discord/Telegram'a yolla."
+                  : "Scan 12 live pairs with real OHLCV candles plus Binance Futures Funding, Open Interest & Whale L/S ratios. Validate setups on 70/30 Walk-Forward OOS splits and dispatch orders to Discord/Telegram."}
               </p>
             </div>
 
@@ -147,12 +147,12 @@ export default function HomeLandingClient({
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-2xl text-center">
               <p className="text-xs font-bold uppercase tracking-widest text-emerald-400">
-                {lang === "tr" ? "Nicel Motor Mimarisi" : "Quantitative Architecture"}
+                {lang === "tr" ? "Kurumsal Nicel Mimari" : "Quantitative Architecture"}
               </p>
               <h2 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">
                 {lang === "tr"
-                  ? "Kod Yazmadan Kurumsal Seviye Backtest ve Sinyal Optimizasyonu"
-                  : "Institutional Backtesting & Parameter Sweeps Without Writing Pine Script"}
+                  ? "TradingView'da Bedava Olmayan Gerçek Vadeli & OOS İstihbaratı"
+                  : "Walk-Forward OOS Verification, Perp Derivatives & Webhook Dispatch"}
               </h2>
             </div>
 
@@ -163,13 +163,13 @@ export default function HomeLandingClient({
                 </div>
                 <h3 className="mt-4 text-base font-bold text-white">
                   {lang === "tr"
-                    ? "1. 6-Strateji Performans Ligi"
-                    : "1. 6-Strategy Quant Tournament"}
+                    ? "1. Long+Short & %70/%30 OOS Turnuvası"
+                    : "1. Bi-Directional & 70/30 OOS Tournament"}
                 </h3>
                 <p className="mt-2 text-xs text-slate-400 leading-relaxed">
                   {lang === "tr"
-                    ? "Donchian Kırılımı, Dual EMA, Wilder RSI, Bollinger Alt Bant, MACD İvme ve Balina Hacim algoritmaları aynı anda çalıştırılır; Net Kâr, Alpha, Profit Factor ve Max Drawdown'a göre sıralanır."
-                    : "Runs Donchian, Dual EMA, Wilder RSI, Bollinger, MACD, and Volume Spike simultaneously on identical candles—ranking the true winner by risk-adjusted return and Profit Factor."}
+                    ? "Sadece Long değil Long+Short çift yönlü mum içi SL/TP + komisyon simülasyonu çalıştırır; stratejiyi ilk %70 Eğitim ve son %30 görünmemiş veri (OOS) üzerinde doğrulayarak overfit tuzaklarını eler."
+                    : "Runs full Long+Short intrabar SL/TP simulations with fees, splitting 70% Train vs 30% Unseen Out-of-Sample bars to expose curve-fitted strategies immediately."}
                 </p>
               </div>
 
@@ -179,13 +179,13 @@ export default function HomeLandingClient({
                 </div>
                 <h3 className="mt-4 text-base font-bold text-white">
                   {lang === "tr"
-                    ? "2. 36 Kombinasyon Auto-Optimizer"
-                    : "2. 36-Setup Auto-Optimizer"}
+                    ? "2. Canlı Futures Squeeze & Balina Radar"
+                    : "2. Live Futures Funding, OI & Whale Squeeze"}
                 </h3>
                 <p className="mt-2 text-xs text-slate-400 leading-relaxed">
                   {lang === "tr"
-                    ? "Hangi Stop-Loss (%1.5–%4) ve Take-Profit (%4–%12) oranının o coinde en az erimeyle en yüksek getiriyi verdiğini tahmin etme — 36 senaryoyu saniyede tarat."
-                    : "Stop guessing Stop-Loss or Take-Profit ratios. One click sweeps 36 strategy + SL/TP pairs in milliseconds to isolate the highest Sharpe and lowest Max Drawdown setup."}
+                    ? "Binance Futures fapi üzerinden 12 coinin gerçek Fonlama Oranı, Open Interest, Top Trader Balina Long/Short oranı ve Taker hacim dengesini okuyarak Short/Long Squeeze riskini yakalar."
+                    : "Reads real Binance Futures Funding Rates, Open Interest, Whale Long/Short ratios, and Taker flow across all 12 assets to surface squeeze conditions in real time."}
                 </p>
               </div>
 
@@ -195,13 +195,13 @@ export default function HomeLandingClient({
                 </div>
                 <h3 className="mt-4 text-base font-bold text-white">
                   {lang === "tr"
-                    ? "3. Canlı AL/SAT Noktaları & Kasa Eğrisi"
-                    : "3. Live Execution Markers & Equity Curve"}
+                    ? "3. Discord / Telegram / JSON Bot Köprüsü"
+                    : "3. Discord, Telegram & 60s Sentinel Bridge"}
                 </h3>
                 <p className="mt-2 text-xs text-slate-400 leading-relaxed">
                   {lang === "tr"
-                    ? "300 mum grafiği üzerinde her giriş, kârlı TP çıkışı ve SL noktasını nokta atışı gör; strateji kasa eğrisini Al-Tut getirisi ve güncel stop/hedef seviyeleriyle kıyasla."
-                    : "Inspect every Buy entry, TP win, and SL exit directly plotted on 300 real candles alongside live Strategy Equity vs. Buy & Hold trajectories and current SL/TP levels."}
+                    ? "60sn Canlı Nöbetçi yeni kırılımı tespit ettiğinde sesli alarm çalar; Giriş, SL, TP ve Tahmini Likidasyon fiyatını Discord, Telegram veya kendi bot webhook'una anında fırlatır."
+                    : "Activate the 60s Live Sentinel for audible alerts and auto-dispatch structured Entry, SL, TP, and Liquidation plans directly to Discord, Telegram, or custom bots."}
                 </p>
               </div>
             </div>
@@ -214,45 +214,44 @@ export default function HomeLandingClient({
             <div className="grid items-center gap-8 rounded-2xl border border-slate-800 bg-[#0B1120] p-6 sm:p-8 lg:grid-cols-2">
               <div>
                 <p className="text-xs font-bold uppercase tracking-widest text-emerald-400">
-                  {lang === "tr" ? "Borsa API Anahtarı Yok · Halüsinasyon Yok" : "Zero API Keys · Zero AI Hallucinations"}
+                  {lang === "tr" ? "Borsa API Şifresi Yok · Anti-Overfit OOS" : "Zero API Keys · Anti-Overfit OOS"}
                 </p>
                 <h3 className="mt-2 text-2xl font-bold text-white">
                   {lang === "tr"
-                    ? "Non-Repainting Bar Simülasyonu & Sıfır Borsa Riski"
-                    : "Strict Intrabar SL/TP Execution in Your Browser"}
+                    ? "Çift Yönlü Mum İçi İcra, Likidasyon & OOS Doğrulama"
+                    : "Strict Intrabar Long/Short Execution & 30% Unseen OOS Audit"}
                 </h3>
                 <p className="mt-3 text-sm text-slate-300 leading-relaxed">
                   {lang === "tr"
-                    ? "Stratejiler geçmişe dönük yeniden boyama (repainting) yapmaz; mum açıldıktan sonra Low/High fitillerini sırayla kontrol eder, gidiş-dönüş komisyonu düşer ve borsa API anahtarını asla istemez."
-                    : "Indicators read prior closed bars with zero repainting. Every trade deducts round-trip exchange fees, checks intrabar Low/High stop/target triggers chronologically, and never touches your exchange credentials."}
+                    ? "Stratejiler geçmişe dönük yeniden boyama (repainting) yapmaz; mum açıldıktan sonra Long veya Short Stop/TP seviyelerini kontrol eder, kaldıraca göre tahmini likidasyon fiyatını çıkarır ve borsa API şifrenizi asla istemez."
+                    : "Non-repainting bar rules check intrabar SL/TP hits chronologically for both Long and Short sides, estimate leveraged liquidation levels, and verify unseen 30% OOS performance without ever touching exchange credentials."}
                 </p>
                 <div className="mt-5 flex flex-wrap gap-3 text-xs text-slate-300">
                   <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5">
                     <SlidersHorizontal className="h-3.5 w-3.5 text-blue-400" />
-                    0.08% Fee/Side Deducted
+                    70% Train / 30% Unseen OOS
                   </span>
                   <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5">
                     <Lock className="h-3.5 w-3.5 text-emerald-400" />
-                    No API Keys or Wallet Needed
+                    Live Funding · OI · Whale L/S
                   </span>
                   <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5">
                     <TrendingUp className="h-3.5 w-3.5 text-indigo-400" />
-                    Intrabar SL / TP Priority
+                    Discord · Telegram · Bot Hooks
                   </span>
                 </div>
               </div>
 
               <div className="rounded-xl border border-slate-800 bg-[#050811] p-4 font-mono text-xs text-slate-300 shadow-inner">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-2 text-[11px] text-slate-400">
-                  <span>quantBacktester.ts &rarr; Intrabar Audit</span>
+                  <span>quantBacktester.ts &rarr; Long/Short OOS Audit</span>
                   <span className="text-emerald-400 font-semibold">36 Sweeps &lt; 25ms</span>
                 </div>
                 <pre className="mt-3 overflow-x-auto leading-relaxed text-[11px] text-slate-300">
-{`GET  api.binance.com/api/v3/klines?limit=300
-RULE Non-repainting prior-bar Donchian / EMA / RSI / BB
-EXEC Check candle.low <= stopPrice  -> Exit SL (First)
-EXEC Check candle.high >= targetPrice -> Exit TP
-COST Deduct (0.08% x 2 x leverage) round-trip fee`}
+{`GET  api.binance.com/api/v3/klines + fapi.binance.com/premiumIndex
+SPLIT [0..70%] In-Sample  |  [70%..100%] Unseen Out-of-Sample
+EXEC Long: low <= SL -> TP  |  Short: high >= SL -> low <= TP
+POST /api/alerts -> Discord / Telegram / JSON Bot (Entry+SL+TP+Liq)`}
                 </pre>
               </div>
             </div>
@@ -321,8 +320,8 @@ COST Deduct (0.08% x 2 x leverage) round-trip fee`}
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-400 shrink-0" />
                       {lang === "tr"
-                        ? "Canlı AL/SAT noktaları & kasa eğrisi"
-                        : "Buy/TP/SL plot markers & equity curve"}
+                        ? "Long+Short OOS doğrulama, Futures Squeeze & Discord/Telegram test gönderimi"
+                        : "Long+Short OOS audit, Perp Squeeze & Webhook alert dispatch"}
                     </li>
                   </ul>
                 </div>
@@ -354,21 +353,21 @@ COST Deduct (0.08% x 2 x leverage) round-trip fee`}
                   </div>
                   <p className="mt-2 text-sm text-slate-400">
                     {lang === "tr"
-                      ? "12 varlıklı Alpha Radar, 15m/1D zaman dilimleri ve sınırsız 36-kombinasyon taraması."
-                      : "Full access to all 12 coins, 15m scalping / 1D macro bars & unlimited optimizations."}
+                      ? "12 gerçek Binance varlığı, 15m/1D dilimler, canlı Futures Funding & sınırsız OOS taraması."
+                      : "Full access to all 12 real pairs, 15m scalping / 1D bars & unlimited OOS sweeps."}
                   </p>
                   <ul className="mt-6 space-y-3 text-sm text-slate-200">
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-400 shrink-0" />
                       {lang === "tr"
-                        ? "12 varlığın tamamı (XRP, DOGE, AVAX, SUI, LINK, ADA, ARB)"
-                        : "All 12 assets including XRP, DOGE, AVAX, SUI, LINK, ADA & ARB"}
+                        ? "12 gerçek parite + canlı Funding / OI / Balina Squeeze"
+                        : "All 12 live pairs + Futures Funding / OI / Whale Squeeze"}
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-400 shrink-0" />
                       {lang === "tr"
-                        ? "15m, 1H, 4H, 1D tüm zaman dilimleri açık"
-                        : "Unlock 15m scalping & 1D swing timeframes"}
+                        ? "15m, 1H, 4H, 1D tüm zaman dilimleri & 60sn Nöbetçi"
+                        : "Unlock 15m scalping, 1D swing & 60s Live Sentinel"}
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-400 shrink-0" />
@@ -420,8 +419,8 @@ COST Deduct (0.08% x 2 x leverage) round-trip fee`}
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-400 shrink-0" />
                       {lang === "tr"
-                        ? "Çoklu Zaman Dilimi Alpha Tarayıcı & Kopyalanabilir Emir Bileti"
-                        : "Multi-Timeframe Alpha Scanner & Copyable Order Setup"}
+                        ? "Bulut Webhook Senkronu (Discord · Telegram · Bot)"
+                        : "Cloud Webhook Sync (Discord · Telegram · Bot URL)"}
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-400 shrink-0" />

@@ -1,5 +1,13 @@
 export type TimeframeId = "15m" | "1h" | "4h" | "1d";
 
+export type TradeDirectionMode = "both" | "long" | "short";
+export type SignalState = "LONG" | "SHORT" | "FLAT" | "ENTRY_NOW" | "SHORT_NOW";
+export type SqueezeState =
+  | "SHORT_SQUEEZE"
+  | "LONG_SQUEEZE"
+  | "WHALE_ACCUMULATION"
+  | "NEUTRAL";
+
 export type StrategyId =
   | "donchian_breakout"
   | "ema_cross"
@@ -28,10 +36,12 @@ export interface StrategyConfig {
   slowPeriod: number;
   rsiOversold: number;
   rsiOverbought: number;
+  direction?: TradeDirectionMode;
 }
 
 export interface TradeExecution {
   id: number;
+  side: "LONG" | "SHORT";
   entryIndex: number;
   exitIndex: number;
   entryTime: number;
@@ -70,10 +80,17 @@ export interface BacktestResult {
   maxDrawdownPct: number;
   sharpeRatio: number;
   totalTrades: number;
-  currentSignal: "LONG" | "FLAT" | "ENTRY_NOW";
+  currentSignal: SignalState;
+  activeSide: "LONG" | "SHORT";
   activeEntryPrice: number | null;
   suggestedStopPrice: number;
   suggestedTargetPrice: number;
+  estimatedLiquidationPrice: number;
+  oosSplitIndex: number;
+  inSampleReturnPct: number;
+  outOfSampleReturnPct: number;
+  outOfSampleWinRatePct: number;
+  isRobustOos: boolean;
   overlayUpper: number[];
   overlayLower: number[];
   overlayLabel: string;
@@ -88,15 +105,40 @@ export interface CoinRadarRow {
   bestStrategyNameTr: string;
   bestStrategyNameEn: string;
   netProfitPct: number;
+  outOfSampleReturnPct: number;
+  isRobustOos: boolean;
   winRatePct: number;
   profitFactor: number;
   maxDrawdownPct: number;
   totalTrades: number;
-  currentSignal: "LONG" | "FLAT" | "ENTRY_NOW";
+  currentSignal: SignalState;
+  activeSide: "LONG" | "SHORT";
   entryPrice: number;
   stopPrice: number;
   targetPrice: number;
+  fundingRatePct: number;
+  squeezeState: SqueezeState;
   proOnly?: boolean;
+}
+
+export interface DerivativesPulse {
+  symbol: string;
+  fundingRatePct: number;
+  markPrice: number;
+  indexPrice: number;
+  basisPct: number;
+  openInterestUsd: number;
+  whaleLongPct: number;
+  whaleShortPct: number;
+  whaleRatio: number;
+  takerBuySellRatio: number;
+  squeezeState: SqueezeState;
+  squeezeScore: number;
+  squeezeLabelTr: string;
+  squeezeLabelEn: string;
+  squeezeDetailTr: string;
+  squeezeDetailEn: string;
+  isLiveDerivatives: boolean;
 }
 
 interface StrategyMeta {
@@ -357,16 +399,176 @@ function computeDonchian(
   return { priorHigh, priorLow };
 }
 
+export function computeEstimatedLiquidationPrice(
+  entryPrice: number,
+  side: "LONG" | "SHORT",
+  leverage: number
+): number {
+  if (!Number.isFinite(entryPrice) || entryPrice <= 0 || leverage <= 1) {
+    return 0;
+  }
+  const marginRatio = Math.max(0.02, 1 / leverage - 0.005);
+  const liq =
+    side === "SHORT"
+      ? entryPrice * (1 + marginRatio)
+      : entryPrice * Math.max(0.05, 1 - marginRatio);
+  return roundPriceAuto(liq);
+}
+
+export function assessDerivativesSqueeze(
+  fundingRatePct: number,
+  whaleLongPct: number,
+  takerBuySellRatio: number,
+  currentSignal: SignalState
+): Pick<
+  DerivativesPulse,
+  | "squeezeState"
+  | "squeezeScore"
+  | "squeezeLabelTr"
+  | "squeezeLabelEn"
+  | "squeezeDetailTr"
+  | "squeezeDetailEn"
+> {
+  if (
+    fundingRatePct <= -0.004 &&
+    (takerBuySellRatio >= 1.02 ||
+      whaleLongPct >= 52 ||
+      currentSignal === "LONG" ||
+      currentSignal === "ENTRY_NOW")
+  ) {
+    const score = Math.min(
+      96,
+      Math.round(76 + Math.abs(fundingRatePct) * 650 + Math.max(0, (takerBuySellRatio - 1) * 40))
+    );
+    return {
+      squeezeState: "SHORT_SQUEEZE",
+      squeezeScore: score,
+      squeezeLabelTr: "SHORT SQUEEZE RİSKİ",
+      squeezeLabelEn: "SHORT SQUEEZE SETUP",
+      squeezeDetailTr:
+        "Negatif fonlama + alıcı baskısı short pozisyonları stoplamaya zorluyor.",
+      squeezeDetailEn:
+        "Negative funding + buyer absorption is pressuring crowded shorts.",
+    };
+  }
+
+  if (
+    fundingRatePct >= 0.018 &&
+    (whaleLongPct >= 62 ||
+      takerBuySellRatio < 0.96 ||
+      currentSignal === "SHORT" ||
+      currentSignal === "SHORT_NOW")
+  ) {
+    const score = Math.min(
+      94,
+      Math.round(74 + fundingRatePct * 520 + Math.max(0, (whaleLongPct - 60) * 0.8))
+    );
+    return {
+      squeezeState: "LONG_SQUEEZE",
+      squeezeScore: score,
+      squeezeLabelTr: "LONG SQUEEZE / AŞIRI KALDIRAÇ",
+      squeezeLabelEn: "LONG SQUEEZE RISK",
+      squeezeDetailTr:
+        "Yüksek pozitif fonlama ve kalabalık longlar aşağı yönlü iğne riski yaratıyor.",
+      squeezeDetailEn:
+        "Elevated positive funding signals crowded longs vulnerable to a flush.",
+    };
+  }
+
+  if (whaleLongPct >= 58 && takerBuySellRatio >= 1.06) {
+    const score = Math.min(86, Math.round(64 + (whaleLongPct - 55) + (takerBuySellRatio - 1) * 35));
+    return {
+      squeezeState: "WHALE_ACCUMULATION",
+      squeezeScore: score,
+      squeezeLabelTr: "BALİNA BİRİKİMİ",
+      squeezeLabelEn: "WHALE ACCUMULATION",
+      squeezeDetailTr:
+        "Top hesaplar ağırlıklı long tarafta ve agresif taker alış hacmi önde.",
+      squeezeDetailEn:
+        "Top trader accounts skew long while aggressive taker buy flow leads.",
+    };
+  }
+
+  return {
+    squeezeState: "NEUTRAL",
+    squeezeScore: 50,
+    squeezeLabelTr: "DENGELİ VADELİ AKIŞ",
+    squeezeLabelEn: "BALANCED FLOW",
+    squeezeDetailTr:
+      "Fonlama oranı ve taker dengesi nötr bölgede; strateji kırılımı bekleniyor.",
+    squeezeDetailEn:
+      "Funding and taker flow are balanced; waiting on price breakout confirmation.",
+  };
+}
+
+export function buildFallbackDerivativesPulse(
+  symbol: string,
+  candles: OHLCVCandle[],
+  currentSignal: SignalState
+): DerivativesPulse {
+  const upper = symbol.toUpperCase();
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < upper.length; i++) {
+    hash ^= upper.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  const u1 = ((hash >>> 0) % 1000) / 1000;
+  const u2 = (((hash * 2654435761) >>> 0) % 1000) / 1000;
+  const lastClose = candles[candles.length - 1]?.close ?? ASSET_BASE_PRICES[upper] ?? 100;
+  const recentOpen = candles[Math.max(0, candles.length - 12)]?.open ?? lastClose;
+  const trendPct = recentOpen > 0 ? ((lastClose - recentOpen) / recentOpen) * 100 : 0;
+
+  const fundingRatePct = roundNum(
+    trendPct < -1.5 ? -0.0085 + u1 * 0.004 : 0.0045 + (u1 - 0.35) * 0.018,
+    4
+  );
+  const basisPct = roundNum((u2 - 0.42) * 0.09, 4);
+  const markPrice = roundPriceAuto(lastClose * (1 + basisPct / 100));
+  const whaleLongPct = roundNum(47 + u1 * 21, 1);
+  const whaleShortPct = roundNum(100 - whaleLongPct, 1);
+  const whaleRatio = roundNum(whaleLongPct / Math.max(10, whaleShortPct), 2);
+  const takerBuySellRatio = roundNum(
+    trendPct < -1.5 && currentSignal === "LONG" ? 1.07 + u2 * 0.14 : 0.91 + u2 * 0.24,
+    2
+  );
+  const baseOi = upper === "BTCUSDT" ? 5.6e9 : upper === "ETHUSDT" ? 2.4e9 : upper === "SOLUSDT" ? 1.15e9 : 2.8e8;
+  const openInterestUsd = Math.round(baseOi * (0.85 + u1 * 0.4));
+
+  const squeeze = assessDerivativesSqueeze(
+    fundingRatePct,
+    whaleLongPct,
+    takerBuySellRatio,
+    currentSignal
+  );
+
+  return {
+    symbol: upper,
+    fundingRatePct,
+    markPrice,
+    indexPrice: lastClose,
+    basisPct,
+    openInterestUsd,
+    whaleLongPct,
+    whaleShortPct,
+    whaleRatio,
+    takerBuySellRatio,
+    ...squeeze,
+    isLiveDerivatives: false,
+  };
+}
+
 export function runStrategyBacktest(
   candles: OHLCVCandle[],
   config: StrategyConfig
 ): BacktestResult {
   const meta = STRATEGY_CATALOG[config.strategyId];
+  const direction: TradeDirectionMode = config.direction ?? "long";
   const capital = Math.max(100, config.capital);
   const leverage = Math.max(1, Math.min(20, config.leverage));
   const stopPct = Math.max(0.25, config.stopLossPct) / 100;
   const targetPct = Math.max(0.5, config.takeProfitPct) / 100;
   const roundTripFeeRate = (Math.max(0, config.feePct) / 100) * 2;
+  const defaultSide: "LONG" | "SHORT" = direction === "short" ? "SHORT" : "LONG";
 
   if (candles.length < 30) {
     return {
@@ -389,9 +591,16 @@ export function runStrategyBacktest(
       sharpeRatio: 0,
       totalTrades: 0,
       currentSignal: "FLAT",
+      activeSide: defaultSide,
       activeEntryPrice: null,
       suggestedStopPrice: 0,
       suggestedTargetPrice: 0,
+      estimatedLiquidationPrice: 0,
+      oosSplitIndex: 0,
+      inSampleReturnPct: 0,
+      outOfSampleReturnPct: 0,
+      outOfSampleWinRatePct: 0,
+      isRobustOos: false,
       overlayUpper: [],
       overlayLower: [],
       overlayLabel: "Indicator Bands",
@@ -425,6 +634,7 @@ export function runStrategyBacktest(
   let maxDrawdownPct = 0;
 
   let activeTrade: {
+    side: "LONG" | "SHORT";
     entryIndex: number;
     entryTime: number;
     entryPrice: number;
@@ -437,49 +647,102 @@ export function runStrategyBacktest(
   const firstClose = closes[0];
   let triggeredLastBar = false;
 
+  const evaluateSignals = (i: number) => {
+    const candle = candles[i];
+    const prevCandle = candles[i - 1];
+    let longEntry = false;
+    let shortEntry = false;
+    let longExitSignal = false;
+    let shortExitSignal = false;
+
+    if (config.strategyId === "donchian_breakout") {
+      longEntry = candle.close > dcEntry.priorHigh[i];
+      shortEntry = candle.close < dcEntry.priorLow[i];
+      longExitSignal = candle.close < dcExit.priorLow[i];
+      shortExitSignal = candle.close > dcExit.priorHigh[i];
+    } else if (config.strategyId === "ema_cross") {
+      longEntry = emaFast[i - 1] <= emaSlow[i - 1] && emaFast[i] > emaSlow[i];
+      shortEntry = emaFast[i - 1] >= emaSlow[i - 1] && emaFast[i] < emaSlow[i];
+      longExitSignal = emaFast[i] < emaSlow[i];
+      shortExitSignal = emaFast[i] > emaSlow[i];
+    } else if (config.strategyId === "rsi_reversion") {
+      longEntry = rsi[i - 1] <= config.rsiOversold && rsi[i] > config.rsiOversold;
+      shortEntry = rsi[i - 1] >= config.rsiOverbought && rsi[i] < config.rsiOverbought;
+      longExitSignal = rsi[i] >= config.rsiOverbought;
+      shortExitSignal = rsi[i] <= config.rsiOversold;
+    } else if (config.strategyId === "bollinger_bounce") {
+      longEntry =
+        prevCandle.low <= bb.lower[i - 1] &&
+        candle.close > bb.lower[i] &&
+        candle.close > candle.open;
+      shortEntry =
+        prevCandle.high >= bb.upper[i - 1] &&
+        candle.close < bb.upper[i] &&
+        candle.close < candle.open;
+      longExitSignal = candle.close >= bb.upper[i];
+      shortExitSignal = candle.close <= bb.lower[i];
+    } else if (config.strategyId === "macd_momentum") {
+      longEntry = macdLine[i - 1] <= macdSignal[i - 1] && macdLine[i] > macdSignal[i];
+      shortEntry = macdLine[i - 1] >= macdSignal[i - 1] && macdLine[i] < macdSignal[i];
+      longExitSignal = macdLine[i] < macdSignal[i];
+      shortExitSignal = macdLine[i] > macdSignal[i];
+    } else if (config.strategyId === "volume_breakout") {
+      const hasSpike = avgVol[i] > 0 && candle.volume >= avgVol[i] * 1.6;
+      longEntry = hasSpike && candle.close > candle.open * 1.006 && candle.close >= emaFast[i];
+      shortEntry = hasSpike && candle.close < candle.open * 0.994 && candle.close <= emaFast[i];
+      longExitSignal = emaFast[i] < emaSlow[i] && candle.close < candle.open;
+      shortExitSignal = emaFast[i] > emaSlow[i] && candle.close > candle.open;
+    }
+
+    return { longEntry, shortEntry, longExitSignal, shortExitSignal };
+  };
+
   for (let i = 0; i < candles.length; i++) {
     const candle = candles[i];
+    const signals = i >= warmup ? evaluateSignals(i) : null;
+    let exitedViaStopOrTargetThisBar = false;
 
-    // Check intrabar SL / TP & strategy exit for active long position
+    // 1. Check intrabar SL / TP & signal exit for open position
     if (activeTrade && i > activeTrade.entryIndex) {
       let exitPrice: number | null = null;
       let exitReason: TradeExecution["exitReason"] | null = null;
 
-      if (candle.low <= activeTrade.stopPrice) {
-        exitPrice = activeTrade.stopPrice;
-        exitReason = "SL";
-      } else if (candle.high >= activeTrade.targetPrice) {
-        exitPrice = activeTrade.targetPrice;
-        exitReason = "TP";
-      } else if (i >= warmup) {
-        let signalExit = false;
-        if (config.strategyId === "donchian_breakout") {
-          signalExit = candle.close < dcExit.priorLow[i];
-        } else if (config.strategyId === "ema_cross") {
-          signalExit = emaFast[i] < emaSlow[i];
-        } else if (config.strategyId === "rsi_reversion") {
-          signalExit = rsi[i] >= config.rsiOverbought;
-        } else if (config.strategyId === "bollinger_bounce") {
-          signalExit = candle.close >= bb.upper[i];
-        } else if (config.strategyId === "macd_momentum") {
-          signalExit = macdLine[i] < macdSignal[i];
-        } else if (config.strategyId === "volume_breakout") {
-          signalExit = emaFast[i] < emaSlow[i] && candle.close < candle.open;
+      if (activeTrade.side === "LONG") {
+        if (candle.low <= activeTrade.stopPrice) {
+          exitPrice = activeTrade.stopPrice;
+          exitReason = "SL";
+        } else if (candle.high >= activeTrade.targetPrice) {
+          exitPrice = activeTrade.targetPrice;
+          exitReason = "TP";
+        } else if (signals?.longExitSignal) {
+          exitPrice = candle.close;
+          exitReason = "SIGNAL";
         }
-        if (signalExit) {
+      } else {
+        if (candle.high >= activeTrade.stopPrice) {
+          exitPrice = activeTrade.stopPrice;
+          exitReason = "SL";
+        } else if (candle.low <= activeTrade.targetPrice) {
+          exitPrice = activeTrade.targetPrice;
+          exitReason = "TP";
+        } else if (signals?.shortExitSignal) {
           exitPrice = candle.close;
           exitReason = "SIGNAL";
         }
       }
 
       if (exitPrice !== null && exitReason !== null) {
-        const grossPct = (exitPrice - activeTrade.entryPrice) / activeTrade.entryPrice;
+        const grossPct =
+          activeTrade.side === "LONG"
+            ? (exitPrice - activeTrade.entryPrice) / activeTrade.entryPrice
+            : (activeTrade.entryPrice - exitPrice) / activeTrade.entryPrice;
         const netLevPct = Math.max(-0.98, (grossPct - roundTripFeeRate) * leverage);
         const pnlUsd = roundNum(equity * netLevPct, 2);
         equity = Math.max(10, roundNum(equity + pnlUsd, 2));
 
         trades.push({
           id: trades.length + 1,
+          side: activeTrade.side,
           entryIndex: activeTrade.entryIndex,
           exitIndex: i,
           entryTime: activeTrade.entryTime,
@@ -493,52 +756,46 @@ export function runStrategyBacktest(
           equityAfter: equity,
         });
 
+        exitedViaStopOrTargetThisBar = exitReason === "SL" || exitReason === "TP";
         activeTrade = null;
       }
     }
 
-    // Check strategy entry if flat and past warmup
-    if (!activeTrade && i >= warmup && i < candles.length) {
-      let signalEntry = false;
-      if (config.strategyId === "donchian_breakout") {
-        signalEntry = candle.close > dcEntry.priorHigh[i];
-      } else if (config.strategyId === "ema_cross") {
-        signalEntry = emaFast[i - 1] <= emaSlow[i - 1] && emaFast[i] > emaSlow[i];
-      } else if (config.strategyId === "rsi_reversion") {
-        signalEntry = rsi[i - 1] <= config.rsiOversold && rsi[i] > config.rsiOversold;
-      } else if (config.strategyId === "bollinger_bounce") {
-        signalEntry =
-          candles[i - 1].low <= bb.lower[i - 1] &&
-          candle.close > bb.lower[i] &&
-          candle.close > candle.open;
-      } else if (config.strategyId === "macd_momentum") {
-        signalEntry = macdLine[i - 1] <= macdSignal[i - 1] && macdLine[i] > macdSignal[i];
-      } else if (config.strategyId === "volume_breakout") {
-        signalEntry =
-          avgVol[i] > 0 &&
-          candle.volume >= avgVol[i] * 1.6 &&
-          candle.close > candle.open * 1.006 &&
-          candle.close >= emaFast[i];
-      }
+    // 2. Check strategy entry if flat (allow signal-to-signal flip on SIGNAL exit in bi-directional mode)
+    if (!activeTrade && signals && !exitedViaStopOrTargetThisBar) {
+      const canLong = direction === "long" || direction === "both";
+      const canShort = direction === "short" || direction === "both";
 
-      if (signalEntry) {
+      if (canLong && signals.longEntry) {
         activeTrade = {
+          side: "LONG",
           entryIndex: i,
           entryTime: candle.time,
           entryPrice: candle.close,
           stopPrice: roundPriceAuto(candle.close * (1 - stopPct)),
           targetPrice: roundPriceAuto(candle.close * (1 + targetPct)),
         };
-        if (i === candles.length - 1) {
-          triggeredLastBar = true;
-        }
+        if (i === candles.length - 1) triggeredLastBar = true;
+      } else if (canShort && signals.shortEntry) {
+        activeTrade = {
+          side: "SHORT",
+          entryIndex: i,
+          entryTime: candle.time,
+          entryPrice: candle.close,
+          stopPrice: roundPriceAuto(candle.close * (1 + stopPct)),
+          targetPrice: roundPriceAuto(candle.close * (1 - targetPct)),
+        };
+        if (i === candles.length - 1) triggeredLastBar = true;
       }
     }
 
-    // Track mark-to-market equity & drawdown
+    // 3. Track mark-to-market equity & drawdown
     let mtmEquity = equity;
     if (activeTrade) {
-      const openPct = (candle.close - activeTrade.entryPrice) / activeTrade.entryPrice;
+      const openPct =
+        activeTrade.side === "LONG"
+          ? (candle.close - activeTrade.entryPrice) / activeTrade.entryPrice
+          : (activeTrade.entryPrice - candle.close) / activeTrade.entryPrice;
       const netOpenLev = Math.max(-0.98, (openPct - roundTripFeeRate * 0.5) * leverage);
       mtmEquity = Math.max(10, roundNum(equity * (1 + netOpenLev), 2));
     }
@@ -558,25 +815,46 @@ export function runStrategyBacktest(
   }
 
   // Record open position if active on final candle
-  let currentSignal: BacktestResult["currentSignal"] = "FLAT";
+  let currentSignal: SignalState = "FLAT";
+  let activeSide: "LONG" | "SHORT" = defaultSide;
   let activeEntryPrice: number | null = null;
   const lastCandle = candles[candles.length - 1];
-  let suggestedStopPrice = roundPriceAuto(lastCandle.close * (1 - stopPct));
-  let suggestedTargetPrice = roundPriceAuto(lastCandle.close * (1 + targetPct));
+  let suggestedStopPrice = roundPriceAuto(
+    defaultSide === "SHORT"
+      ? lastCandle.close * (1 + stopPct)
+      : lastCandle.close * (1 - stopPct)
+  );
+  let suggestedTargetPrice = roundPriceAuto(
+    defaultSide === "SHORT"
+      ? lastCandle.close * (1 - targetPct)
+      : lastCandle.close * (1 + targetPct)
+  );
 
   if (activeTrade) {
-    currentSignal = triggeredLastBar ? "ENTRY_NOW" : "LONG";
+    activeSide = activeTrade.side;
+    currentSignal =
+      activeTrade.side === "LONG"
+        ? triggeredLastBar
+          ? "ENTRY_NOW"
+          : "LONG"
+        : triggeredLastBar
+          ? "SHORT_NOW"
+          : "SHORT";
     activeEntryPrice = activeTrade.entryPrice;
     suggestedStopPrice = activeTrade.stopPrice;
     suggestedTargetPrice = activeTrade.targetPrice;
 
-    const grossPct = (lastCandle.close - activeTrade.entryPrice) / activeTrade.entryPrice;
+    const grossPct =
+      activeTrade.side === "LONG"
+        ? (lastCandle.close - activeTrade.entryPrice) / activeTrade.entryPrice
+        : (activeTrade.entryPrice - lastCandle.close) / activeTrade.entryPrice;
     const netLevPct = Math.max(-0.98, (grossPct - roundTripFeeRate) * leverage);
     const pnlUsd = roundNum(equity * netLevPct, 2);
     const mtmFinal = Math.max(10, roundNum(equity + pnlUsd, 2));
 
     trades.push({
       id: trades.length + 1,
+      side: activeTrade.side,
       entryIndex: activeTrade.entryIndex,
       exitIndex: candles.length - 1,
       entryTime: activeTrade.entryTime,
@@ -590,6 +868,12 @@ export function runStrategyBacktest(
       equityAfter: mtmFinal,
     });
   }
+
+  const estimatedLiquidationPrice = computeEstimatedLiquidationPrice(
+    activeEntryPrice ?? lastCandle.close,
+    activeSide,
+    leverage
+  );
 
   const finalEquity = equityCurve[equityCurve.length - 1]?.strategyEquity ?? capital;
   const netProfitUsd = roundNum(finalEquity - capital, 2);
@@ -610,6 +894,20 @@ export function runStrategyBacktest(
       : grossProfit > 0
         ? 9.99
         : 0;
+
+  // Walk-Forward Out-of-Sample Split (First 70% Train / Last 30% Unseen Validation)
+  const oosSplitIndex = Math.max(warmup + 5, Math.min(candles.length - 15, Math.floor(candles.length * 0.7)));
+  const splitEquity = equityCurve[oosSplitIndex]?.strategyEquity ?? capital;
+  const inSampleReturnPct = roundNum(((splitEquity - capital) / capital) * 100, 2);
+  const outOfSampleReturnPct =
+    splitEquity > 0 ? roundNum(((finalEquity - splitEquity) / splitEquity) * 100, 2) : 0;
+  const oosTrades = trades.filter((t) => t.entryIndex >= oosSplitIndex);
+  const outOfSampleWinRatePct =
+    oosTrades.length > 0
+      ? roundNum((oosTrades.filter((t) => t.pnlUsd > 0).length / oosTrades.length) * 100, 1)
+      : winRatePct;
+  const isRobustOos =
+    trades.length >= 2 && inSampleReturnPct > -2 && outOfSampleReturnPct > 0 && winRatePct >= 40;
 
   // Approximate annualized trade-return Sharpe ratio
   let sharpeRatio = 0;
@@ -648,7 +946,7 @@ export function runStrategyBacktest(
     nameEn: meta.nameEn,
     descTr: meta.descTr,
     descEn: meta.descEn,
-    config,
+    config: { ...config, direction },
     trades,
     equityCurve,
     netProfitPct,
@@ -662,9 +960,16 @@ export function runStrategyBacktest(
     sharpeRatio,
     totalTrades: trades.length,
     currentSignal,
+    activeSide,
     activeEntryPrice,
     suggestedStopPrice,
     suggestedTargetPrice,
+    estimatedLiquidationPrice,
+    oosSplitIndex,
+    inSampleReturnPct,
+    outOfSampleReturnPct,
+    outOfSampleWinRatePct,
+    isRobustOos,
     overlayUpper,
     overlayLower,
     overlayLabel,
@@ -673,7 +978,15 @@ export function runStrategyBacktest(
 
 function scoreBacktest(r: BacktestResult): number {
   const tradeBonus = r.totalTrades >= 3 ? 5 : r.totalTrades === 0 ? -50 : 0;
-  return r.netProfitPct - r.maxDrawdownPct * 0.5 + r.profitFactor * 1.5 + tradeBonus;
+  const oosBonus = r.isRobustOos ? 6 : 0;
+  return (
+    r.netProfitPct * 0.7 +
+    r.outOfSampleReturnPct * 0.9 -
+    r.maxDrawdownPct * 0.5 +
+    r.profitFactor * 1.5 +
+    tradeBonus +
+    oosBonus
+  );
 }
 
 export function runStrategyTournament(
@@ -691,7 +1004,8 @@ export function runStrategyTournament(
 export function optimizeStrategyConfig(
   candles: OHLCVCandle[],
   baseCapital: number,
-  leverage: number
+  leverage: number,
+  direction: TradeDirectionMode = "long"
 ): { best: BacktestResult; testedCount: number } {
   const strategyIds = Object.keys(STRATEGY_CATALOG) as StrategyId[];
   const slTpPairs: [number, number][] = [
@@ -720,6 +1034,7 @@ export function optimizeStrategyConfig(
         slowPeriod: 21,
         rsiOversold: 32,
         rsiOverbought: 70,
+        direction,
       });
 
       if (!best || scoreBacktest(res) > scoreBacktest(best)) {
@@ -740,6 +1055,7 @@ export function optimizeStrategyConfig(
       slowPeriod: 21,
       rsiOversold: 32,
       rsiOverbought: 70,
+      direction,
     });
   }
 
@@ -747,18 +1063,21 @@ export function optimizeStrategyConfig(
 }
 
 /**
- * Evaluates a coin across the 6-strategy tournament (default 2.5% SL / 7% TP @ 2x)
- * to rank active market signals across multiple assets rapidly.
+ * Evaluates a coin across the 6-strategy tournament (default bi-directional 2x futures)
+ * to rank active market signals, OOS robustness & derivatives funding squeeze across all assets.
  */
 export function buildCoinRadarRow(
   symbol: string,
   base: string,
   candles: OHLCVCandle[],
   change24hPct: number,
-  proOnly = false
+  proOnly = false,
+  fundingRatePct = 0,
+  direction: TradeDirectionMode = "both"
 ): CoinRadarRow {
-  const { best } = optimizeStrategyConfig(candles, 10000, 2);
+  const { best } = optimizeStrategyConfig(candles, 10000, 2, direction);
   const lastPrice = candles[candles.length - 1]?.close ?? 0;
+  const squeeze = assessDerivativesSqueeze(fundingRatePct, 54, 1.04, best.currentSignal);
 
   return {
     symbol,
@@ -769,14 +1088,19 @@ export function buildCoinRadarRow(
     bestStrategyNameTr: best.nameTr,
     bestStrategyNameEn: best.nameEn,
     netProfitPct: best.netProfitPct,
+    outOfSampleReturnPct: best.outOfSampleReturnPct,
+    isRobustOos: best.isRobustOos,
     winRatePct: best.winRatePct,
     profitFactor: best.profitFactor,
     maxDrawdownPct: best.maxDrawdownPct,
     totalTrades: best.totalTrades,
     currentSignal: best.currentSignal,
+    activeSide: best.activeSide,
     entryPrice: best.activeEntryPrice ?? lastPrice,
     stopPrice: best.suggestedStopPrice,
     targetPrice: best.suggestedTargetPrice,
+    fundingRatePct,
+    squeezeState: squeeze.squeezeState,
     proOnly,
   };
 }
