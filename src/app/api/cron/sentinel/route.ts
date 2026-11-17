@@ -20,6 +20,7 @@ import {
 } from "@/lib/quantBacktester";
 
 export const dynamic = "force-dynamic";
+export const preferredRegion = ["fra1", "cdg1", "lhr1"];
 
 interface PolarCustomer {
   id: string;

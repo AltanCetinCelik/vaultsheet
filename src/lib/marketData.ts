@@ -150,29 +150,57 @@ export async function fetchDerivativesPulseWithFallback(
   timeframe: TimeframeId,
   candles: OHLCVCandle[],
   currentSignal: SignalState = "FLAT"
-): Promise<{ pulse: DerivativesPulse; source: "binance_fapi" | "bybit_linear" | "simulated" }> {
+): Promise<{
+  pulse: DerivativesPulse;
+  source: "binance_fapi" | "bybit_linear" | "gate_perp" | "simulated";
+}> {
   const sym = symbol.toUpperCase();
   const fb = buildFallbackDerivativesPulse(sym, candles, currentSignal);
 
-  // 1. Primary: Binance Futures fapi
-  const [prem, oi, whaleList, takerList] = await Promise.all([
+  const gateContract = sym.replace(/USDT$/, "_USDT");
+
+  // Run Binance fapi & Gate.io Global Perpetuals in parallel -> 0ms failover delay regardless of server region
+  const [prem, oi, whaleList, takerList, gateTickers, gateStats] = await Promise.all([
     fetchJsonWithTimeout<{
       markPrice: string;
       indexPrice: string;
       lastFundingRate: string;
-    }>(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${encodeURIComponent(sym)}`, 4500),
+    }>(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${encodeURIComponent(sym)}`, 2500),
     fetchJsonWithTimeout<{ openInterest: string }>(
       `https://fapi.binance.com/fapi/v1/openInterest?symbol=${encodeURIComponent(sym)}`,
-      4500
+      2500
     ),
     fetchJsonWithTimeout<
       { longAccount: string; shortAccount: string; longShortRatio: string }[]
     >(
       `https://fapi.binance.com/futures/data/topLongShortPositionRatio?symbol=${encodeURIComponent(sym)}&period=${encodeURIComponent(timeframe)}&limit=1`,
-      4500
+      2500
     ),
     fetchJsonWithTimeout<{ buySellRatio: string }[]>(
       `https://fapi.binance.com/futures/data/takerlongshortRatio?symbol=${encodeURIComponent(sym)}&period=${encodeURIComponent(timeframe)}&limit=1`,
+      2500
+    ),
+    fetchJsonWithTimeout<
+      {
+        mark_price: string;
+        index_price: string;
+        funding_rate: string;
+      }[]
+    >(
+      `https://api.gateio.ws/api/v4/futures/usdt/tickers?contract=${encodeURIComponent(gateContract)}`,
+      4500
+    ),
+    fetchJsonWithTimeout<
+      {
+        mark_price: number;
+        open_interest_usd: number;
+        top_long_size: number;
+        top_short_size: number;
+        lsr_taker: number;
+        last_funding_rate: string;
+      }[]
+    >(
+      `https://api.gateio.ws/api/v4/futures/usdt/contract_stats?contract=${encodeURIComponent(gateContract)}&interval=${encodeURIComponent(timeframe)}&limit=1`,
       4500
     ),
   ]);
@@ -229,7 +257,62 @@ export async function fetchDerivativesPulseWithFallback(
     };
   }
 
-  // 2. Fallback: Bybit v5 Linear Perpetual Tickers & Account Long/Short Ratio
+  // Secondary: Gate.io Global USDT Perpetuals (Zero US-East geo-block, includes OI USD, Top Whale L/S & Taker ratio)
+
+  const gT = Array.isArray(gateTickers) ? gateTickers[0] : undefined;
+  const gS = Array.isArray(gateStats) ? gateStats[0] : undefined;
+  if (gT?.mark_price || gS?.mark_price) {
+    const markPrice = Number.parseFloat(String(gT?.mark_price ?? gS?.mark_price ?? fb.markPrice));
+    const indexPrice = Number.parseFloat(String(gT?.index_price ?? markPrice));
+    const rawFund = Number.parseFloat(String(gT?.funding_rate ?? gS?.last_funding_rate ?? 0));
+    const fundingRatePct = Math.round(rawFund * 100 * 10000) / 10000;
+    const basisPct =
+      indexPrice > 0
+        ? Math.round(((markPrice - indexPrice) / indexPrice) * 100 * 10000) / 10000
+        : 0;
+    const openInterestUsd = Math.round(Number(gS?.open_interest_usd) || fb.openInterestUsd);
+
+    const topLong = Number(gS?.top_long_size) || 0;
+    const topShort = Number(gS?.top_short_size) || 0;
+    const whaleLongPct =
+      topLong + topShort > 0
+        ? Math.round((topLong / (topLong + topShort)) * 1000) / 10
+        : fb.whaleLongPct;
+    const whaleShortPct = Math.round((100 - whaleLongPct) * 10) / 10;
+    const whaleRatio = Math.round((whaleLongPct / Math.max(5, whaleShortPct)) * 100) / 100;
+    const rawTaker = Number(gS?.lsr_taker);
+    const takerBuySellRatio =
+      Number.isFinite(rawTaker) && rawTaker > 0
+        ? Math.round(rawTaker * 100) / 100
+        : fb.takerBuySellRatio;
+
+    const squeeze = assessDerivativesSqueeze(
+      fundingRatePct,
+      whaleLongPct,
+      takerBuySellRatio,
+      currentSignal
+    );
+
+    return {
+      source: "gate_perp",
+      pulse: {
+        symbol: sym,
+        fundingRatePct,
+        markPrice,
+        indexPrice,
+        basisPct,
+        openInterestUsd,
+        whaleLongPct,
+        whaleShortPct,
+        whaleRatio,
+        takerBuySellRatio,
+        ...squeeze,
+        isLiveDerivatives: true,
+      },
+    };
+  }
+
+  // 3. Fallback: Bybit v5 Linear Perpetual Tickers & Account Long/Short Ratio
   const [bybitTicker, bybitRatio] = await Promise.all([
     fetchJsonWithTimeout<{
       result?: {
@@ -242,13 +325,13 @@ export async function fetchDerivativesPulseWithFallback(
       };
     }>(
       `https://api.bybit.com/v5/market/tickers?category=linear&symbol=${encodeURIComponent(sym)}`,
-      5000
+      4500
     ),
     fetchJsonWithTimeout<{
       result?: { list?: { buyRatio: string; sellRatio: string }[] };
     }>(
       `https://api.bybit.com/v5/market/account-ratio?category=linear&symbol=${encodeURIComponent(sym)}&period=${encodeURIComponent(BYBIT_RATIO_PERIOD[timeframe])}&limit=1`,
-      5000
+      4500
     ),
   ]);
 
@@ -308,18 +391,22 @@ export async function fetchRadarSnapshotServer(
 ): Promise<{ rows: CoinRadarRow[]; source: MarketDataSource }> {
   const symbolsParam = encodeURIComponent(JSON.stringify(QUANT_ASSETS.map((a) => a.symbol)));
 
-  const [visionTickers, fapiPrem, bybitTickers] = await Promise.all([
+  const [visionTickers, fapiPrem, gateTickers, bybitTickers] = await Promise.all([
     fetchJsonWithTimeout<{ symbol: string; lastPrice: string; priceChangePercent: string }[]>(
       `https://data-api.binance.vision/api/v3/ticker/24hr?symbols=${symbolsParam}`,
-      5500
+      5000
     ),
     fetchJsonWithTimeout<{ symbol: string; lastFundingRate: string }[]>(
       `https://fapi.binance.com/fapi/v1/premiumIndex`,
-      5000
+      4000
+    ),
+    fetchJsonWithTimeout<{ contract: string; funding_rate: string; change_percentage: string }[]>(
+      `https://api.gateio.ws/api/v4/futures/usdt/tickers`,
+      4500
     ),
     fetchJsonWithTimeout<{
       result?: { list?: { symbol: string; price24hPcnt: string; fundingRate: string }[] };
-    }>(`https://api.bybit.com/v5/market/tickers?category=linear`, 5000),
+    }>(`https://api.bybit.com/v5/market/tickers?category=linear`, 4000),
   ]);
 
   const changeMap = new Map<string, number>();
@@ -336,6 +423,21 @@ export async function fetchRadarSnapshotServer(
         p.symbol,
         Math.round((Number.parseFloat(p.lastFundingRate) || 0) * 100 * 10000) / 10000
       );
+    }
+  }
+  if (Array.isArray(gateTickers)) {
+    for (const g of gateTickers) {
+      if (!g.contract?.endsWith("_USDT")) continue;
+      const sym = g.contract.replace(/_USDT$/, "USDT");
+      if (!fundingMap.has(sym)) {
+        fundingMap.set(
+          sym,
+          Math.round((Number.parseFloat(g.funding_rate) || 0) * 100 * 10000) / 10000
+        );
+      }
+      if (!changeMap.has(sym) && g.change_percentage) {
+        changeMap.set(sym, Number.parseFloat(g.change_percentage) || 0);
+      }
     }
   }
   const bybitList = bybitTickers?.result?.list;

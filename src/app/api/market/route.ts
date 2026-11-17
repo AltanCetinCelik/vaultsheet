@@ -8,6 +8,7 @@ import {
 import type { TimeframeId, TradeDirectionMode } from "@/lib/quantBacktester";
 
 export const dynamic = "force-dynamic";
+export const preferredRegion = ["fra1", "cdg1", "lhr1"];
 
 const ALLOWED_TFS = new Set<TimeframeId>(["15m", "1h", "4h", "1d"]);
 const ALLOWED_DIRS = new Set<TradeDirectionMode>(["both", "long", "short"]);
