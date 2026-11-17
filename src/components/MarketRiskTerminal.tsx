@@ -756,7 +756,7 @@ export default function MarketRiskTerminal({
 
     setOptMessage(
       lang === "tr"
-        ? `Sıfır-Sızıntılı Kör OOS: İlk %70 eğitimde ${testedCount} kombinasyon yarıştı → Kazanan: ${best.nameTr} | Görünmemiş %30 OOS: %${best.outOfSampleReturnPct >= 0 ? "+" : ""}${best.outOfSampleReturnPct}`
+        ? `Sıfır-Sızıntılı Kör OOS: İlk %70 eğitimde ${testedCount} kombinasyon yarıştı → Kazanan: ${best.nameTr} | Görünmemiş %30 OOS: ${best.outOfSampleReturnPct >= 0 ? "+" : ""}${best.outOfSampleReturnPct}%`
         : `Strict Zero-Leakage OOS: Ranked ${testedCount} setups on first 70% only → Winner: ${best.nameEn} | Blind 30% OOS: ${best.outOfSampleReturnPct >= 0 ? "+" : ""}${best.outOfSampleReturnPct}%`
     );
   };

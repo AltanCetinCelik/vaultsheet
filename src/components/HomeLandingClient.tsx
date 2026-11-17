@@ -245,7 +245,7 @@ export default function HomeLandingClient({
 
                 <a
                   href={passCheckout}
-                  className="mt-6 inline-flex w-full items-center justify-center gap-1.5 rounded bg-emerald-400 py-2 text-xs font-bold text-slate-950 transition hover:bg-emerald-300"
+                  className="mt-6 inline-flex w-full items-center justify-center gap-1.5 rounded border border-transparent bg-emerald-400 py-2 text-xs font-bold text-slate-950 transition hover:bg-emerald-300"
                 >
                   <span>{lang === "tr" ? "7 Günlük Pass Al — $12" : "Get 7-Day Pass — $12"}</span>
                   <ArrowRight className="h-3.5 w-3.5" />

@@ -130,18 +130,18 @@ const TIMEFRAMES: { id: TimeframeId; label: string; proOnly?: boolean }[] = [
 ];
 
 const DIRECTIONS: { id: TradeDirectionMode; labelTr: string; labelEn: string }[] = [
-  { id: "both", labelTr: "ÇİFT YÖN", labelEn: "LONG+SHORT" },
-  { id: "long", labelTr: "SADECE LONG", labelEn: "LONG ONLY" },
-  { id: "short", labelTr: "SADECE SHORT", labelEn: "SHORT ONLY" },
+  { id: "both", labelTr: "ÇİFT YÖN", labelEn: "BOTH" },
+  { id: "long", labelTr: "LONG", labelEn: "LONG" },
+  { id: "short", labelTr: "SHORT", labelEn: "SHORT" },
 ];
 
 const SHORT_STRATEGY_LABELS: Record<StrategyId, { tr: string; en: string }> = {
-  donchian_breakout: { tr: "Donchian Kırılım", en: "Donchian" },
+  donchian_breakout: { tr: "Donchian", en: "Donchian" },
   ema_cross: { tr: "EMA Trend", en: "EMA Trend" },
   rsi_reversion: { tr: "RSI Dönüş", en: "RSI Reversion" },
-  bollinger_bounce: { tr: "Bollinger Bant", en: "Bollinger" },
-  macd_momentum: { tr: "MACD İvme", en: "MACD Momentum" },
-  volume_breakout: { tr: "Hacim Kırılımı", en: "Vol Breakout" },
+  bollinger_bounce: { tr: "Bollinger", en: "Bollinger" },
+  macd_momentum: { tr: "MACD İvme", en: "MACD" },
+  volume_breakout: { tr: "Hacim Kırılım", en: "Vol Break" },
 };
 
 function formatSourceShort(src: MarketDataSource, bars: number): string {
@@ -381,7 +381,7 @@ export default function TerminalCockpitView({
             </div>
 
             {/* Derivatives Telemetry Strip */}
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px]">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px]">
               <div className="flex flex-col">
                 <span className="text-[9.5px] uppercase tracking-wider text-slate-500">
                   {lang === "tr" ? "Fonlama (8s)" : "Funding (8h)"}
@@ -432,10 +432,10 @@ export default function TerminalCockpitView({
                 )}
               </div>
 
-              {/* Squeeze Pill */}
+              {/* Squeeze Pill (2XL+ inline since full Squeeze Intel Dock sits on right rail) */}
               {!isBootingChart && (
                 <div
-                  className={`hidden md:inline-flex items-center gap-1.5 rounded border px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap ${
+                  className={`hidden 2xl:inline-flex items-center gap-1.5 rounded border px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap ${
                     derivativesPulse.squeezeState === "SHORT_SQUEEZE"
                       ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-300"
                       : derivativesPulse.squeezeState === "LONG_SQUEEZE"
@@ -541,7 +541,7 @@ export default function TerminalCockpitView({
                   : "Auto-Optimize (36 Setups)"}
               </span>
               {!isPaid && (
-                <span className="rounded bg-slate-950/15 px-1 py-0.5 text-[9px] font-extrabold">
+                <span className="ml-1 rounded bg-slate-950/20 px-1.5 py-0.5 text-[9px] font-bold tracking-normal">
                   {consumedFreeOpt ? "PRO" : lang === "tr" ? "1 Ücretsiz" : "1 Free"}
                 </span>
               )}
@@ -581,7 +581,7 @@ export default function TerminalCockpitView({
       </div>
 
       {/* Main 3-Pane Institutional Docking Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-[264px_minmax(0,1fr)_316px] lg:divide-x divide-white/[0.07]">
+      <div className="grid grid-cols-1 lg:grid-cols-[264px_minmax(0,1fr)_324px] lg:divide-x divide-white/[0.07]">
         {/* LEFT RAIL: 12-Pair Live Screener */}
         <aside
           className={`${
@@ -644,7 +644,7 @@ export default function TerminalCockpitView({
           {/* Column Labels */}
           <div className="flex items-center justify-between border-b border-white/[0.05] px-3 py-1 text-[9.5px] font-semibold uppercase tracking-wider text-slate-500">
             <span>{lang === "tr" ? "Parite / Strateji" : "Pair / Alpha"}</span>
-            <span>{lang === "tr" ? "Fiyat · Kör OOS" : "Price · OOS %"}</span>
+            <span>{lang === "tr" ? "Fiyat · OOS (300B)" : "Price · OOS (300B)"}</span>
           </div>
 
           {/* Pair Rows */}
@@ -1078,20 +1078,20 @@ export default function TerminalCockpitView({
                 <table className="w-full border-collapse text-left text-[11px]">
                   <thead className="sticky top-0 z-10 border-b border-white/[0.06] bg-[#0D1118] text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                     <tr>
-                      <th className="px-3 py-2">#</th>
-                      <th className="px-3 py-2">
+                      <th className="px-3 py-2 whitespace-nowrap">#</th>
+                      <th className="px-3 py-2 whitespace-nowrap">
                         {lang === "tr" ? "Algoritma (Seçmek için Tıkla)" : "Algorithm (Click to Load)"}
                       </th>
-                      <th className="px-3 py-2 text-right">
+                      <th className="px-3 py-2 text-right whitespace-nowrap">
                         {lang === "tr" ? "Kör OOS %30" : "Blind OOS 30%"}
                       </th>
-                      <th className="px-3 py-2 text-right">
-                        {lang === "tr" ? "Toplam Net %" : "Net Return %"}
+                      <th className="px-3 py-2 text-right whitespace-nowrap">
+                        {lang === "tr" ? "Net Getiri" : "Net Return"}
                       </th>
-                      <th className="px-3 py-2 text-right">Win %</th>
-                      <th className="px-3 py-2 text-right">PF</th>
-                      <th className="px-3 py-2 text-right">Max DD</th>
-                      <th className="px-3 py-2 text-center">
+                      <th className="px-3 py-2 text-right whitespace-nowrap">Win %</th>
+                      <th className="px-3 py-2 text-right whitespace-nowrap">PF</th>
+                      <th className="px-3 py-2 text-right whitespace-nowrap">Max DD</th>
+                      <th className="px-3 py-2 text-center whitespace-nowrap">
                         {lang === "tr" ? "Sinyal" : "Signal"}
                       </th>
                     </tr>
@@ -1107,9 +1107,12 @@ export default function TerminalCockpitView({
                             isSelected ? "bg-emerald-500/10" : "hover:bg-white/[0.03]"
                           }`}
                         >
-                          <td className="mono-nums px-3 py-2.5 text-slate-400">
+                          <td className="mono-nums px-3 py-2.5 text-slate-400 whitespace-nowrap">
                             {index === 0 ? (
-                              <Award className="h-3.5 w-3.5 text-amber-400" />
+                              <span className="inline-flex items-center gap-1 font-bold text-amber-300">
+                                <Award className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                                #1
+                              </span>
                             ) : (
                               `#${index + 1}`
                             )}
@@ -1123,7 +1126,7 @@ export default function TerminalCockpitView({
                             </span>
                           </td>
                           <td
-                            className={`mono-nums px-3 py-2.5 text-right font-bold ${
+                            className={`mono-nums px-3 py-2.5 text-right font-bold whitespace-nowrap ${
                               strat.outOfSampleReturnPct >= 0
                                 ? "text-cyan-300"
                                 : "text-rose-400"
@@ -1133,23 +1136,23 @@ export default function TerminalCockpitView({
                             {strat.outOfSampleReturnPct}%
                           </td>
                           <td
-                            className={`mono-nums px-3 py-2.5 text-right font-bold ${
+                            className={`mono-nums px-3 py-2.5 text-right font-bold whitespace-nowrap ${
                               strat.netProfitPct >= 0 ? "text-emerald-400" : "text-rose-400"
                             }`}
                           >
                             {strat.netProfitPct >= 0 ? "+" : ""}
                             {strat.netProfitPct}%
                           </td>
-                          <td className="mono-nums px-3 py-2.5 text-right text-slate-200">
+                          <td className="mono-nums px-3 py-2.5 text-right text-slate-200 whitespace-nowrap">
                             {strat.winRatePct}% ({strat.totalTrades})
                           </td>
-                          <td className="mono-nums px-3 py-2.5 text-right text-slate-200">
+                          <td className="mono-nums px-3 py-2.5 text-right text-slate-200 whitespace-nowrap">
                             {strat.profitFactor}
                           </td>
-                          <td className="mono-nums px-3 py-2.5 text-right text-rose-400">
+                          <td className="mono-nums px-3 py-2.5 text-right text-rose-400 whitespace-nowrap">
                             -{strat.maxDrawdownPct}%
                           </td>
-                          <td className="px-3 py-2.5 text-center">
+                          <td className="px-3 py-2.5 text-center whitespace-nowrap">
                             <span
                               className={`inline-block rounded-xs px-1.5 py-0.5 text-[9.5px] font-bold ${
                                 strat.currentSignal === "LONG"
@@ -1717,7 +1720,7 @@ export default function TerminalCockpitView({
                   </span>
                   <span className="block text-[10px] text-slate-300">
                     {lang === "tr"
-                      ? "12 parite · 7/24 Cloud Cron · CSV"
+                      ? "12 parite · 7/24 Bulut Cron · CSV"
                       : "12 pairs · 24/7 Cloud Cron · CSV"}
                   </span>
                 </div>
@@ -1726,6 +1729,91 @@ export default function TerminalCockpitView({
                 </span>
               </button>
             )}
+          </div>
+
+          {/* Derivatives Squeeze & Sentinel Quick Dock (Fills Right Rail Naturally) */}
+          <div className="p-3.5 space-y-2.5 text-[11px] mt-auto bg-[#080B10]/50">
+            <div className="flex items-center justify-between">
+              <span className="inline-flex items-center gap-1.5 font-bold uppercase tracking-wider text-slate-300">
+                <Zap className="h-3.5 w-3.5 text-amber-400" />
+                {lang === "tr" ? "Vadeli Akış & Squeeze" : "Derivatives Squeeze Intel"}
+              </span>
+              <span className="mono-nums text-[10px] text-slate-500">
+                {derivativesPulse.squeezeScore}/100
+              </span>
+            </div>
+
+            <div className="rounded border border-white/[0.07] bg-[#0B0F17] p-2.5 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-white">
+                  {lang === "tr"
+                    ? derivativesPulse.squeezeLabelTr
+                    : derivativesPulse.squeezeLabelEn}
+                </span>
+                <span className="mono-nums text-[10px] text-cyan-400">
+                  Taker {derivativesPulse.takerBuySellRatio}x
+                </span>
+              </div>
+              <p className="text-[10.5px] leading-relaxed text-slate-400">
+                {lang === "tr"
+                  ? derivativesPulse.squeezeDetailTr
+                  : derivativesPulse.squeezeDetailEn}
+              </p>
+              {/* Whale L/S Distribution Bar */}
+              <div className="pt-1">
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-rose-500/35">
+                  <div
+                    className="h-full bg-emerald-400"
+                    style={{ width: `${Math.min(100, Math.max(5, derivativesPulse.whaleLongPct))}%` }}
+                  />
+                </div>
+                <div className="mt-1 flex justify-between mono-nums text-[9.5px] text-slate-400">
+                  <span>Long {derivativesPulse.whaleLongPct}%</span>
+                  <span>Short {derivativesPulse.whaleShortPct}%</span>
+                </div>
+              </div>
+
+              {/* Multi-Timeframe Confluence Strip (visible all viewports >=lg & mobile Trade tab) */}
+              <div className="grid grid-cols-4 gap-1 border-t border-white/[0.06] pt-2">
+                {mtfEntries.map((m) => (
+                  <button
+                    key={`mtf-${m.timeframe}`}
+                    type="button"
+                    onClick={() => {
+                      const tfObj = TIMEFRAMES.find((t) => t.id === m.timeframe);
+                      if (tfObj) onSelectTimeframe(tfObj);
+                    }}
+                    className={`rounded border px-1 py-1 text-center text-[9.5px] font-semibold mono-nums transition cursor-pointer ${
+                      m.currentSignal === "LONG"
+                        ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-300"
+                        : m.currentSignal === "SHORT"
+                          ? "border-rose-500/35 bg-rose-500/10 text-rose-300"
+                          : "border-white/[0.08] bg-[#080B10] text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    {m.timeframe.toUpperCase()}{" "}
+                    {m.currentSignal === "LONG" ? "▲" : m.currentSignal === "SHORT" ? "▼" : "•"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setBottomTab("sentinel");
+                setMobilePane("chart");
+              }}
+              className="flex w-full items-center justify-between rounded border border-white/[0.08] bg-[#0D1118] px-3 py-2 text-[10.5px] font-semibold text-slate-300 hover:border-white/[0.16] hover:text-white transition cursor-pointer"
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <Cloud className="h-3.5 w-3.5 text-cyan-400" />
+                {lang === "tr"
+                  ? `7/24 Bulut Sentinel (${sentinelSymbols.length} Parite)`
+                  : `24/7 Cloud Sentinel (${sentinelSymbols.length} Pairs)`}
+              </span>
+              <span className="text-emerald-400">&rarr;</span>
+            </button>
           </div>
         </aside>
       </div>
