@@ -7,7 +7,6 @@ import {
   Lock,
   ShieldCheck,
   Sparkles,
-  X,
 } from "lucide-react";
 import ConverterWorkbench from "@/components/ConverterWorkbench";
 import NavbarAuthButtons from "@/components/NavbarAuthButtons";
@@ -166,158 +165,71 @@ export default function HomePage() {
           <div className="mx-auto max-w-7xl px-4 pt-10 pb-12 sm:px-6 lg:px-8 lg:pt-14">
             <div className="mx-auto max-w-4xl text-center">
               <p className="text-xs font-bold uppercase tracking-widest text-blue-600">
-                100% LOCAL AI CFO &amp; FINANCIAL FORENSICS &middot; ZERO SERVER UPLOADS
+                VAULTSHEET SUITE &middot; 3 FINANCIAL TOOLS UNDER ONE ROOF &middot; 100% LOCAL PRIVACY
               </p>
 
               <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-5xl sm:leading-[1.1]">
-                Uncover Hidden Money Leaks, Forgotten Subscriptions &amp; Tax Write-Offs From Any Bank PDF
+                One Financial Workspace for Statement Conversion, Market Risk &amp; Spend Audits
               </h1>
 
               <p className="mt-4 text-base text-slate-600 sm:text-lg leading-relaxed">
-                Drop any bank or credit card statement (TR &amp; Global). Instantly detect recurring drains,
-                calculate your KDV &amp; income tax shield, generate 1-click cancellation &amp; refund
-                notices, and export reconciled Excel/QBO files 100% locally in your browser.
+                Convert bank PDFs to reconciled Excel/QBO with zero server uploads, size market
+                positions from live 24h anomaly scanning, and uncover subscription drains &amp;
+                tax write-offs in one clean workspace.
               </p>
 
               <p className="mt-3 text-xs font-medium text-slate-500">
-                Money Leak Radar &nbsp;&middot;&nbsp; 5-Yr Wealth Recovery Simulator &nbsp;&middot;&nbsp; KDV &amp; Income Tax Shield &nbsp;&middot;&nbsp; 1st Full .XLSX Export Free
+                PDF Statement Converter (OCR + Password) &nbsp;&middot;&nbsp; Live Market &amp; Risk Terminal &nbsp;&middot;&nbsp; Leak, Tax &amp; Audit Studio
               </p>
             </div>
 
-            {/* Live Interactive AI CFO Cockpit Right in Hero */}
+            {/* Live 3-Module Financial Suite Right in Hero */}
             <div id="workbench" className="mt-8 scroll-mt-20">
               <ConverterWorkbench defaultPreset="garanti" />
             </div>
           </div>
         </section>
 
-        {/* How VaultSheet Finds Cash & Tax Write-Offs in 3 Steps */}
+        {/* 3 Core Modules Overview */}
         <section id="how-it-works" className="border-b border-slate-200 bg-[#f8fafc] py-12">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="grid gap-5 md:grid-cols-3">
               <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-2xs">
-                <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-rose-600 text-xs font-bold text-white">
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-xs font-bold text-white">
                   1
                 </span>
                 <h2 className="mt-3 text-base font-bold text-slate-900">
-                  1. Money Leak &amp; Subscription Radar
+                  1. PDF Statement Converter
                 </h2>
                 <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">
-                  Drop digital or scanned PDFs from 64+ TR &amp; Global banks. Instantly spot
-                  silent SaaS renewals, EFT/wire commissions, and 5-year compounded wealth drain.
-                </p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-2xs">
-                <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-xs font-bold text-white">
-                  2
-                </span>
-                <h2 className="mt-3 text-base font-bold text-slate-900">
-                  2. Tax &amp; VAT Shield + 1-Click Legal Notices
-                </h2>
-                <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">
-                  Calculate KDV (20%) &amp; GVK / Schedule C write-offs on the fly and generate
-                  ready-to-send BDDK / 6502 TKHK fee-refund and subscription cancellation notices.
+                  Drop digital, scanned (local Tesseract OCR), or password-protected PDFs. Inspect
+                  side-by-side pages, confirm 0.00 balance diff, and export Excel (1st file free) or QuickBooks .QBO.
                 </p>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-2xs">
                 <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-600 text-xs font-bold text-white">
+                  2
+                </span>
+                <h2 className="mt-3 text-base font-bold text-slate-900">
+                  2. Live Market &amp; Risk Terminal
+                </h2>
+                <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">
+                  Track live 24h range breakouts, oversold dip zones, and volatility spikes across
+                  major pairs&mdash;then compute exact position sizes, R:R ratios, and 20-trade expectancy.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-2xs">
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-xs font-bold text-white">
                   3
                 </span>
                 <h2 className="mt-3 text-base font-bold text-slate-900">
-                  3. Side-by-Side PDF + Excel &amp; QBO Export
+                  3. Leak, Tax &amp; Audit Studio
                 </h2>
                 <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">
-                  Inspect original PDF pages alongside verified 0.00-diff transactions and export
-                  Excel (.xlsx — 1st full file free!), QuickBooks (.qbo), Xero, or CPA Audit PDFs.
+                  Spot hidden bank fees &amp; SaaS drains, calculate KDV (20%) &amp; GVK / Schedule C
+                  tax shields, draft 1-click legal notices, and copy verifiable CPA audit summaries.
                 </p>
               </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Competitor Comparison Section */}
-        <section className="border-b border-slate-200 bg-white py-16">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="mx-auto max-w-2xl text-center">
-              <p className="text-xs font-bold uppercase tracking-widest text-blue-600">
-                Why Firms Switch
-              </p>
-              <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-                Built for Bookkeepers Who Refuse to Upload Client PDFs
-              </h2>
-              <p className="mt-3 text-sm text-slate-600 sm:text-base">
-                Legacy cloud converters queue sensitive financial statements on remote servers and
-                lock you into $50+/month subscriptions even for a single quarterly audit.
-              </p>
-            </div>
-
-            <div className="mt-10 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-xs">
-              <table className="w-full min-w-[720px] border-collapse text-left text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wider text-slate-600">
-                    <th className="px-5 py-4 font-semibold">Capability</th>
-                    <th className="bg-blue-50/60 px-5 py-4 font-bold text-blue-700">VaultSheet</th>
-                    <th className="px-5 py-4 font-semibold">Cloud PDF Converters</th>
-                    <th className="px-5 py-4 font-semibold">ChatGPT / Manual Copy</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 text-slate-600">
-                  <tr>
-                    <td className="px-5 py-4 font-semibold text-slate-900">
-                      Server Upload Exposure
-                    </td>
-                    <td className="bg-blue-50/30 px-5 py-4 font-semibold text-emerald-700">
-                      Zero bytes uploaded (runs on your device)
-                    </td>
-                    <td className="px-5 py-4 text-rose-700">Uploads full PDF to remote cloud</td>
-                    <td className="px-5 py-4 text-amber-700">Sent to external AI endpoints</td>
-                  </tr>
-                  <tr>
-                    <td className="px-5 py-4 font-semibold text-slate-900">
-                      Cent-by-Cent Math Audit
-                    </td>
-                    <td className="bg-blue-50/30 px-5 py-4 font-medium text-emerald-700">
-                      <span className="inline-flex items-center gap-1.5">
-                        <Check className="h-4 w-4" /> Flags exact cent discrepancies inline
-                      </span>
-                    </td>
-                    <td className="px-5 py-4 text-slate-500">Rarely checks row continuity</td>
-                    <td className="px-5 py-4 text-rose-700">
-                      <span className="inline-flex items-center gap-1.5">
-                        <X className="h-4 w-4" /> Silent arithmetic hallucinations
-                      </span>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="px-5 py-4 font-semibold text-slate-900">
-                      Multi-Line Description Stitching
-                    </td>
-                    <td className="bg-blue-50/30 px-5 py-4 font-medium text-slate-900">
-                      Merges wrapped memos automatically
-                    </td>
-                    <td className="px-5 py-4 text-slate-500">Often splits into blank orphan rows</td>
-                    <td className="px-5 py-4 text-slate-500">Requires manual prompt cleanup</td>
-                  </tr>
-                  <tr>
-                    <td className="px-5 py-4 font-semibold text-slate-900">Accounting Formats</td>
-                    <td className="bg-blue-50/30 px-5 py-4 font-medium text-slate-900">
-                      XLSX (3-sheet), CSV, QBO, Xero, OFX, JSON
-                    </td>
-                    <td className="px-5 py-4 text-slate-500">Usually CSV / XLSX only</td>
-                    <td className="px-5 py-4 text-slate-500">Markdown / raw CSV copy-paste</td>
-                  </tr>
-                  <tr>
-                    <td className="px-5 py-4 font-semibold text-slate-900">
-                      One-Off Tax Season Pricing
-                    </td>
-                    <td className="bg-blue-50/30 px-5 py-4 font-bold text-blue-700">
-                      $12 for 7-Day Pass (no renewal trap)
-                    </td>
-                    <td className="px-5 py-4 text-slate-500">$30&ndash;$99/mo recurring plans</td>
-                    <td className="px-5 py-4 text-slate-500">$20/mo + manual cleanup hours</td>
-                  </tr>
-                </tbody>
-              </table>
             </div>
           </div>
         </section>

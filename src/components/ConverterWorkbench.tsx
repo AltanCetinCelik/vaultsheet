@@ -9,6 +9,7 @@ import React, {
   useSyncExternalStore,
 } from "react";
 import {
+  Activity,
   AlertTriangle,
   ArrowLeft,
   ArrowLeftRight,
@@ -25,26 +26,26 @@ import {
   FileCheck2,
   FileSpreadsheet,
   FileText,
-  Flame,
+  Globe,
   KeyRound,
   Lock,
   LogOut,
   Plus,
   Scale,
   Search,
+  Share2,
   Shield,
   SlidersHorizontal,
   Sparkles,
-  Table2,
   Tag,
   Trash2,
-  TrendingUp,
   Upload,
   User,
   UserCheck,
   X,
 } from "lucide-react";
 import PdfPagePreview from "@/components/PdfPagePreview";
+import MarketRiskTerminal from "@/components/MarketRiskTerminal";
 import {
   analyzeStatementForensics,
   generateLegalActionNotice,
@@ -193,12 +194,12 @@ function subscribeLangStorage(onStoreChange: () => void) {
 }
 
 function loadRawLang(): string {
-  if (typeof window === "undefined") return "tr";
-  return window.localStorage.getItem(LANG_STORAGE_KEY) ?? "tr";
+  if (typeof window === "undefined") return "en";
+  return window.localStorage.getItem(LANG_STORAGE_KEY) ?? "en";
 }
 
 function getServerLangSnapshot(): string {
-  return "tr";
+  return "en";
 }
 
 function subscribeLicenseStorage(onStoreChange: () => void) {
@@ -327,11 +328,12 @@ export default function ConverterWorkbench({
   defaultPreset = "chase",
   contextBankName,
 }: ConverterWorkbenchProps) {
+  const [activeSuiteModule, setActiveSuiteModule] = useState<
+    "converter" | "market" | "audit"
+  >("converter");
   const [viewMode, setViewMode] = useState<"upload" | "results">("results");
   const [activePreset, setActivePreset] = useState<SamplePresetId>(defaultPreset);
-  const [activeCockpitTab, setActiveCockpitTab] = useState<
-    "leaks" | "tax" | "cashflow" | "table"
-  >("leaks");
+  const [auditSubTab, setAuditSubTab] = useState<"leaks" | "tax" | "cashflow">("leaks");
   const [taxBracketPct, setTaxBracketPct] = useState<number>(25);
   const [includeVat, setIncludeVat] = useState<boolean>(true);
   const [cutLeakIds, setCutLeakIds] = useState<string[]>([]);
@@ -400,7 +402,7 @@ export default function ConverterWorkbench({
     loadRawLang,
     getServerLangSnapshot
   );
-  const lang: AppLang = rawLang === "en" ? "en" : "tr";
+  const lang: AppLang = rawLang === "tr" ? "tr" : "en";
 
   const setAppLang = useCallback((nextLang: AppLang) => {
     if (typeof window === "undefined") return;
@@ -805,6 +807,7 @@ export default function ConverterWorkbench({
         setSearchQuery("");
         setCutLeakIds([]);
         setActiveNoticeItem(null);
+        setActiveSuiteModule((prev) => (prev === "market" ? "converter" : prev));
         setViewMode("results");
       } catch (err) {
         if (err instanceof PdfPasswordRequiredError) {
@@ -855,6 +858,7 @@ export default function ConverterWorkbench({
       setActiveNoticeItem(null);
       setPendingPasswordFile(null);
       setPdfPasswordInput("");
+      setActiveSuiteModule((prev) => (prev === "market" ? "converter" : prev));
       setViewMode("results");
       showToast(
         `Unlocked and extracted ${finalResult.transactions.length} transactions locally.`
@@ -997,6 +1001,7 @@ export default function ConverterWorkbench({
     setCutLeakIds([]);
     setActiveNoticeItem(null);
     setShowPasteModal(false);
+    setActiveSuiteModule((prev) => (prev === "market" ? "converter" : prev));
     setViewMode("results");
     showToast(`Parsed ${parsed.transactions.length} rows locally from pasted text.`);
   };
@@ -1327,6 +1332,30 @@ export default function ConverterWorkbench({
     );
   }, []);
 
+  const handleCopyAuditSummary = useCallback(() => {
+    const summaryText = [
+      `VaultSheet Verified Audit Report — ${result.metadata.bankDetected} (Acct ****${result.metadata.accountLast4})`,
+      `Period: ${result.metadata.periodStart ?? "—"} to ${result.metadata.periodEnd ?? "—"} | Currency: ${result.metadata.currency}`,
+      `Reconciliation: ${result.reconciliation.isFullyReconciled ? "VERIFIED ($0.00 diff)" : `Review Needed (${result.reconciliation.mismatchRows} mismatch)`}`,
+      `Opening Balance: ${formatMoney(result.reconciliation.openingBalance, result.metadata.currency)}`,
+      `Total Credits: +${formatMoney(result.reconciliation.totalCredits, result.metadata.currency)}`,
+      `Total Debits: -${formatMoney(result.reconciliation.totalDebits, result.metadata.currency)}`,
+      `Closing Balance: ${formatMoney(result.reconciliation.closingBalance ?? result.reconciliation.calculatedClosingBalance, result.metadata.currency)}`,
+      `Detected Annual Leaks: ${formatMoney(forensics.totalDetectedLeaksAnnual, result.metadata.currency)} (${forensics.leaks.length} items)`,
+      `5-Yr Wealth Recovery (@ 12%): +${formatMoney(forensics.savedFiveYearCompounded, result.metadata.currency)}`,
+      `Claimable Tax & VAT Shield: +${formatMoney(forensics.totalTaxCashback, result.metadata.currency)} (${forensics.taxItems.length} deductible lines)`,
+    ].join("\n");
+
+    if (typeof navigator !== "undefined") {
+      void navigator.clipboard.writeText(summaryText);
+      showToast(
+        lang === "tr"
+          ? "Müşteri / Mali Müşavir denetim özeti panoya kopyalandı."
+          : "Client / CPA audit verification summary copied to clipboard."
+      );
+    }
+  }, [result, forensics, lang, showToast]);
+
   const { reconciliation, metadata } = result;
   const passCheckoutHref = getCheckoutUrlWithEmail(
     CHECKOUT_URLS.pass7Day,
@@ -1374,92 +1403,92 @@ export default function ConverterWorkbench({
         }}
       />
 
-      {/* Always-Visible AI CFO Top Command Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-200 bg-slate-900 px-4 py-3 text-white sm:px-6">
-        <div className="flex flex-wrap items-center gap-2">
+      {/* Minimalist Suite Pillar Switcher Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/90 px-4 py-3 sm:px-6">
+        <div
+          role="tablist"
+          aria-label="VaultSheet Suite Modules"
+          className="flex flex-wrap items-center gap-1.5"
+        >
           <button
             type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isParsing}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-500 disabled:opacity-60"
+            role="tab"
+            aria-selected={activeSuiteModule === "converter"}
+            onClick={() => setActiveSuiteModule("converter")}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition cursor-pointer ${
+              activeSuiteModule === "converter"
+                ? "bg-slate-900 text-white shadow-xs"
+                : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+            }`}
           >
-            <Upload className="h-3.5 w-3.5" />
-            {isParsing
-              ? parseStatusText
-              : lang === "tr"
-                ? "Kendi Ekstreni Yükle (PDF / OCR)"
-                : "Upload Your PDF (Digital / Scan)"}
+            <FileSpreadsheet
+              className={`h-3.5 w-3.5 ${
+                activeSuiteModule === "converter" ? "text-blue-400" : "text-blue-600"
+              }`}
+            />
+            <span>{lang === "tr" ? "PDF Ekstre Çevirici" : "PDF Converter"}</span>
           </button>
 
           <button
             type="button"
-            onClick={() => setViewMode(viewMode === "results" ? "upload" : "results")}
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-700 hover:text-white"
+            role="tab"
+            aria-selected={activeSuiteModule === "market"}
+            onClick={() => setActiveSuiteModule("market")}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition cursor-pointer ${
+              activeSuiteModule === "market"
+                ? "bg-slate-900 text-white shadow-xs"
+                : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+            }`}
           >
-            {viewMode === "upload" && <ArrowLeft className="h-3.5 w-3.5" />}
-            {viewMode === "results"
-              ? lang === "tr"
-                ? "Sürükle-Bırak / Geçmiş"
-                : "Dropzone / History"
-              : lang === "tr"
-                ? "Kokpite Dön"
-                : "Back to Cockpit"}
+            <Activity
+              className={`h-3.5 w-3.5 ${
+                activeSuiteModule === "market" ? "text-emerald-400" : "text-emerald-600"
+              }`}
+            />
+            <span>{lang === "tr" ? "Piyasa & Risk Terminali" : "Market & Risk Terminal"}</span>
           </button>
 
-          <div className="hidden h-4 w-px bg-slate-700 xl:block" />
-
-          {/* 5 Instant Bank Presets */}
-          <div className="flex flex-wrap items-center gap-1">
-            {(Object.keys(BANK_PRESETS) as SamplePresetId[]).map((id) => {
-              const p = BANK_PRESETS[id];
-              const isActivePreset = result.isSample && activePreset === id && viewMode === "results";
-              const flag =
-                id === "garanti"
-                  ? "🇹🇷"
-                  : id === "wise"
-                    ? "🇪🇺"
-                    : id === "revolut"
-                      ? "🇬🇧"
-                      : "🇺🇸";
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => handleLoadSample(id)}
-                  className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition ${
-                    isActivePreset
-                      ? "bg-white text-slate-900 shadow-xs"
-                      : "bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-white"
-                  }`}
-                >
-                  <span>{flag}</span>
-                  <span>{id === "garanti" ? "Garanti (TRY)" : p.bankName.split(" ")[0]}</span>
-                </button>
-              );
-            })}
-          </div>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeSuiteModule === "audit"}
+            onClick={() => setActiveSuiteModule("audit")}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition cursor-pointer ${
+              activeSuiteModule === "audit"
+                ? "bg-slate-900 text-white shadow-xs"
+                : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+            }`}
+          >
+            <Shield
+              className={`h-3.5 w-3.5 ${
+                activeSuiteModule === "audit" ? "text-indigo-400" : "text-indigo-600"
+              }`}
+            />
+            <span>{lang === "tr" ? "Kaçak, Vergi & Rapor" : "Leaks, Tax & Audit"}</span>
+          </button>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* TR / EN Language Pill */}
-          <div className="inline-flex rounded-lg border border-slate-700 bg-slate-800 p-0.5 text-[11px] font-bold">
-            <button
-              type="button"
-              onClick={() => setAppLang("tr")}
-              className={`rounded-md px-2 py-1 transition ${
-                lang === "tr" ? "bg-white text-slate-900" : "text-slate-300 hover:text-white"
-              }`}
-            >
-              🇹🇷 TR
-            </button>
+          {/* Clean SVG Language Switcher */}
+          <div className="inline-flex items-center rounded-lg border border-slate-200 bg-white p-0.5 text-[11px] font-bold">
+            <Globe className="ml-2 mr-1 h-3.5 w-3.5 text-slate-400" />
             <button
               type="button"
               onClick={() => setAppLang("en")}
-              className={`rounded-md px-2 py-1 transition ${
-                lang === "en" ? "bg-white text-slate-900" : "text-slate-300 hover:text-white"
+              className={`rounded-md px-2 py-1 transition cursor-pointer ${
+                lang === "en" ? "bg-slate-900 text-white" : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              🇺🇸 EN
+              EN
+            </button>
+            <button
+              type="button"
+              onClick={() => setAppLang("tr")}
+              className={`rounded-md px-2 py-1 transition cursor-pointer ${
+                lang === "tr" ? "bg-slate-900 text-white" : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              TR
             </button>
           </div>
 
@@ -1467,17 +1496,17 @@ export default function ConverterWorkbench({
             <button
               type="button"
               onClick={() => setShowAccountModal(true)}
-              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
                 accountTier.isPaid
-                  ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25"
-                  : "border-blue-400/40 bg-blue-500/15 text-blue-200 hover:bg-blue-500/25"
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                  : "border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100"
               }`}
             >
               <UserCheck className="h-3.5 w-3.5" />
               <span className="max-w-[120px] truncate">
                 {storedProfile?.customerName || storedProfile?.customerEmail || "Account"}
               </span>
-              <span className="opacity-80">&middot; {accountTier.isPaid ? "Pro" : "Free"}</span>
+              <span className="opacity-75">&middot; {accountTier.isPaid ? "Pro" : "Free"}</span>
             </button>
           ) : (
             <div className="flex items-center gap-1.5">
@@ -1489,10 +1518,10 @@ export default function ConverterWorkbench({
                   setUpgradeReason("");
                   setShowAuthModal(true);
                 }}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-700"
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-100 cursor-pointer"
               >
-                <KeyRound className="h-3 w-3" />
-                {lang === "tr" ? "Giriş / Anahtar" : "Log In / Key"}
+                <KeyRound className="h-3 w-3 text-slate-500" />
+                {lang === "tr" ? "Giriş" : "Log In"}
               </button>
               <button
                 type="button"
@@ -1502,10 +1531,10 @@ export default function ConverterWorkbench({
                   setUpgradeReason("");
                   setShowAuthModal(true);
                 }}
-                className="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-2.5 py-1.5 text-xs font-bold text-slate-950 transition hover:bg-emerald-400"
+                className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-2xs transition hover:bg-blue-700 cursor-pointer"
               >
                 <User className="h-3 w-3" />
-                {lang === "tr" ? "Ücretsiz Üye Ol" : "Sign Up Free"}
+                {lang === "tr" ? "Ücretsiz Başla" : "Sign Up Free"}
               </button>
             </div>
           )}
@@ -1520,857 +1549,328 @@ export default function ConverterWorkbench({
       )}
 
       {/* =========================================================================
-          STAGE 1: UPLOAD MODE (Simple, Zero-Clutter Entry Point)
+          MODULE 2: LIVE MARKET & POSITION RISK TERMINAL
          ========================================================================= */}
-      {viewMode === "upload" && (
-        <div className="p-5 sm:p-10">
-          <div
-            onDragOver={(e) => {
-              e.preventDefault();
-              setIsDragging(true);
-            }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setIsDragging(false);
-              if (e.dataTransfer.files?.length) {
-                void handleFiles(e.dataTransfer.files);
-              }
-            }}
-            onClick={() => fileInputRef.current?.click()}
-            className={`mx-auto flex max-w-3xl cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-12 text-center transition ${
-              isDragging
-                ? "border-blue-600 bg-blue-50/90"
-                : "border-blue-200 bg-blue-50/30 hover:border-blue-400 hover:bg-blue-50/60"
-            }`}
-          >
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-md shadow-blue-600/20">
-              <Upload className="h-6 w-6" />
-            </div>
+      {activeSuiteModule === "market" && <MarketRiskTerminal lang={lang} />}
 
-            <h2 className="mt-5 text-xl font-bold text-slate-900 sm:text-2xl">
-              {isParsing ? parseStatusText : "Drop your PDF bank statement here"}
-            </h2>
-
-            <p className="mt-2 max-w-lg text-sm text-slate-500">
-              Works with digital PDFs from Chase, Wells Fargo, BofA, Wise, Mercury, Revolut &amp;
-              60+ banks. Nothing leaves your computer.
-            </p>
-
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  fileInputRef.current?.click();
-                }}
-                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-7 py-3.5 text-sm font-bold text-white shadow-md shadow-blue-600/20 transition hover:bg-blue-700"
-              >
-                <Upload className="h-4 w-4" />
-                Select PDF Statement
-              </button>
-
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowPasteModal(true);
-                }}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50"
-              >
-                <FileText className="h-4 w-4 text-slate-500" />
-                Or Paste OCR / Table Text
-              </button>
-            </div>
-          </div>
-
-          {/* 1-Click Live Demo Bar */}
-          <div className="mx-auto mt-6 flex max-w-3xl flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3">
+      {/* =========================================================================
+          MODULE 1: PDF STATEMENT CONVERTER (Focused, Clean, Zero Clutter)
+         ========================================================================= */}
+      {activeSuiteModule === "converter" && (
+        <>
+          {/* Clean Statement Action & Preset Strip */}
+          <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-200 bg-white px-4 py-2.5 sm:px-6">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-medium text-slate-600">
-                No PDF handy? Try an instant live sample:
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isParsing}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-2xs transition hover:bg-blue-700 disabled:opacity-60 cursor-pointer"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                {isParsing
+                  ? parseStatusText
+                  : lang === "tr"
+                    ? "PDF Yükle (Dijital / OCR)"
+                    : "Upload PDF (Digital / OCR)"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewMode(viewMode === "results" ? "upload" : "results")}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 cursor-pointer"
+              >
+                {viewMode === "upload" && <ArrowLeft className="h-3.5 w-3.5" />}
+                {viewMode === "results"
+                  ? lang === "tr"
+                    ? "Yükleme Ekranı"
+                    : "Dropzone"
+                  : lang === "tr"
+                    ? "Tabloya Dön"
+                    : "Back to Table"}
+              </button>
+            </div>
+
+            {/* Clean Bank Presets (Zero Emojis) */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] font-medium text-slate-400 mr-1 hidden sm:inline">
+                {lang === "tr" ? "Canlı Örnek:" : "Sample:"}
               </span>
               {(Object.keys(BANK_PRESETS) as SamplePresetId[]).map((id) => {
                 const p = BANK_PRESETS[id];
+                const isActivePreset =
+                  result.isSample && activePreset === id && viewMode === "results";
                 return (
                   <button
                     key={id}
                     type="button"
                     onClick={() => handleLoadSample(id)}
-                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-800 shadow-2xs transition hover:border-blue-400 hover:text-blue-600"
+                    className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition cursor-pointer ${
+                      isActivePreset
+                        ? "border border-blue-600 bg-blue-50 text-blue-700"
+                        : "border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                    }`}
                   >
-                    <span>{p.label}</span>
-                    <span className="mono-nums text-[10px] font-normal text-slate-400">
-                      {p.currency}
-                    </span>
+                    {id === "garanti"
+                      ? "Garanti TRY"
+                      : `${p.bankName.split(" ")[0]} ${p.currency}`}
                   </button>
                 );
               })}
             </div>
-
-            <button
-              type="button"
-              onClick={handleDownloadSamplePdf}
-              className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline"
-            >
-              Download Sample PDF
-            </button>
           </div>
 
-          {/* Saved Recent Statements (Retention Hook) */}
-          {savedHistory.length > 0 && (
-            <div className="mx-auto mt-6 max-w-3xl">
-              <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
-                <span className="inline-flex items-center gap-1.5">
-                  <Clock className="h-3.5 w-3.5 text-blue-600" />
-                  Your Recent Statements (Saved Locally)
-                </span>
-              </div>
-              <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                {savedHistory.slice(0, 4).map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => handleRestoreHistory(item)}
-                    className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-left text-xs shadow-2xs transition hover:border-blue-400 hover:bg-blue-50/30"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate font-semibold text-slate-900">
-                        {item.result.metadata.fileName}
-                      </p>
-                      <p className="mt-0.5 text-[11px] text-slate-500">
-                        {item.result.transactions.length} rows &middot;{" "}
-                        {item.result.metadata.currency}
-                      </p>
-                    </div>
-                    <span className="shrink-0 font-semibold text-blue-600">
-                      Open &rarr;
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* =========================================================================
-          STAGE 2: AI CFO FORENSICS & EXPORTER COCKPIT
-         ========================================================================= */}
-      {viewMode === "results" && (
-        <>
-          {/* Statement Identity + Export Bar + 4 High-Impact AI CFO KPI Cards */}
-          <div className="border-b border-slate-200 bg-white px-4 py-5 sm:px-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="min-w-0 space-y-1">
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <h2 className="text-lg font-bold text-slate-900 truncate">
-                    {metadata.bankDetected}
-                  </h2>
-                  {reconciliation.isFullyReconciled ? (
-                    <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                      {lang === "tr"
-                        ? "Bakiye Doğrulandı (0.00 Fark)"
-                        : "Balance Verified ($0.00 diff)"}
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
-                      <AlertTriangle className="h-3.5 w-3.5" />
-                      {lang === "tr" ? "Kontrol Gerekli" : "Review Needed"} (
-                      {reconciliation.mismatchRows} &middot;{" "}
-                      {formatMoney(reconciliation.discrepancy, metadata.currency)})
-                    </span>
-                  )}
-                  {result.isSample && (
-                    <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
-                      {lang === "tr" ? "Canlı Demo Senaryo" : "Interactive Demo"}
-                    </span>
-                  )}
+          {/* STAGE 1: DROPZONE / HISTORY */}
+          {viewMode === "upload" && (
+            <div className="p-6 sm:p-12">
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className={`mx-auto flex max-w-2xl cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-12 text-center transition ${
+                  isDragging
+                    ? "border-blue-600 bg-blue-50/90"
+                    : "border-slate-300 bg-slate-50/50 hover:border-blue-400 hover:bg-blue-50/30"
+                }`}
+              >
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
+                  <Upload className="h-5 w-5" />
                 </div>
 
-                <p className="text-xs text-slate-500">
-                  <span className="mono-nums font-medium text-slate-700">
-                    {lang === "tr" ? "Hesap" : "Acct"} ****{metadata.accountLast4}
-                  </span>{" "}
-                  &middot; {metadata.currency} &middot; {metadata.periodStart ?? "—"} &rarr;{" "}
-                  {metadata.periodEnd ?? "—"} &middot; {result.transactions.length}{" "}
-                  {lang === "tr" ? "işlem" : "transactions"}
-                </p>
-              </div>
-
-              {/* Primary Export Buttons */}
-              <div className="flex flex-wrap items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => handleExport("xlsx")}
-                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700"
-                >
-                  <FileSpreadsheet className="h-4 w-4" />
-                  {lang === "tr" ? "Excel İndir (.xlsx)" : "Download Excel (.xlsx)"}
-                  {freeExcelAvailable ? (
-                    <span className="rounded bg-emerald-400/95 px-1.5 py-0.5 text-[10px] font-extrabold text-slate-950">
-                      {lang === "tr" ? "İlk Dosya Ücretsiz" : "1st File Free"}
-                    </span>
-                  ) : (
-                    !result.isSample &&
-                    !accountTier.isPaid && <Lock className="h-3 w-3 opacity-85" />
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleExport("qbo")}
-                  className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-slate-800"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  {lang === "tr" ? "QuickBooks (.QBO)" : "Download QuickBooks (.QBO)"}
-                  {!result.isSample && !accountTier.isPaid && (
-                    <Lock className="h-3 w-3 opacity-85" />
-                  )}
-                </button>
-
-                <div className="inline-flex items-center rounded-xl border border-slate-300 bg-white p-0.5 shadow-2xs">
-                  <select
-                    value={secondaryFormat}
-                    onChange={(e) =>
-                      setSecondaryFormat(e.target.value as WorkbenchExportChoice)
-                    }
-                    aria-label="Additional export format"
-                    className="bg-transparent px-2.5 py-1.5 text-xs font-medium text-slate-700 focus:outline-none"
-                  >
-                    <option value="quickbooks_csv">QB CSV (4-Col)</option>
-                    <option value="quickbooks_3col_csv">QB CSV (3-Col)</option>
-                    <option value="xero_csv">Xero CSV</option>
-                    <option value="csv">Standard CSV</option>
-                    <option value="ofx">OFX (.ofx)</option>
-                    <option value="audit_pdf">CPA Audit Certificate (.pdf)</option>
-                    <option value="json">JSON</option>
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => handleExport(secondaryFormat)}
-                    className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-800 transition hover:bg-slate-200"
-                  >
-                    {lang === "tr" ? "İndir" : "Download"}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* 4 High-Contrast AI CFO Forensics KPI Cards */}
-            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-xl border border-rose-200 bg-rose-50/70 px-4 py-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-rose-700">
-                    {lang === "tr" ? "Yıllık Para Kaçağı & Gider" : "Annual Money Leaks"}
-                  </span>
-                  <Flame className="h-4 w-4 text-rose-600" />
-                </div>
-                <span className="mono-nums mt-1 block text-lg font-extrabold text-rose-900 sm:text-xl">
-                  {formatMoney(forensics.totalDetectedLeaksAnnual, metadata.currency)}
-                </span>
-                <span className="mt-0.5 block text-[11px] font-medium text-rose-700">
-                  {forensics.leaks.length}{" "}
-                  {lang === "tr"
-                    ? "tekrarlayan abonelik / masraf bulundu"
-                    : "recurring drains / fees detected"}
-                </span>
-              </div>
-
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-                    {lang === "tr"
-                      ? "5 Yıllık Servet Kurtarma (@ %12)"
-                      : "5-Yr Wealth Recovery (@ 12%)"}
-                  </span>
-                  <TrendingUp className="h-4 w-4 text-emerald-600" />
-                </div>
-                <span className="mono-nums mt-1 block text-lg font-extrabold text-emerald-900 sm:text-xl">
-                  +{formatMoney(forensics.savedFiveYearCompounded, metadata.currency)}
-                </span>
-                <span className="mt-0.5 block text-[11px] font-medium text-emerald-700">
-                  {cutLeakIds.length > 0
-                    ? lang === "tr"
-                      ? `${cutLeakIds.length} gider kesilirse (Yıllık ${formatMoney(forensics.savedAnnualTotal, metadata.currency)})`
-                      : `Cutting ${cutLeakIds.length} selected (${formatMoney(forensics.savedAnnualTotal, metadata.currency)}/yr)`
+                <h2 className="mt-4 text-lg font-bold text-slate-900 sm:text-xl">
+                  {isParsing
+                    ? parseStatusText
                     : lang === "tr"
-                      ? `Abonelik + masraf kesintisi potansiyeli`
-                      : `Projected recovery on subs + fees`}
-                </span>
-              </div>
+                      ? "Banka PDF Ekstreni Buraya Bırak"
+                      : "Drop your PDF bank statement here"}
+                </h2>
 
-              <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 px-4 py-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700">
-                    {lang === "tr"
-                      ? "Vergi & KDV Kalkanı Kazancı"
-                      : "Claimable Tax & VAT Shield"}
-                  </span>
-                  <Shield className="h-4 w-4 text-indigo-600" />
-                </div>
-                <span className="mono-nums mt-1 block text-lg font-extrabold text-indigo-950 sm:text-xl">
-                  +{formatMoney(forensics.totalTaxCashback, metadata.currency)}
-                </span>
-                <span className="mt-0.5 block text-[11px] font-medium text-indigo-700">
+                <p className="mt-2 max-w-md text-xs text-slate-500">
                   {lang === "tr"
-                    ? `%${taxBracketPct} Vergi ${includeVat ? "+ %20 KDV" : ""} (${forensics.taxItems.length} gider kalemi)`
-                    : `${taxBracketPct}% Bracket ${includeVat ? "+ 20% VAT" : ""} (${forensics.taxItems.length} write-offs)`}
-                </span>
-              </div>
+                    ? "Garanti BBVA, Chase, Wise, Mercury, Revolut ve 60+ banka desteklenir. Taranmış veya şifreli PDF'ler cihazınızda çözülür."
+                    : "Supports Chase, Wise, Mercury, Revolut, Garanti BBVA & 60+ banks. Scanned OCR & encrypted PDFs run strictly on your device."}
+                </p>
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                    {lang === "tr" ? "Dönem Sonu Bakiye & Skor" : "Closing Balance & Score"}
-                  </span>
-                  <CheckCircle2
-                    className={`h-4 w-4 ${
-                      reconciliation.isFullyReconciled ? "text-emerald-600" : "text-amber-600"
-                    }`}
-                  />
+                <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      fileInputRef.current?.click();
+                    }}
+                    className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-3 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700 cursor-pointer"
+                  >
+                    <Upload className="h-4 w-4" />
+                    {lang === "tr" ? "PDF Dosyası Seç" : "Select PDF Statement"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowPasteModal(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-4 py-3 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 cursor-pointer"
+                  >
+                    <FileText className="h-4 w-4 text-slate-500" />
+                    {lang === "tr" ? "OCR / Metin Yapıştır" : "Paste OCR Text"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDownloadSamplePdf();
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-semibold text-blue-600 transition hover:bg-blue-50 cursor-pointer"
+                  >
+                    <Download className="h-4 w-4" />
+                    {lang === "tr" ? "Örnek PDF İndir" : "Sample PDF"}
+                  </button>
                 </div>
-                <span className="mono-nums mt-1 block text-lg font-extrabold text-slate-900 sm:text-xl">
-                  {formatMoney(
-                    reconciliation.closingBalance ?? reconciliation.calculatedClosingBalance,
-                    metadata.currency
-                  )}
-                </span>
-                <span className="mt-0.5 block text-[11px] font-medium text-slate-600">
-                  {lang === "tr"
-                    ? `Finansal Sağlık Skoru: ${forensics.healthScore}/100`
-                    : `Financial Health Score: ${forensics.healthScore}/100`}
-                </span>
               </div>
-            </div>
-          </div>
 
-          {/* 4 Interactive Cockpit Tabs */}
-          <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 bg-slate-100/80 px-4 py-2.5 sm:px-6">
-            <button
-              type="button"
-              onClick={() => setActiveCockpitTab("leaks")}
-              className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold transition ${
-                activeCockpitTab === "leaks"
-                  ? "bg-slate-900 text-white shadow-sm"
-                  : "bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"
-              }`}
-            >
-              <Flame
-                className={`h-3.5 w-3.5 ${
-                  activeCockpitTab === "leaks" ? "text-rose-400" : "text-rose-600"
-                }`}
-              />
-              {lang === "tr"
-                ? `Para Kaçağı & Abonelik Avcısı (${forensics.leaks.length})`
-                : `Money Leaks & Fee Hunter (${forensics.leaks.length})`}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveCockpitTab("tax")}
-              className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold transition ${
-                activeCockpitTab === "tax"
-                  ? "bg-slate-900 text-white shadow-sm"
-                  : "bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"
-              }`}
-            >
-              <Shield
-                className={`h-3.5 w-3.5 ${
-                  activeCockpitTab === "tax" ? "text-indigo-400" : "text-indigo-600"
-                }`}
-              />
-              {lang === "tr"
-                ? `Vergi & KDV Kalkanı (${forensics.taxItems.length})`
-                : `Tax & VAT Shield (${forensics.taxItems.length})`}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveCockpitTab("cashflow")}
-              className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold transition ${
-                activeCockpitTab === "cashflow"
-                  ? "bg-slate-900 text-white shadow-sm"
-                  : "bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"
-              }`}
-            >
-              <BarChart3
-                className={`h-3.5 w-3.5 ${
-                  activeCockpitTab === "cashflow" ? "text-emerald-400" : "text-emerald-600"
-                }`}
-              />
-              {lang === "tr" ? "Nakit Akışı Röntgeni" : "Cashflow X-Ray"}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveCockpitTab("table")}
-              className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold transition ${
-                activeCockpitTab === "table"
-                  ? "bg-slate-900 text-white shadow-sm"
-                  : "bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"
-              }`}
-            >
-              <Table2
-                className={`h-3.5 w-3.5 ${
-                  activeCockpitTab === "table" ? "text-blue-400" : "text-blue-600"
-                }`}
-              />
-              {lang === "tr"
-                ? `Yan Yana PDF & Tam Tablo (${result.transactions.length})`
-                : `Split PDF & Full Table (${result.transactions.length})`}
-            </button>
-          </div>
-
-          {/* =====================================================================
-              TAB 1: MONEY LEAK HUNTER + 5-YR WEALTH SIMULATOR + LEGAL NOTICES
-             ===================================================================== */}
-          {activeCockpitTab === "leaks" && (
-            <div className="space-y-5 bg-white p-4 sm:p-6">
-              {/* Interactive 5-Year Wealth Recovery Simulator Bar */}
-              <div className="rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-white to-blue-50 p-4 sm:p-5">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div>
-                    <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
-                      <TrendingUp className="h-3 w-3" />
+              {savedHistory.length > 0 && (
+                <div className="mx-auto mt-8 max-w-2xl">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+                    <Clock className="h-3.5 w-3.5 text-blue-600" />
+                    <span>
                       {lang === "tr"
-                        ? "Canlı Servet Kurtarma Simülatörü"
-                        : "Live Wealth Recovery Simulator"}
+                        ? "Son Dönüştürülen Ekstreler (Yerel)"
+                        : "Recent Statements (Saved Locally)"}
                     </span>
-                    <h3 className="mt-2 text-base font-bold text-slate-900">
-                      {cutLeakIds.length > 0
-                        ? lang === "tr"
-                          ? `Seçtiğin ${cutLeakIds.length} kaçağı kesersen yıllık ${formatMoney(forensics.savedAnnualTotal, metadata.currency)} cebinde kalır!`
-                          : `Cutting ${cutLeakIds.length} selected expenses saves ${formatMoney(forensics.savedAnnualTotal, metadata.currency)}/year!`
-                        : lang === "tr"
-                          ? "Aşağıdan kesmek istediğin giderleri işaretle; 5 yılda ne kadar nakit birikeceğini gör:"
-                          : "Toggle expenses below to simulate 1-year cash retained and 5-year compounded wealth:"}
-                    </h3>
                   </div>
-
-                  <div className="flex flex-wrap items-center gap-3">
-                    <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-center shadow-2xs">
-                      <span className="block text-[10px] font-semibold uppercase text-slate-500">
-                        {lang === "tr" ? "Aylık Tasarruf" : "Monthly Saved"}
-                      </span>
-                      <span className="mono-nums text-sm font-extrabold text-slate-900">
-                        {formatMoney(forensics.savedMonthlyTotal, metadata.currency)}
-                      </span>
-                    </div>
-                    <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-center shadow-2xs">
-                      <span className="block text-[10px] font-semibold uppercase text-slate-500">
-                        {lang === "tr" ? "1 Yıllık Nakit" : "1-Year Cash"}
-                      </span>
-                      <span className="mono-nums text-sm font-extrabold text-blue-700">
-                        {formatMoney(forensics.savedAnnualTotal, metadata.currency)}
-                      </span>
-                    </div>
-                    <div className="rounded-xl border border-emerald-300 bg-emerald-600 px-4 py-2 text-center text-white shadow-sm">
-                      <span className="block text-[10px] font-bold uppercase text-emerald-100">
-                        {lang === "tr" ? "5 Yıllık Değer (%12)" : "5-Yr Invested (12%)"}
-                      </span>
-                      <span className="mono-nums text-base font-extrabold">
-                        +{formatMoney(forensics.savedFiveYearCompounded, metadata.currency)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {forensics.leaks.length > 0 && (
-                  <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-emerald-200/70 pt-3">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setCutLeakIds(
-                          forensics.leaks
-                            .filter(
-                              (l) =>
-                                l.leakType === "subscription" || l.leakType === "bank_fee"
-                            )
-                            .map((l) => l.id)
-                        )
-                      }
-                      className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800"
-                    >
-                      {lang === "tr"
-                        ? "Tüm Abonelik & Banka Masraflarını Kes"
-                        : "Select All Subscriptions & Bank Fees"}
-                    </button>
-                    {cutLeakIds.length > 0 && (
+                  <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
+                    {savedHistory.slice(0, 4).map((item) => (
                       <button
+                        key={item.id}
                         type="button"
-                        onClick={() => setCutLeakIds([])}
-                        className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                        onClick={() => handleRestoreHistory(item)}
+                        className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-left text-xs transition hover:border-blue-400 cursor-pointer"
                       >
-                        {lang === "tr" ? "Seçimi Sıfırla" : "Reset Selection"}
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-slate-900">
+                            {item.result.metadata.fileName}
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-slate-500">
+                            {item.result.transactions.length} rows &middot;{" "}
+                            {item.result.metadata.currency}
+                          </p>
+                        </div>
+                        <span className="shrink-0 font-semibold text-blue-600">
+                          {lang === "tr" ? "Aç →" : "Open →"}
+                        </span>
                       </button>
-                    )}
+                    ))}
                   </div>
-                )}
-              </div>
-
-              {/* Leaks Action Table / Cards */}
-              {forensics.leaks.length === 0 ? (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-600">
-                  {lang === "tr"
-                    ? "Bu ekstrede tekrarlayan abonelik, gizli banka komisyonu veya yüksek yanık gideri tespit edilmedi."
-                    : "No recurring subscriptions, hidden bank fees, or high-burn leaks detected in this statement."}
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {forensics.leaks.map((leak) => {
-                    const isCut = cutLeakIds.includes(leak.id);
-                    return (
-                      <div
-                        key={leak.id}
-                        className={`flex flex-col justify-between gap-4 rounded-xl border p-4 transition lg:flex-row lg:items-center ${
-                          isCut
-                            ? "border-emerald-300 bg-emerald-50/50"
-                            : "border-slate-200 bg-white hover:border-slate-300"
-                        }`}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span
-                              className={`rounded-md px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${
-                                leak.leakType === "bank_fee"
-                                  ? "bg-rose-100 text-rose-800 border border-rose-200"
-                                  : leak.leakType === "subscription"
-                                    ? "bg-amber-100 text-amber-800 border border-amber-200"
-                                    : "bg-slate-100 text-slate-700 border border-slate-200"
-                              }`}
-                            >
-                              {leak.leakType === "bank_fee"
-                                ? lang === "tr"
-                                  ? "Gizli Banka Masrafı"
-                                  : "Bank Fee"
-                                : leak.leakType === "subscription"
-                                  ? lang === "tr"
-                                    ? "Tekrarlayan Abonelik"
-                                    : "Subscription"
-                                  : lang === "tr"
-                                    ? "Yüksek Operasyon Yakımı"
-                                    : "High Burn"}
-                            </span>
-                            <span className="mono-nums text-xs text-slate-500">
-                              {leak.date}
-                            </span>
-                            <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-                              {leak.category}
-                            </span>
-                          </div>
-
-                          <p className="mt-1.5 font-bold text-slate-900 truncate">
-                            {leak.merchant}
-                          </p>
-                          <p className="mt-0.5 text-xs text-slate-600">
-                            {lang === "tr" ? leak.reasonTr : leak.reasonEn}
-                          </p>
-                        </div>
-
-                        {/* Cost & 5-Year Impact Numbers */}
-                        <div className="flex flex-wrap items-center gap-4 shrink-0">
-                          <div className="text-right">
-                            <span className="block text-[10px] font-semibold uppercase text-slate-400">
-                              {lang === "tr" ? "Bu Ekstre" : "Monthly"}
-                            </span>
-                            <span className="mono-nums text-sm font-bold text-slate-900">
-                              {formatMoney(leak.monthlyAmount, metadata.currency)}
-                            </span>
-                          </div>
-                          <div className="text-right">
-                            <span className="block text-[10px] font-semibold uppercase text-rose-500">
-                              {lang === "tr" ? "1 Yıllık Yük" : "1-Yr Drain"}
-                            </span>
-                            <span className="mono-nums text-sm font-bold text-rose-700">
-                              {formatMoney(leak.annualCost, metadata.currency)}
-                            </span>
-                          </div>
-                          <div className="text-right">
-                            <span className="block text-[10px] font-semibold uppercase text-emerald-600">
-                              {lang === "tr" ? "5 Yıl (@%12)" : "5-Yr Opportunity"}
-                            </span>
-                            <span className="mono-nums text-sm font-bold text-emerald-700">
-                              {formatMoney(leak.fiveYearCompoundedCost, metadata.currency)}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Actions: Cut Toggle + 1-Click Legal Notice Generator */}
-                        <div className="flex flex-wrap items-center gap-2 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => handleToggleCutLeak(leak.id)}
-                            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition ${
-                              isCut
-                                ? "bg-emerald-600 text-white shadow-xs hover:bg-emerald-700"
-                                : "border border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
-                            }`}
-                          >
-                            {isCut ? (
-                              <>
-                                <Check className="h-3.5 w-3.5" />
-                                {lang === "tr" ? "Kesildi" : "Cut ✓"}
-                              </>
-                            ) : lang === "tr" ? (
-                              "Bu Gideri Kes"
-                            ) : (
-                              "Cut Expense"
-                            )}
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setActiveNoticeItem(leak);
-                              setCopiedNotice(false);
-                            }}
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white shadow-2xs transition hover:bg-blue-700"
-                          >
-                            <Scale className="h-3.5 w-3.5 text-amber-300" />
-                            {lang === "tr"
-                              ? leak.leakType === "bank_fee"
-                                ? "İade İhtarnamesi Üret"
-                                : "İptal Dilekçesi Üret"
-                              : leak.leakType === "bank_fee"
-                                ? "Draft Fee Refund"
-                                : "Draft Cancel Notice"}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
                 </div>
               )}
             </div>
           )}
 
-          {/* =====================================================================
-              TAB 2: TAX & VAT SHIELD CALCULATOR
-             ===================================================================== */}
-          {activeCockpitTab === "tax" && (
-            <div className="space-y-5 bg-white p-4 sm:p-6">
-              {/* Interactive Controls */}
-              <div className="grid gap-4 rounded-2xl border border-indigo-200 bg-indigo-50/50 p-4 sm:grid-cols-2 sm:items-center sm:p-5">
-                <div>
-                  <div className="flex items-center justify-between text-xs font-bold text-slate-900">
-                    <span>
-                      {lang === "tr"
-                        ? `Gelir / Kurumlar Vergisi Dilimin: %${taxBracketPct}`
-                        : `Your Income / Corporate Tax Bracket: ${taxBracketPct}%`}
-                    </span>
-                    <span className="mono-nums rounded bg-indigo-600 px-2 py-0.5 text-[11px] text-white">
-                      %{taxBracketPct}
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min={15}
-                    max={45}
-                    step={1}
-                    value={taxBracketPct}
-                    onChange={(e) => setTaxBracketPct(Number(e.target.value))}
-                    aria-label="Tax bracket percentage"
-                    className="mt-2 w-full accent-indigo-600 cursor-pointer"
-                  />
-                  <div className="flex justify-between text-[10px] font-medium text-slate-500">
-                    <span>%15</span>
-                    <span>%25 (Kurumlar / LLC)</span>
-                    <span>%40+</span>
-                  </div>
-                </div>
-
-                <div className="flex flex-col justify-between gap-3 sm:items-end">
-                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-indigo-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-800 shadow-2xs">
-                    <input
-                      type="checkbox"
-                      checked={includeVat}
-                      onChange={(e) => setIncludeVat(e.target.checked)}
-                      className="h-4 w-4 rounded accent-indigo-600"
-                    />
-                    <span>
-                      {lang === "tr"
-                        ? "KDV (%20) İndirilebilir Payını Dahil Et"
-                        : "Include 20% VAT / KDV Input Tax Recovery"}
-                    </span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => handleExport("xlsx")}
-                    className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-indigo-700"
-                  >
-                    <FileSpreadsheet className="h-3.5 w-3.5" />
-                    {lang === "tr"
-                      ? "Vergi Tablosunu Excel (.xlsx) Olarak Al"
-                      : "Export Tax Ledger to Excel (.xlsx)"}
-                  </button>
-                </div>
-              </div>
-
-              {/* 4 Tax Shield Totals */}
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
-                  <span className="block text-[10px] font-bold uppercase text-slate-500">
-                    {lang === "tr" ? "Gider Yazılabilir Toplam" : "Eligible Business Spend"}
-                  </span>
-                  <span className="mono-nums mt-1 block text-base font-extrabold text-slate-900">
-                    {formatMoney(forensics.totalDeductibleSpend, metadata.currency)}
-                  </span>
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
-                  <span className="block text-[10px] font-bold uppercase text-slate-500">
-                    {lang === "tr" ? "Kurtarılan KDV (%20)" : "Input VAT Recovered"}
-                  </span>
-                  <span className="mono-nums mt-1 block text-base font-extrabold text-blue-700">
-                    +{formatMoney(forensics.totalVatShield, metadata.currency)}
-                  </span>
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
-                  <span className="block text-[10px] font-bold uppercase text-slate-500">
-                    {lang === "tr"
-                      ? `Vergi Kalkanı (%${taxBracketPct})`
-                      : `Income Tax Saved (${taxBracketPct}%)`}
-                  </span>
-                  <span className="mono-nums mt-1 block text-base font-extrabold text-indigo-700">
-                    +{formatMoney(forensics.totalIncomeTaxShield, metadata.currency)}
-                  </span>
-                </div>
-                <div className="rounded-xl border border-emerald-300 bg-emerald-600 p-3.5 text-white">
-                  <span className="block text-[10px] font-bold uppercase text-emerald-100">
-                    {lang === "tr" ? "Cebinde Kalacak Net Vergi" : "Net Tax Cashback"}
-                  </span>
-                  <span className="mono-nums mt-1 block text-base font-extrabold">
-                    +{formatMoney(forensics.totalTaxCashback, metadata.currency)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Deductible Transactions Table */}
-              <div className="overflow-x-auto rounded-xl border border-slate-200">
-                <table className="w-full border-collapse text-left text-xs">
-                  <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase text-slate-500">
-                    <tr>
-                      <th className="px-3.5 py-2.5">{lang === "tr" ? "Tarih" : "Date"}</th>
-                      <th className="px-3.5 py-2.5">{lang === "tr" ? "Harcama Kalemi" : "Expense"}</th>
-                      <th className="px-3.5 py-2.5">{lang === "tr" ? "Mevzuat Dayanağı" : "Tax Rule Basis"}</th>
-                      <th className="px-3.5 py-2.5 text-right">{lang === "tr" ? "Tutar" : "Spend"}</th>
-                      <th className="px-3.5 py-2.5 text-right">{lang === "tr" ? "KDV İndirimi" : "VAT"}</th>
-                      <th className="px-3.5 py-2.5 text-right">
-                        {lang === "tr" ? "Toplam Kazanç" : "Tax Shield"}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {forensics.taxItems.map((item) => (
-                      <tr key={item.id} className="hover:bg-slate-50">
-                        <td className="mono-nums px-3.5 py-2.5 text-slate-600">{item.date}</td>
-                        <td className="px-3.5 py-2.5">
-                          <p className="font-semibold text-slate-900">{item.merchant}</p>
-                          <span className="text-[10px] font-medium text-slate-500">
-                            {item.category} &middot; %{item.deductibleSharePct}
-                          </span>
-                        </td>
-                        <td className="px-3.5 py-2.5 text-slate-600">
-                          {lang === "tr" ? item.lawRefTr : item.lawRefEn}
-                        </td>
-                        <td className="mono-nums px-3.5 py-2.5 text-right font-medium text-slate-800">
-                          {formatMoney(item.grossSpend, metadata.currency)}
-                        </td>
-                        <td className="mono-nums px-3.5 py-2.5 text-right text-blue-700">
-                          {formatMoney(item.vatSaved, metadata.currency)}
-                        </td>
-                        <td className="mono-nums px-3.5 py-2.5 text-right font-bold text-emerald-700">
-                          +{formatMoney(item.totalTaxShield, metadata.currency)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* =====================================================================
-              TAB 3: CASHFLOW & CATEGORY SPEND X-RAY
-             ===================================================================== */}
-          {activeCockpitTab === "cashflow" && (
-            <div className="space-y-5 bg-white p-4 sm:p-6">
-              <div className="grid gap-3 sm:grid-cols-4">
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
-                  <span className="block text-[10px] font-bold uppercase text-slate-500">
-                    {lang === "tr" ? "Açılış Bakiyesi" : "Opening Balance"}
-                  </span>
-                  <span className="mono-nums mt-1 block text-base font-bold text-slate-900">
-                    {formatMoney(reconciliation.openingBalance, metadata.currency)}
-                  </span>
-                </div>
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3.5">
-                  <span className="block text-[10px] font-bold uppercase text-emerald-700">
-                    {lang === "tr" ? "+ Toplam Girişler" : "+ Total Inflows"}
-                  </span>
-                  <span className="mono-nums mt-1 block text-base font-bold text-emerald-800">
-                    +{formatMoney(reconciliation.totalCredits, metadata.currency)}
-                  </span>
-                </div>
-                <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-3.5">
-                  <span className="block text-[10px] font-bold uppercase text-rose-700">
-                    {lang === "tr" ? "− Toplam Çıkışlar" : "− Total Outflows"}
-                  </span>
-                  <span className="mono-nums mt-1 block text-base font-bold text-rose-800">
-                    -{formatMoney(reconciliation.totalDebits, metadata.currency)}
-                  </span>
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-slate-900 p-3.5 text-white">
-                  <span className="block text-[10px] font-bold uppercase text-slate-400">
-                    {lang === "tr" ? "Net Tasarruf Oranı & Skor" : "Net Margin & Score"}
-                  </span>
-                  <span className="mono-nums mt-1 block text-base font-extrabold">
-                    {forensics.savingsRatePct}% &middot; {forensics.healthScore}/100
-                  </span>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 sm:p-5">
-                <h3 className="text-sm font-bold text-slate-900">
-                  {lang === "tr"
-                    ? "Kategori Bazlı Nakit Çıkış Dağılımı"
-                    : "Outflow Breakdown by Category"}
-                </h3>
-                <div className="mt-4 space-y-3">
-                  {forensics.categoryBreakdown.map((cat) => (
-                    <div key={cat.category}>
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-semibold text-slate-800">
-                          {cat.category}{" "}
-                          <span className="font-normal text-slate-500">
-                            ({cat.txCount} {lang === "tr" ? "işlem" : "txns"})
-                          </span>
-                        </span>
-                        <span className="mono-nums font-bold text-slate-900">
-                          {formatMoney(cat.totalOutflow, metadata.currency)} (
-                          {cat.sharePct}%)
-                        </span>
-                      </div>
-                      <div className="mt-1.5 h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
-                        <div
-                          className="h-full rounded-full bg-blue-600 transition-all"
-                          style={{ width: `${Math.max(4, Math.min(100, cat.sharePct))}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* =====================================================================
-              TAB 4: SIDE-BY-SIDE LIVE PDF PREVIEW & EDITABLE LEDGER TABLE
-             ===================================================================== */}
-          {activeCockpitTab === "table" && (
+          {/* STAGE 2: CLEAN CONVERTER & RECONCILIATION WORKSPACE */}
+          {viewMode === "results" && (
             <>
-              {/* Search + Single Collapsible "Edit & Advanced Tools" Toggle */}
+              <div className="border-b border-slate-200 bg-white px-4 py-5 sm:px-6">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <h2 className="text-lg font-bold text-slate-900 truncate">
+                        {metadata.bankDetected}
+                      </h2>
+                      {reconciliation.isFullyReconciled ? (
+                        <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          {lang === "tr"
+                            ? "Bakiye Doğrulandı (0.00 Fark)"
+                            : "Balance Verified (0.00 diff)"}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                          {lang === "tr" ? "Kontrol Gerekli" : "Review Needed"} (
+                          {reconciliation.mismatchRows} &middot;{" "}
+                          {formatMoney(reconciliation.discrepancy, metadata.currency)})
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="text-xs text-slate-500">
+                      <span className="mono-nums font-medium text-slate-700">
+                        {lang === "tr" ? "Hesap" : "Acct"} ****{metadata.accountLast4}
+                      </span>{" "}
+                      &middot; {metadata.currency} &middot; {metadata.periodStart ?? "—"} &rarr;{" "}
+                      {metadata.periodEnd ?? "—"} &middot; {result.transactions.length}{" "}
+                      {lang === "tr" ? "satır" : "rows"}
+                    </p>
+                  </div>
+
+                  {/* Clean Export Buttons */}
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleExport("xlsx")}
+                      className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700 cursor-pointer"
+                    >
+                      <FileSpreadsheet className="h-4 w-4" />
+                      {lang === "tr" ? "Excel İndir (.xlsx)" : "Download Excel (.xlsx)"}
+                      {freeExcelAvailable ? (
+                        <span className="rounded bg-emerald-400/95 px-1.5 py-0.5 text-[10px] font-extrabold text-slate-950">
+                          {lang === "tr" ? "İlk Ücretsiz" : "1st Free"}
+                        </span>
+                      ) : (
+                        !result.isSample &&
+                        !accountTier.isPaid && <Lock className="h-3 w-3 opacity-85" />
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleExport("qbo")}
+                      className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-slate-800 cursor-pointer"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      QuickBooks (.QBO)
+                      {!result.isSample && !accountTier.isPaid && (
+                        <Lock className="h-3 w-3 opacity-85" />
+                      )}
+                    </button>
+
+                    <div className="inline-flex items-center rounded-xl border border-slate-300 bg-white p-0.5 shadow-2xs">
+                      <select
+                        value={secondaryFormat}
+                        onChange={(e) =>
+                          setSecondaryFormat(e.target.value as WorkbenchExportChoice)
+                        }
+                        aria-label="Additional export format"
+                        className="bg-transparent px-2.5 py-1.5 text-xs font-medium text-slate-700 focus:outline-none"
+                      >
+                        <option value="quickbooks_csv">QB CSV (4-Col)</option>
+                        <option value="quickbooks_3col_csv">QB CSV (3-Col)</option>
+                        <option value="xero_csv">Xero CSV</option>
+                        <option value="csv">Standard CSV</option>
+                        <option value="ofx">OFX (.ofx)</option>
+                        <option value="audit_pdf">CPA Audit PDF</option>
+                        <option value="json">JSON</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => handleExport(secondaryFormat)}
+                        className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-800 transition hover:bg-slate-200 cursor-pointer"
+                      >
+                        {lang === "tr" ? "İndir" : "Download"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4 Clean Reconciliation KPI Cards */}
+                <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-2.5">
+                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                      {lang === "tr" ? "Açılış Bakiyesi" : "Opening Balance"}
+                    </span>
+                    <span className="mono-nums mt-0.5 block text-sm font-bold text-slate-900 sm:text-base">
+                      {formatMoney(reconciliation.openingBalance, metadata.currency)}
+                    </span>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-2.5">
+                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                      {lang === "tr" ? "+ Toplam Giriş" : "+ Total Deposits"}
+                    </span>
+                    <span className="mono-nums mt-0.5 block text-sm font-bold text-emerald-700 sm:text-base">
+                      +{formatMoney(reconciliation.totalCredits, metadata.currency)}
+                    </span>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-2.5">
+                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                      {lang === "tr" ? "− Toplam Çıkış" : "− Total Withdrawals"}
+                    </span>
+                    <span className="mono-nums mt-0.5 block text-sm font-bold text-slate-900 sm:text-base">
+                      -{formatMoney(reconciliation.totalDebits, metadata.currency)}
+                    </span>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-2.5">
+                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                      {lang === "tr" ? "= Kapanış Bakiyesi" : "= Closing Balance"}
+                    </span>
+                    <span
+                      className={`mono-nums mt-0.5 block text-sm font-bold sm:text-base ${
+                        reconciliation.isFullyReconciled ? "text-slate-900" : "text-amber-700"
+                      }`}
+                    >
+                      {formatMoney(
+                        reconciliation.closingBalance ??
+                          reconciliation.calculatedClosingBalance,
+                        metadata.currency
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Search + Split View + Edit Tools Toolbar */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/50 px-4 py-2.5 sm:px-6">
             <div className="flex flex-wrap items-center gap-2">
               <div className="relative">
@@ -2823,23 +2323,25 @@ export default function ConverterWorkbench({
               </table>
             </div>
           </div>
-            </>
-          )}
 
           {/* Tier & Account Status Strip */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs sm:px-6">
             <div>
               {result.isSample ? (
                 <span className="font-medium text-emerald-700">
-                  Interactive sample mode: Test all 8 export formats free before uploading your own statement.
+                  {lang === "tr"
+                    ? "Örnek modu: Kendi ekstreni yüklemeden önce tüm 8 formatı ücretsiz test edebilirsin."
+                    : "Interactive sample mode: Test all 8 export formats free before uploading your own statement."}
                 </span>
               ) : accountTier.isPaid ? (
                 <span className="font-medium text-emerald-700">
-                  {accountTier.planName} active: Unlimited rows, batch PDF merge &amp; all formats unlocked.
+                  {accountTier.planName}: Unlimited rows, batch PDF merge &amp; all formats unlocked.
                 </span>
               ) : freeExcelAvailable ? (
                 <span className="font-medium text-emerald-700">
-                  1st Full Uploaded Statement Gift: Download Excel (.xlsx) free right above (up to 100 rows) to verify quality!
+                  {lang === "tr"
+                    ? "İlk Dosya Hediyesi: 100 satıra kadar ilk yüklenen ekstreni Excel (.xlsx) olarak ücretsiz indir."
+                    : "1st Full Uploaded Statement Gift: Download Excel (.xlsx) free right above (up to 100 rows)."}
                 </span>
               ) : accountTier.isLoggedIn ? (
                 <span className="text-slate-600">
@@ -2872,13 +2374,444 @@ export default function ConverterWorkbench({
             <button
               type="button"
               onClick={() => handleExport("csv")}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-100"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-100 cursor-pointer"
             >
               <Download className="h-3.5 w-3.5 text-slate-500" />
               Quick CSV
             </button>
           </div>
+            </>
+          )}
         </>
+      )}
+
+      {/* =========================================================================
+          MODULE 3: LEAK, TAX & CLIENT AUDIT STUDIO (Clean, Focused Workspace)
+         ========================================================================= */}
+      {activeSuiteModule === "audit" && (
+        <div className="bg-white">
+          {/* Studio Top Sub-Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-4 sm:px-6">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 sm:text-lg">
+                {lang === "tr"
+                  ? "Para Kaçağı, Vergi Kalkanı & Müşteri Denetim Stüdyosu"
+                  : "Spend Leak, Tax Shield & Client Audit Studio"}
+              </h2>
+              <p className="mt-0.5 text-xs text-slate-500">
+                {metadata.bankDetected} &middot; {lang === "tr" ? "Hesap" : "Acct"} ****
+                {metadata.accountLast4} &middot; {result.transactions.length}{" "}
+                {lang === "tr" ? "işlem" : "transactions"}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleCopyAuditSummary}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-2xs transition hover:bg-slate-50 cursor-pointer"
+              >
+                <Share2 className="h-3.5 w-3.5 text-blue-600" />
+                {lang === "tr" ? "Denetim Özetini Kopyala" : "Copy Client Audit Summary"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleExport("audit_pdf")}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-slate-800 cursor-pointer"
+              >
+                <FileCheck2 className="h-3.5 w-3.5 text-emerald-400" />
+                {lang === "tr" ? "CPA Denetim Sertifikası (.pdf)" : "CPA Audit Certificate (.pdf)"}
+                {!result.isSample && !accountTier.isPaid && (
+                  <Lock className="h-3 w-3 opacity-80" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* 3 Clean Summary Cards */}
+          <div className="grid gap-3 border-b border-slate-200 bg-slate-50/60 px-4 py-4 sm:grid-cols-3 sm:px-6">
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-rose-600">
+                {lang === "tr" ? "Yıllık Para Kaçağı Yükü" : "Annual Recurring Drains"}
+              </span>
+              <span className="mono-nums mt-1 block text-xl font-extrabold text-slate-900">
+                {formatMoney(forensics.totalDetectedLeaksAnnual, metadata.currency)}
+              </span>
+              <span className="mt-0.5 block text-[11px] text-slate-500">
+                {forensics.leaks.length}{" "}
+                {lang === "tr" ? "abonelik / banka kesintisi" : "subscriptions & fees"}
+              </span>
+            </div>
+
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                {lang === "tr" ? "5 Yıllık Kurtarma (@ %12)" : "5-Yr Wealth Recovery (@ 12%)"}
+              </span>
+              <span className="mono-nums mt-1 block text-xl font-extrabold text-emerald-900">
+                +{formatMoney(forensics.savedFiveYearCompounded, metadata.currency)}
+              </span>
+              <span className="mt-0.5 block text-[11px] text-emerald-700">
+                {lang === "tr"
+                  ? `Kesinti sonrası yıllık ${formatMoney(forensics.savedAnnualTotal, metadata.currency)}`
+                  : `${formatMoney(forensics.savedAnnualTotal, metadata.currency)}/yr cash retained`}
+              </span>
+            </div>
+
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 p-4">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-indigo-700">
+                {lang === "tr" ? "Vergi & KDV Kalkanı" : "Claimable Tax & VAT Shield"}
+              </span>
+              <span className="mono-nums mt-1 block text-xl font-extrabold text-indigo-950">
+                +{formatMoney(forensics.totalTaxCashback, metadata.currency)}
+              </span>
+              <span className="mt-0.5 block text-[11px] text-indigo-700">
+                %{taxBracketPct} {lang === "tr" ? "vergi dilimi" : "tax bracket"}
+                {includeVat ? " + %20 KDV/VAT" : ""}
+              </span>
+            </div>
+          </div>
+
+          {/* Audit Sub-Navigation */}
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 bg-white px-4 py-2.5 sm:px-6">
+            <button
+              type="button"
+              onClick={() => setAuditSubTab("leaks")}
+              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition cursor-pointer ${
+                auditSubTab === "leaks"
+                  ? "bg-slate-900 text-white"
+                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+              }`}
+            >
+              {lang === "tr"
+                ? `Abonelik & İade Dilekçeleri (${forensics.leaks.length})`
+                : `Money Leaks & Legal Notices (${forensics.leaks.length})`}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setAuditSubTab("tax")}
+              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition cursor-pointer ${
+                auditSubTab === "tax"
+                  ? "bg-slate-900 text-white"
+                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+              }`}
+            >
+              {lang === "tr"
+                ? `Vergi & KDV Kalkanı (${forensics.taxItems.length})`
+                : `Tax & VAT Shield (${forensics.taxItems.length})`}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setAuditSubTab("cashflow")}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition cursor-pointer ${
+                auditSubTab === "cashflow"
+                  ? "bg-slate-900 text-white"
+                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+              }`}
+            >
+              <BarChart3 className="h-3.5 w-3.5" />
+              {lang === "tr" ? "Kategori Dağılımı & Skor" : "Cashflow & Score"}
+            </button>
+          </div>
+
+          {/* Audit Sub-Tab 1: Leaks & Legal Notices */}
+          {auditSubTab === "leaks" && (
+            <div className="space-y-4 p-4 sm:p-6">
+              {forensics.leaks.length > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3">
+                  <div className="text-xs text-slate-800">
+                    <span className="font-bold">
+                      {cutLeakIds.length > 0
+                        ? lang === "tr"
+                          ? `${cutLeakIds.length} kesinti seçili`
+                          : `${cutLeakIds.length} cuts selected`
+                        : lang === "tr"
+                          ? "Tüm abonelik & banka kesintileri simülasyonu"
+                          : "Projected recovery across recurring leaks"}
+                    </span>
+                    <span className="mx-2 text-slate-300">|</span>
+                    <span className="mono-nums font-bold text-emerald-800">
+                      {formatMoney(forensics.savedMonthlyTotal, metadata.currency)}/mo &rarr;{" "}
+                      +{formatMoney(forensics.savedFiveYearCompounded, metadata.currency)} (5 yr @ 12%)
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCutLeakIds(
+                          forensics.leaks
+                            .filter(
+                              (l) =>
+                                l.leakType === "subscription" || l.leakType === "bank_fee"
+                            )
+                            .map((l) => l.id)
+                        )
+                      }
+                      className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 cursor-pointer"
+                    >
+                      {lang === "tr" ? "Abonelikleri Kes" : "Cut Subs & Fees"}
+                    </button>
+                    {cutLeakIds.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setCutLeakIds([])}
+                        className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                      >
+                        {lang === "tr" ? "Sıfırla" : "Reset"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {forensics.leaks.length === 0 ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-600">
+                  {lang === "tr"
+                    ? "Bu ekstrede tekrarlayan abonelik veya banka masrafı tespit edilmedi."
+                    : "No recurring subscriptions or hidden bank fees detected in this statement."}
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-200 rounded-xl border border-slate-200">
+                  {forensics.leaks.map((leak) => {
+                    const isCut = cutLeakIds.includes(leak.id);
+                    return (
+                      <div
+                        key={leak.id}
+                        className={`flex flex-col justify-between gap-3 p-4 transition lg:flex-row lg:items-center ${
+                          isCut ? "bg-emerald-50/40" : "bg-white hover:bg-slate-50/60"
+                        }`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
+                                leak.leakType === "bank_fee"
+                                  ? "bg-rose-100 text-rose-800"
+                                  : leak.leakType === "subscription"
+                                    ? "bg-amber-100 text-amber-800"
+                                    : "bg-slate-100 text-slate-700"
+                              }`}
+                            >
+                              {leak.leakType === "bank_fee"
+                                ? lang === "tr"
+                                  ? "Banka Masrafı"
+                                  : "Bank Fee"
+                                : leak.leakType === "subscription"
+                                  ? lang === "tr"
+                                    ? "Abonelik"
+                                    : "Subscription"
+                                  : lang === "tr"
+                                    ? "Yüksek Yakım"
+                                    : "High Burn"}
+                            </span>
+                            <span className="mono-nums text-xs text-slate-500">{leak.date}</span>
+                            <span className="text-[11px] font-medium text-slate-500">
+                              {leak.category}
+                            </span>
+                          </div>
+                          <p className="mt-1 font-bold text-slate-900 truncate">
+                            {leak.merchant}
+                          </p>
+                          <p className="mt-0.5 text-xs text-slate-600">
+                            {lang === "tr" ? leak.reasonTr : leak.reasonEn}
+                          </p>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-5 shrink-0">
+                          <div className="text-right">
+                            <span className="block text-[10px] font-semibold uppercase text-slate-400">
+                              {lang === "tr" ? "Aylık" : "Monthly"}
+                            </span>
+                            <span className="mono-nums text-sm font-bold text-slate-900">
+                              {formatMoney(leak.monthlyAmount, metadata.currency)}
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <span className="block text-[10px] font-semibold uppercase text-rose-500">
+                              {lang === "tr" ? "5 Yıl (@%12)" : "5-Yr Cost"}
+                            </span>
+                            <span className="mono-nums text-sm font-bold text-emerald-700">
+                              {formatMoney(leak.fiveYearCompoundedCost, metadata.currency)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleCutLeak(leak.id)}
+                              className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold transition cursor-pointer ${
+                                isCut
+                                  ? "bg-emerald-600 text-white"
+                                  : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                              }`}
+                            >
+                              {isCut && <Check className="h-3.5 w-3.5" />}
+                              {isCut
+                                ? lang === "tr"
+                                  ? "Kesildi"
+                                  : "Cut"
+                                : lang === "tr"
+                                  ? "Gideri Kes"
+                                  : "Cut"}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveNoticeItem(leak);
+                                setCopiedNotice(false);
+                              }}
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 cursor-pointer"
+                            >
+                              <Scale className="h-3.5 w-3.5 text-amber-300" />
+                              {lang === "tr" ? "Dilekçe Üret" : "Legal Notice"}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Audit Sub-Tab 2: Tax & VAT Shield */}
+          {auditSubTab === "tax" && (
+            <div className="space-y-4 p-4 sm:p-6">
+              <div className="grid gap-4 rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 sm:grid-cols-2 sm:items-center">
+                <div>
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-900">
+                    <span>
+                      {lang === "tr"
+                        ? `Vergi Dilimin: %${taxBracketPct}`
+                        : `Tax Bracket: ${taxBracketPct}%`}
+                    </span>
+                    <span className="mono-nums text-indigo-700">%{taxBracketPct}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={15}
+                    max={45}
+                    step={1}
+                    value={taxBracketPct}
+                    onChange={(e) => setTaxBracketPct(Number(e.target.value))}
+                    aria-label="Tax bracket percentage"
+                    className="mt-2 w-full accent-indigo-600 cursor-pointer"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800">
+                    <input
+                      type="checkbox"
+                      checked={includeVat}
+                      onChange={(e) => setIncludeVat(e.target.checked)}
+                      className="h-4 w-4 accent-indigo-600"
+                    />
+                    <span>
+                      {lang === "tr" ? "KDV (%20) İndirimi Dahil" : "Include 20% VAT Recovery"}
+                    </span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => handleExport("xlsx")}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-indigo-700 cursor-pointer"
+                  >
+                    <FileSpreadsheet className="h-3.5 w-3.5" />
+                    Excel (.xlsx)
+                  </button>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase text-slate-500">
+                    <tr>
+                      <th className="px-3.5 py-2.5">{lang === "tr" ? "Tarih" : "Date"}</th>
+                      <th className="px-3.5 py-2.5">{lang === "tr" ? "Harcama" : "Expense"}</th>
+                      <th className="px-3.5 py-2.5">{lang === "tr" ? "Mevzuat" : "Legal Rule"}</th>
+                      <th className="px-3.5 py-2.5 text-right">{lang === "tr" ? "Tutar" : "Spend"}</th>
+                      <th className="px-3.5 py-2.5 text-right">{lang === "tr" ? "Kalkan" : "Tax Shield"}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {forensics.taxItems.map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-50">
+                        <td className="mono-nums px-3.5 py-2.5 text-slate-600">{item.date}</td>
+                        <td className="px-3.5 py-2.5">
+                          <p className="font-semibold text-slate-900">{item.merchant}</p>
+                          <span className="text-[10px] text-slate-500">
+                            {item.category} &middot; %{item.deductibleSharePct}
+                          </span>
+                        </td>
+                        <td className="px-3.5 py-2.5 text-slate-600">
+                          {lang === "tr" ? item.lawRefTr : item.lawRefEn}
+                        </td>
+                        <td className="mono-nums px-3.5 py-2.5 text-right font-medium text-slate-800">
+                          {formatMoney(item.grossSpend, metadata.currency)}
+                        </td>
+                        <td className="mono-nums px-3.5 py-2.5 text-right font-bold text-emerald-700">
+                          +{formatMoney(item.totalTaxShield, metadata.currency)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Audit Sub-Tab 3: Cashflow & Category X-Ray */}
+          {auditSubTab === "cashflow" && (
+            <div className="space-y-4 p-4 sm:p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs">
+                <div>
+                  <span className="font-bold text-slate-900">
+                    {lang === "tr" ? "Finansal Sağlık Skoru:" : "Financial Health Score:"}{" "}
+                    {forensics.healthScore}/100
+                  </span>
+                  <span className="mx-2 text-slate-300">|</span>
+                  <span className="text-slate-600">
+                    {lang === "tr" ? "Net Tasarruf Marjı:" : "Net Savings Rate:"}{" "}
+                    <strong className="text-slate-900">{forensics.savingsRatePct}%</strong>
+                  </span>
+                </div>
+                <span className="mono-nums font-bold text-emerald-700">
+                  +{formatMoney(reconciliation.totalCredits, metadata.currency)} / -
+                  {formatMoney(reconciliation.totalDebits, metadata.currency)}
+                </span>
+              </div>
+
+              <div className="space-y-3 rounded-xl border border-slate-200 p-4">
+                {forensics.categoryBreakdown.map((cat) => (
+                  <div key={cat.category}>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-800">
+                        {cat.category}{" "}
+                        <span className="font-normal text-slate-500">
+                          ({cat.txCount} {lang === "tr" ? "işlem" : "txns"})
+                        </span>
+                      </span>
+                      <span className="mono-nums font-bold text-slate-900">
+                        {formatMoney(cat.totalOutflow, metadata.currency)} ({cat.sharePct}%)
+                      </span>
+                    </div>
+                    <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className="h-full rounded-full bg-blue-600"
+                        style={{ width: `${Math.max(4, Math.min(100, cat.sharePct))}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* =========================================================================
