@@ -4,9 +4,12 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   ArrowDownRight,
+  ArrowRight,
   ArrowUpRight,
   Calculator,
+  FileSpreadsheet,
   RefreshCw,
+  Shield,
   ShieldAlert,
   TrendingUp,
 } from "lucide-react";
@@ -24,6 +27,14 @@ interface MarketAsset {
   signal: "breakout" | "dip" | "volatility" | "consolidation";
 }
 
+export interface MarketRiskTerminalProps {
+  lang: AppLang;
+  monthlyLeakSaved?: number;
+  statementCurrency?: string;
+  onJumpToConverter?: () => void;
+  onJumpToAudit?: () => void;
+}
+
 const SYMBOLS_QUERY = encodeURIComponent(
   JSON.stringify([
     "BTCUSDT",
@@ -36,6 +47,16 @@ const SYMBOLS_QUERY = encodeURIComponent(
     "LINKUSDT",
   ])
 );
+
+const APPROX_USD_RATE: Record<string, number> = {
+  USD: 1,
+  EUR: 1.08,
+  GBP: 1.27,
+  TRY: 0.029,
+  CAD: 0.72,
+  AUD: 0.65,
+  CHF: 1.13,
+};
 
 const FALLBACK_TICKERS: MarketAsset[] = [
   {
@@ -160,9 +181,23 @@ function formatUsd(val: number): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   }).format(val);
+}
+
+function formatStatementMoney(val: number, currency: string): string {
+  const sym =
+    currency === "EUR"
+      ? "€"
+      : currency === "GBP"
+        ? "£"
+        : currency === "TRY"
+          ? "₺"
+          : "$";
+  return `${sym}${new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 0,
+  }).format(Math.round(val))}`;
 }
 
 interface BinanceTickerDto {
@@ -174,13 +209,18 @@ interface BinanceTickerDto {
   quoteVolume: string;
 }
 
-export default function MarketRiskTerminal({ lang }: { lang: AppLang }) {
+export default function MarketRiskTerminal({
+  lang,
+  monthlyLeakSaved = 0,
+  statementCurrency = "USD",
+  onJumpToConverter,
+  onJumpToAudit,
+}: MarketRiskTerminalProps) {
   const [assets, setAssets] = useState<MarketAsset[]>(FALLBACK_TICKERS);
   const [feedSource, setFeedSource] = useState<"live" | "cached">("cached");
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [lastUpdatedLabel, setLastUpdatedLabel] = useState<string>("Baseline snapshot");
+  const [lastUpdatedLabel, setLastUpdatedLabel] = useState<string>("Snapshot");
 
-  // Deterministic Position Size & Expectancy Inputs
   const [selectedSymbol, setSelectedSymbol] = useState<string>("BTCUSDT");
   const [capital, setCapital] = useState<number>(10000);
   const [riskPct, setRiskPct] = useState<number>(1.5);
@@ -209,7 +249,9 @@ export default function MarketRiskTerminal({ lang }: { lang: AppLang }) {
           const quoteVolumeM = Math.round(Number.parseFloat(row.quoteVolume) / 1_000_000);
           const span = high24h - low24h;
           const rangePositionPct =
-            span > 0 ? Math.max(0, Math.min(100, Math.round(((price - low24h) / span) * 100))) : 50;
+            span > 0
+              ? Math.max(0, Math.min(100, Math.round(((price - low24h) / span) * 100)))
+              : 50;
           const baseClean = row.symbol.replace(/USDT$/, "");
           return {
             symbol: row.symbol,
@@ -257,8 +299,13 @@ export default function MarketRiskTerminal({ lang }: { lang: AppLang }) {
     setTakeProfitPrice(roundPrice(asset.price * 1.06));
   };
 
+  const monthlyLeakUsd = useMemo(() => {
+    const fx = APPROX_USD_RATE[statementCurrency] ?? 1;
+    return Math.max(0, monthlyLeakSaved * fx);
+  }, [monthlyLeakSaved, statementCurrency]);
+
   const metrics = useMemo(() => {
-    const safeCapital = Math.max(0, capital);
+    const safeCapital = Math.max(100, capital);
     const safeRiskPct = Math.max(0.1, Math.min(25, riskPct));
     const maxRiskAmount = safeCapital * (safeRiskPct / 100);
     const stopDistancePerUnit = Math.abs(entryPrice - stopLossPrice);
@@ -276,9 +323,12 @@ export default function MarketRiskTerminal({ lang }: { lang: AppLang }) {
     const winP = Math.max(0, Math.min(100, winRatePct)) / 100;
     const lossP = 1 - winP;
     const expectedValuePerTrade = winP * projectedProfit - lossP * maxRiskAmount;
-    const twentyTradeProjectedCapital = safeCapital + expectedValuePerTrade * 20;
+    const twentyTradeBase = safeCapital + expectedValuePerTrade * 20;
+    const leakBoost12Mo = monthlyLeakUsd * 12;
+    const combinedCapital = twentyTradeBase + leakBoost12Mo;
 
     return {
+      safeCapital,
       maxRiskAmount,
       stopDistancePct,
       positionUnits,
@@ -288,35 +338,103 @@ export default function MarketRiskTerminal({ lang }: { lang: AppLang }) {
       projectedProfit,
       breakevenWinRatePct,
       expectedValuePerTrade,
-      twentyTradeProjectedCapital,
+      twentyTradeBase,
+      combinedCapital,
+      leakBoost12Mo,
     };
-  }, [capital, riskPct, entryPrice, stopLossPrice, takeProfitPrice, winRatePct]);
+  }, [capital, riskPct, entryPrice, stopLossPrice, takeProfitPrice, winRatePct, monthlyLeakUsd]);
+
+  // Build interactive SVG multi-curve coordinates (20 steps on 640x210 canvas)
+  const chartData = useMemo(() => {
+    const steps = 20;
+    const baseSeries: number[] = [];
+    const boostedSeries: number[] = [];
+    const stressSeries: number[] = [];
+
+    for (let i = 0; i <= steps; i++) {
+      const baseVal = metrics.safeCapital + metrics.expectedValuePerTrade * i;
+      const leakStep = (metrics.leakBoost12Mo / steps) * i;
+      const boostedVal = baseVal + leakStep;
+
+      // Early 4-loss drawdown trough around step 4 then recovery slope
+      const lossShock =
+        i <= 4
+          ? -metrics.maxRiskAmount * i
+          : -metrics.maxRiskAmount * 4 + metrics.expectedValuePerTrade * (i - 4) * 1.15;
+      const stressVal = Math.max(0, metrics.safeCapital + lossShock);
+
+      baseSeries.push(baseVal);
+      boostedSeries.push(boostedVal);
+      stressSeries.push(stressVal);
+    }
+
+    const allVals = [...baseSeries, ...boostedSeries, ...stressSeries];
+    const minY = Math.min(...allVals) * 0.96;
+    const maxY = Math.max(...allVals) * 1.03;
+    const spanY = Math.max(100, maxY - minY);
+
+    const W = 640;
+    const H = 200;
+    const padX = 14;
+    const padY = 18;
+    const plotW = W - padX * 2;
+    const plotH = H - padY * 2;
+
+    const toCoords = (series: number[]) =>
+      series.map((v, idx) => {
+        const x = padX + (idx / steps) * plotW;
+        const y = padY + plotH - ((v - minY) / spanY) * plotH;
+        return { x: Number(x.toFixed(1)), y: Number(y.toFixed(1)) };
+      });
+
+    const boostedPts = toCoords(boostedSeries);
+    const basePts = toCoords(baseSeries);
+    const stressPts = toCoords(stressSeries);
+
+    const toLine = (pts: { x: number; y: number }[]) =>
+      pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+
+    const boostedPath = toLine(boostedPts);
+    const boostedArea = `${boostedPath} L ${boostedPts[boostedPts.length - 1].x} ${H - padY} L ${boostedPts[0].x} ${H - padY} Z`;
+
+    return {
+      boostedPath,
+      boostedArea,
+      basePath: toLine(basePts),
+      stressPath: toLine(stressPts),
+      endBoosted: boostedPts[boostedPts.length - 1],
+      endBase: basePts[basePts.length - 1],
+      endStress: stressPts[stressPts.length - 1],
+    };
+  }, [metrics]);
 
   return (
     <div className="bg-white p-5 sm:p-8 space-y-6">
       {/* Header Bar */}
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-900 text-white">
+          <div className="flex items-center gap-2.5">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-slate-950 text-emerald-400 shadow-xs">
               <Activity className="h-4 w-4" />
             </span>
-            <h2 className="text-lg font-bold text-slate-900">
-              {lang === "tr"
-                ? "Canlı Piyasa Anomali Tarayıcısı & Pozisyon Risk Terminali"
-                : "Live Market Scanner & Position Risk Terminal"}
-            </h2>
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">
+                {lang === "tr"
+                  ? "Canlı Piyasa Radarı & Kasa Büyüme Simülatörü"
+                  : "Live Market Scanner & Wealth Curve Simulator"}
+              </h2>
+              <p className="text-xs text-slate-500">
+                {lang === "tr"
+                  ? "Canlı 24s fiyat kırılımlarını yakala, işlem riskini hesapla ve ekstre tasarruflarının 20 işlem sonu kasa eğrine etkisini izle."
+                  : "Scan real-time 24h range breakouts, size risk deterministically, and project how recovered statement leaks accelerate your equity curve."}
+              </p>
+            </div>
           </div>
-          <p className="mt-1 text-xs text-slate-500">
-            {lang === "tr"
-              ? "Anlık 24s fiyat/aralık taraması yap, varlık seç ve işlem başına kasa riskini kuruşu kuruşuna hesapla."
-              : "Scan real-time 24h range momentum, click any pair, and deterministically size your risk & stop-loss."}
-          </p>
         </div>
 
         <div className="flex items-center gap-2.5 shrink-0">
           <span
-            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold ${
               feedSource === "live"
                 ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                 : "border-slate-200 bg-slate-50 text-slate-600"
@@ -324,13 +442,13 @@ export default function MarketRiskTerminal({ lang }: { lang: AppLang }) {
           >
             <span
               className={`h-1.5 w-1.5 rounded-full ${
-                feedSource === "live" ? "bg-emerald-500" : "bg-slate-400"
+                feedSource === "live" ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
               }`}
             />
             {feedSource === "live"
               ? `${lang === "tr" ? "Canlı Akış" : "Live Feed"} · ${lastUpdatedLabel}`
               : lang === "tr"
-                ? "Referans Veri"
+                ? "Referans Akış"
                 : "Baseline Feed"}
           </span>
 
@@ -338,11 +456,180 @@ export default function MarketRiskTerminal({ lang }: { lang: AppLang }) {
             type="button"
             onClick={() => void fetchLiveFeed()}
             disabled={isRefreshing}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
-            {lang === "tr" ? "Veriyi Yenile" : "Refresh"}
+            {lang === "tr" ? "Yenile" : "Refresh"}
           </button>
+        </div>
+      </div>
+
+      {/* Interactive Obsidian SVG Equity & Leak-Compounding Chart Stage */}
+      <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 p-5 text-white shadow-xl">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">
+              {lang === "tr"
+                ? "İnteraktif Kasa & Bileşik Büyüme Projeksiyonu"
+                : "Interactive 20-Trade + Statement Leak Recovery Curve"}
+            </span>
+            <div className="mt-1 flex flex-wrap items-baseline gap-3">
+              <span className="mono-nums text-2xl font-extrabold text-white sm:text-3xl">
+                {formatUsd(metrics.combinedCapital)}
+              </span>
+              <span className="mono-nums text-xs font-semibold text-emerald-400">
+                +{formatUsd(metrics.combinedCapital - metrics.safeCapital)} (
+                {(((metrics.combinedCapital - metrics.safeCapital) / metrics.safeCapital) * 100).toFixed(1)}
+                %)
+              </span>
+            </div>
+          </div>
+
+          {/* Curve Legend Pills */}
+          <div className="flex flex-wrap items-center gap-3 text-[11px] font-medium">
+            <span className="inline-flex items-center gap-1.5 text-emerald-300">
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+              {lang === "tr" ? "Strateji + Ekstre Tasarrufu" : "Strategy + Leak Recovery"}
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-blue-300">
+              <span className="h-2.5 w-2.5 rounded-full bg-blue-400" />
+              {lang === "tr" ? "Baz Beklenti Eğrisi" : "Base Expectancy"}
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-rose-300">
+              <span className="h-2.5 w-2.5 rounded-full border border-rose-400" />
+              {lang === "tr" ? "4 Stop Stres Tabanı" : "4-Loss Stress Floor"}
+            </span>
+          </div>
+        </div>
+
+        {/* SVG Area & Line Visualization */}
+        <div className="mt-4 w-full">
+          <svg
+            viewBox="0 0 640 200"
+            className="h-44 w-full sm:h-52"
+            role="img"
+            aria-label="Portfolio and statement leak recovery curve"
+          >
+            <defs>
+              <linearGradient id="vaultBoostGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#10b981" stopOpacity="0.38" />
+                <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+              </linearGradient>
+            </defs>
+
+            {/* Horizontal Grid Lines */}
+            {[40, 90, 140, 182].map((yPos) => (
+              <line
+                key={yPos}
+                x1="14"
+                y1={yPos}
+                x2="626"
+                y2={yPos}
+                stroke="#1e293b"
+                strokeDasharray="4 4"
+                strokeWidth="1"
+              />
+            ))}
+
+            {/* Area & Curves */}
+            <path d={chartData.boostedArea} fill="url(#vaultBoostGrad)" />
+            <path
+              d={chartData.stressPath}
+              fill="none"
+              stroke="#f43f5e"
+              strokeWidth="2"
+              strokeDasharray="5 4"
+              opacity="0.85"
+            />
+            <path
+              d={chartData.basePath}
+              fill="none"
+              stroke="#60a5fa"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+            />
+            <path
+              d={chartData.boostedPath}
+              fill="none"
+              stroke="#34d399"
+              strokeWidth="3"
+              strokeLinecap="round"
+            />
+
+            {/* End Points */}
+            <circle cx={chartData.endStress.x} cy={chartData.endStress.y} r="4" fill="#f43f5e" />
+            <circle cx={chartData.endBase.x} cy={chartData.endBase.y} r="4.5" fill="#60a5fa" />
+            <circle
+              cx={chartData.endBoosted.x}
+              cy={chartData.endBoosted.y}
+              r="5.5"
+              fill="#34d399"
+              stroke="#022c22"
+              strokeWidth="2"
+            />
+          </svg>
+        </div>
+
+        {/* Interactive Statement-to-Portfolio Bridge Bar */}
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/90 px-4 py-2.5 text-xs">
+          <div className="text-slate-300">
+            {monthlyLeakSaved > 0 ? (
+              lang === "tr" ? (
+                <span>
+                  Aktif ekstreden tespit edilen aylık{" "}
+                  <strong className="text-emerald-400">
+                    {formatStatementMoney(monthlyLeakSaved, statementCurrency)}
+                  </strong>{" "}
+                  abonelik &amp; komisyon tasarrufunun 12 aylık katkısı (
+                  <strong className="text-white">+{formatUsd(metrics.leakBoost12Mo)}</strong>)
+                  eğriye eklendi.
+                </span>
+              ) : (
+                <span>
+                  Annualized{" "}
+                  <strong className="text-emerald-400">
+                    +{formatUsd(metrics.leakBoost12Mo)}
+                  </strong>{" "}
+                  from your active statement ({formatStatementMoney(monthlyLeakSaved, statementCurrency)}/mo
+                  leaks) is compounded into the green curve.
+                </span>
+              )
+            ) : lang === "tr" ? (
+              <span>
+                Banka PDF ekstreni yükle; kesilen abonelikler otomatik olarak bu kasa eğrisini
+                yukarı taşısın.
+              </span>
+            ) : (
+              <span>
+                Upload your bank PDF to inject recovered subscription &amp; bank fees directly into
+                this portfolio curve.
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {onJumpToConverter && (
+              <button
+                type="button"
+                onClick={onJumpToConverter}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1 text-[11px] font-semibold text-slate-200 hover:bg-slate-700 cursor-pointer"
+              >
+                <FileSpreadsheet className="h-3 w-3 text-blue-400" />
+                {lang === "tr" ? "Ekstre Yükle" : "Upload PDF"}
+              </button>
+            )}
+            {onJumpToAudit && (
+              <button
+                type="button"
+                onClick={onJumpToAudit}
+                className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/20 px-2.5 py-1 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/30 cursor-pointer"
+              >
+                <Shield className="h-3 w-3" />
+                {lang === "tr" ? "Kaçakları Kes" : "Cut Leaks"}
+                <ArrowRight className="h-3 w-3" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -353,7 +640,7 @@ export default function MarketRiskTerminal({ lang }: { lang: AppLang }) {
           <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
               {lang === "tr"
-                ? "24s Aralık & Hacim Taraması (Satıra Tıkla)"
+                ? "24s Aralık & Hacim Radarı (Satıra Tıkla)"
                 : "24h Range & Momentum Feed (Click Row to Size)"}
             </span>
             <span className="text-[11px] text-slate-500">Spot / USDT</span>
@@ -367,7 +654,7 @@ export default function MarketRiskTerminal({ lang }: { lang: AppLang }) {
                   <th className="px-4 py-2.5 text-right">{lang === "tr" ? "Fiyat" : "Price"}</th>
                   <th className="px-4 py-2.5 text-right">{lang === "tr" ? "24s %" : "24h %"}</th>
                   <th className="px-4 py-2.5">{lang === "tr" ? "24s Aralık Konumu" : "24h Range"}</th>
-                  <th className="px-4 py-2.5 text-right">{lang === "tr" ? "Durum" : "Signal"}</th>
+                  <th className="px-4 py-2.5 text-right">{lang === "tr" ? "Sinyal" : "Signal"}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -441,7 +728,7 @@ export default function MarketRiskTerminal({ lang }: { lang: AppLang }) {
                                 : "Dip Zone"
                               : asset.signal === "volatility"
                                 ? lang === "tr"
-                                  ? "Hacim/Oynaklık"
+                                  ? "Oynaklık"
                                   : "High Vol"
                                 : lang === "tr"
                                   ? "Kanal"
@@ -463,7 +750,7 @@ export default function MarketRiskTerminal({ lang }: { lang: AppLang }) {
               <Calculator className="h-4 w-4 text-blue-600" />
               <h3 className="text-sm font-bold text-slate-900">
                 {lang === "tr"
-                  ? `Kasa & Pozisyon Hesaplayıcı (${selectedSymbol})`
+                  ? `Kasa & Risk Hesaplayıcı (${selectedSymbol})`
                   : `Position Risk Engine (${selectedSymbol})`}
               </h3>
             </div>
@@ -472,7 +759,6 @@ export default function MarketRiskTerminal({ lang }: { lang: AppLang }) {
             </span>
           </div>
 
-          {/* Numeric Inputs Grid */}
           <div className="grid grid-cols-2 gap-3 text-xs">
             <div>
               <label className="block text-[11px] font-semibold text-slate-600">
@@ -480,7 +766,7 @@ export default function MarketRiskTerminal({ lang }: { lang: AppLang }) {
               </label>
               <input
                 type="number"
-                min={1}
+                min={100}
                 value={capital}
                 onChange={(e) => setCapital(Number(e.target.value) || 0)}
                 className="mono-nums mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-900 focus:border-blue-500 focus:outline-none"
@@ -489,16 +775,16 @@ export default function MarketRiskTerminal({ lang }: { lang: AppLang }) {
 
             <div>
               <label className="block text-[11px] font-semibold text-slate-600">
-                {lang === "tr" ? "İşlem Başı Risk (%)" : "Risk Per Trade (%)"}
+                {lang === "tr" ? `İşlem Riski: %${riskPct}` : `Risk Per Trade: ${riskPct}%`}
               </label>
               <input
-                type="number"
+                type="range"
                 step="0.25"
-                min={0.1}
-                max={25}
+                min={0.25}
+                max={10}
                 value={riskPct}
-                onChange={(e) => setRiskPct(Number(e.target.value) || 0.1)}
-                className="mono-nums mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-900 focus:border-blue-500 focus:outline-none"
+                onChange={(e) => setRiskPct(Number(e.target.value))}
+                className="mt-3 w-full accent-blue-600 cursor-pointer"
               />
             </div>
 
@@ -551,12 +837,11 @@ export default function MarketRiskTerminal({ lang }: { lang: AppLang }) {
                 max={85}
                 value={winRatePct}
                 onChange={(e) => setWinRatePct(Number(e.target.value))}
-                className="mt-3 w-full accent-blue-600 cursor-pointer"
+                className="mt-3 w-full accent-emerald-600 cursor-pointer"
               />
             </div>
           </div>
 
-          {/* Deterministic Results Summary */}
           <div className="grid grid-cols-2 gap-3 border-t border-slate-200 pt-4">
             <div className="rounded-xl border border-slate-200 bg-white p-3">
               <span className="block text-[10px] font-bold uppercase text-slate-500">
@@ -572,7 +857,7 @@ export default function MarketRiskTerminal({ lang }: { lang: AppLang }) {
 
             <div className="rounded-xl border border-slate-200 bg-white p-3">
               <span className="block text-[10px] font-bold uppercase text-slate-500">
-                {lang === "tr" ? "R:R & Max Stop Zararı" : "R:R & Max Stop Loss"}
+                {lang === "tr" ? "R:R & Stop Limiti" : "R:R & Stop Cap"}
               </span>
               <span className="mono-nums mt-1 block text-sm font-extrabold text-blue-700">
                 1 : {metrics.rrRatio.toFixed(2)}
@@ -601,14 +886,14 @@ export default function MarketRiskTerminal({ lang }: { lang: AppLang }) {
             >
               <span className="flex items-center gap-1 text-[10px] font-bold uppercase text-slate-600">
                 <TrendingUp className="h-3 w-3" />
-                {lang === "tr" ? "20 İşlem Sonu Kasa" : "20-Trade Expectancy"}
+                {lang === "tr" ? "20 İşlem Baz Kasa" : "20-Trade Expectancy"}
               </span>
               <span
                 className={`mono-nums mt-1 block text-sm font-extrabold ${
                   metrics.expectedValuePerTrade >= 0 ? "text-emerald-800" : "text-rose-800"
                 }`}
               >
-                {formatUsd(metrics.twentyTradeProjectedCapital)}
+                {formatUsd(metrics.twentyTradeBase)}
               </span>
               <span className="mono-nums text-[11px] text-slate-600">
                 EV: {metrics.expectedValuePerTrade >= 0 ? "+" : ""}

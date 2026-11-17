@@ -2,8 +2,9 @@
 
 import React, { useMemo, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, User } from "lucide-react";
+import { ChevronDown, Globe, User } from "lucide-react";
 import type { StoredLicenseProfile } from "@/lib/licensing";
+import { useAppLang } from "@/lib/useAppLang";
 
 const LICENSE_CHANGE_EVENT = "vaultsheet-license-changed";
 const LICENSE_PROFILE_STORAGE_KEY = "vaultsheet_license_profile_v1";
@@ -42,8 +43,9 @@ function getServerSnapshot(): string {
   return "";
 }
 
-export default function NavbarAuthButtons() {
+export default function NavbarAuthButtons({ dark = false }: { dark?: boolean }) {
   const router = useRouter();
+  const [lang, setLang] = useAppLang();
   const rawJson = useSyncExternalStore(
     subscribeStorage,
     getProfileSnapshot,
@@ -74,45 +76,105 @@ export default function NavbarAuthButtons() {
     window.dispatchEvent(new CustomEvent(name, { detail }));
   };
 
+  const langSwitch = (
+    <div
+      className={`inline-flex items-center rounded-lg p-0.5 text-[11px] font-bold border ${
+        dark
+          ? "border-slate-700/80 bg-slate-900/90 text-slate-300"
+          : "border-slate-200 bg-white text-slate-600"
+      }`}
+    >
+      <Globe className="ml-2 mr-1 h-3.5 w-3.5 opacity-60" />
+      <button
+        type="button"
+        onClick={() => setLang("tr")}
+        className={`rounded-md px-2 py-1 transition cursor-pointer ${
+          lang === "tr"
+            ? dark
+              ? "bg-white text-slate-950"
+              : "bg-slate-900 text-white"
+            : dark
+              ? "hover:text-white"
+              : "hover:text-slate-900"
+        }`}
+      >
+        TR
+      </button>
+      <button
+        type="button"
+        onClick={() => setLang("en")}
+        className={`rounded-md px-2 py-1 transition cursor-pointer ${
+          lang === "en"
+            ? dark
+              ? "bg-white text-slate-950"
+              : "bg-slate-900 text-white"
+            : dark
+              ? "hover:text-white"
+              : "hover:text-slate-900"
+        }`}
+      >
+        EN
+      </button>
+    </div>
+  );
+
   if (profile) {
     const isPaid = profile.plan === "pass_7d" || profile.plan === "pro_monthly";
     return (
-      <button
-        type="button"
-        onClick={() => triggerEvent("vaultsheet-open-account")}
-        className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold shadow-2xs transition ${
-          isPaid
-            ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-            : "border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100"
-        }`}
-      >
-        <User className="h-3.5 w-3.5" />
-        <span className="max-w-[140px] truncate">
-          {profile.customerName || profile.customerEmail || "My Account"}
-        </span>
-        <span className="hidden text-[11px] font-medium opacity-80 sm:inline">
-          &middot; {isPaid ? "Pro" : "Free (25 rows)"}
-        </span>
-        <ChevronDown className="h-3 w-3 opacity-70" />
-      </button>
+      <div className="flex items-center gap-2">
+        {langSwitch}
+        <button
+          type="button"
+          onClick={() => triggerEvent("vaultsheet-open-account")}
+          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold shadow-2xs transition cursor-pointer ${
+            isPaid
+              ? dark
+                ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25"
+                : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+              : dark
+                ? "border-blue-400/40 bg-blue-500/15 text-blue-200 hover:bg-blue-500/25"
+                : "border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100"
+          }`}
+        >
+          <User className="h-3.5 w-3.5" />
+          <span className="max-w-[140px] truncate">
+            {profile.customerName ||
+              profile.customerEmail ||
+              (lang === "tr" ? "Hesabım" : "My Account")}
+          </span>
+          <span className="hidden text-[11px] font-medium opacity-80 sm:inline">
+            &middot; {isPaid ? "Pro" : lang === "tr" ? "Ücretsiz" : "Free"}
+          </span>
+          <ChevronDown className="h-3 w-3 opacity-70" />
+        </button>
+      </div>
     );
   }
 
   return (
     <div className="flex items-center gap-2">
+      {langSwitch}
       <button
         type="button"
         onClick={() => triggerEvent("vaultsheet-open-auth", { mode: "login" })}
-        className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:text-slate-900"
+        className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
+          dark
+            ? "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 hover:text-white"
+            : "border-slate-300 bg-white text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900"
+        }`}
       >
-        Log In
+        {lang === "tr" ? "Giriş Yap" : "Log In"}
       </button>
       <button
         type="button"
         onClick={() => triggerEvent("vaultsheet-open-auth", { mode: "signup" })}
-        className="inline-flex items-center rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs transition hover:bg-blue-700"
+        className={`inline-flex items-center rounded-lg px-3.5 py-1.5 text-xs font-semibold shadow-xs transition cursor-pointer ${
+          dark
+            ? "bg-emerald-400 text-slate-950 hover:bg-emerald-300"
+            : "bg-blue-600 text-white hover:bg-blue-700"
+        }`}
       >
-        Sign Up Free
+        {lang === "tr" ? "Ücretsiz Başla" : "Sign Up Free"}
       </button>
     </div>
   );

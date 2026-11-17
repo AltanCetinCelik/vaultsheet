@@ -49,9 +49,9 @@ import MarketRiskTerminal from "@/components/MarketRiskTerminal";
 import {
   analyzeStatementForensics,
   generateLegalActionNotice,
-  type AppLang,
   type MoneyLeakItem,
 } from "@/lib/financialForensics";
+import { useAppLang } from "@/lib/useAppLang";
 import type {
   AccountType,
   CategoryName,
@@ -112,8 +112,6 @@ const HISTORY_STORAGE_KEY = "vaultsheet_history_v1";
 const HISTORY_CHANGE_EVENT = "vaultsheet-history-changed";
 const FREE_XLSX_STORAGE_KEY = "vaultsheet_free_xlsx_used_v1";
 const FREE_XLSX_CHANGE_EVENT = "vaultsheet-free-xlsx-changed";
-const LANG_STORAGE_KEY = "vaultsheet_lang_v1";
-const LANG_CHANGE_EVENT = "vaultsheet-lang-changed";
 
 interface CustomCategoryRule {
   id: string;
@@ -180,26 +178,6 @@ function loadRawFreeXlsxFlag(): string {
 
 function getServerFreeXlsxSnapshot(): string {
   return "0";
-}
-
-function subscribeLangStorage(onStoreChange: () => void) {
-  if (typeof window === "undefined") return () => {};
-  const handler = () => onStoreChange();
-  window.addEventListener("storage", handler);
-  window.addEventListener(LANG_CHANGE_EVENT, handler);
-  return () => {
-    window.removeEventListener("storage", handler);
-    window.removeEventListener(LANG_CHANGE_EVENT, handler);
-  };
-}
-
-function loadRawLang(): string {
-  if (typeof window === "undefined") return "en";
-  return window.localStorage.getItem(LANG_STORAGE_KEY) ?? "en";
-}
-
-function getServerLangSnapshot(): string {
-  return "en";
 }
 
 function subscribeLicenseStorage(onStoreChange: () => void) {
@@ -330,7 +308,7 @@ export default function ConverterWorkbench({
 }: ConverterWorkbenchProps) {
   const [activeSuiteModule, setActiveSuiteModule] = useState<
     "converter" | "market" | "audit"
-  >("converter");
+  >(contextBankName ? "converter" : "market");
   const [viewMode, setViewMode] = useState<"upload" | "results">("results");
   const [activePreset, setActivePreset] = useState<SamplePresetId>(defaultPreset);
   const [auditSubTab, setAuditSubTab] = useState<"leaks" | "tax" | "cashflow">("leaks");
@@ -397,18 +375,7 @@ export default function ConverterWorkbench({
     loadRawFreeXlsxFlag,
     getServerFreeXlsxSnapshot
   );
-  const rawLang = useSyncExternalStore(
-    subscribeLangStorage,
-    loadRawLang,
-    getServerLangSnapshot
-  );
-  const lang: AppLang = rawLang === "tr" ? "tr" : "en";
-
-  const setAppLang = useCallback((nextLang: AppLang) => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(LANG_STORAGE_KEY, nextLang);
-    window.dispatchEvent(new Event(LANG_CHANGE_EVENT));
-  }, []);
+  const [lang, setAppLang] = useAppLang();
 
   // Auth & Account modals
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -1403,8 +1370,8 @@ export default function ConverterWorkbench({
         }}
       />
 
-      {/* Minimalist Suite Pillar Switcher Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/90 px-4 py-3 sm:px-6">
+      {/* Minimalist Obsidian Suite Pillar Switcher Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-slate-900 px-4 py-3 text-white sm:px-6">
         <div
           role="tablist"
           aria-label="VaultSheet Suite Modules"
@@ -1413,39 +1380,39 @@ export default function ConverterWorkbench({
           <button
             type="button"
             role="tab"
-            aria-selected={activeSuiteModule === "converter"}
-            onClick={() => setActiveSuiteModule("converter")}
+            aria-selected={activeSuiteModule === "market"}
+            onClick={() => setActiveSuiteModule("market")}
             className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition cursor-pointer ${
-              activeSuiteModule === "converter"
-                ? "bg-slate-900 text-white shadow-xs"
-                : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+              activeSuiteModule === "market"
+                ? "bg-white text-slate-950 shadow-sm"
+                : "border border-slate-700/80 bg-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white"
             }`}
           >
-            <FileSpreadsheet
+            <Activity
               className={`h-3.5 w-3.5 ${
-                activeSuiteModule === "converter" ? "text-blue-400" : "text-blue-600"
+                activeSuiteModule === "market" ? "text-emerald-600" : "text-emerald-400"
               }`}
             />
-            <span>{lang === "tr" ? "PDF Ekstre Çevirici" : "PDF Converter"}</span>
+            <span>{lang === "tr" ? "Canlı Piyasa & Kasa Riski" : "Live Market & Wealth Curve"}</span>
           </button>
 
           <button
             type="button"
             role="tab"
-            aria-selected={activeSuiteModule === "market"}
-            onClick={() => setActiveSuiteModule("market")}
+            aria-selected={activeSuiteModule === "converter"}
+            onClick={() => setActiveSuiteModule("converter")}
             className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition cursor-pointer ${
-              activeSuiteModule === "market"
-                ? "bg-slate-900 text-white shadow-xs"
-                : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+              activeSuiteModule === "converter"
+                ? "bg-white text-slate-950 shadow-sm"
+                : "border border-slate-700/80 bg-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white"
             }`}
           >
-            <Activity
+            <FileSpreadsheet
               className={`h-3.5 w-3.5 ${
-                activeSuiteModule === "market" ? "text-emerald-400" : "text-emerald-600"
+                activeSuiteModule === "converter" ? "text-blue-600" : "text-blue-400"
               }`}
             />
-            <span>{lang === "tr" ? "Piyasa & Risk Terminali" : "Market & Risk Terminal"}</span>
+            <span>{lang === "tr" ? "PDF Ekstre → Excel / QBO" : "PDF Statement Converter"}</span>
           </button>
 
           <button
@@ -1455,40 +1422,39 @@ export default function ConverterWorkbench({
             onClick={() => setActiveSuiteModule("audit")}
             className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition cursor-pointer ${
               activeSuiteModule === "audit"
-                ? "bg-slate-900 text-white shadow-xs"
-                : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+                ? "bg-white text-slate-950 shadow-sm"
+                : "border border-slate-700/80 bg-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white"
             }`}
           >
             <Shield
               className={`h-3.5 w-3.5 ${
-                activeSuiteModule === "audit" ? "text-indigo-400" : "text-indigo-600"
+                activeSuiteModule === "audit" ? "text-indigo-600" : "text-indigo-400"
               }`}
             />
-            <span>{lang === "tr" ? "Kaçak, Vergi & Rapor" : "Leaks, Tax & Audit"}</span>
+            <span>{lang === "tr" ? "Para Kaçağı, Vergi & Dilekçe" : "Leaks, Tax & Legal Audit"}</span>
           </button>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Clean SVG Language Switcher */}
-          <div className="inline-flex items-center rounded-lg border border-slate-200 bg-white p-0.5 text-[11px] font-bold">
+          <div className="inline-flex items-center rounded-lg border border-slate-700 bg-slate-950 p-0.5 text-[11px] font-bold">
             <Globe className="ml-2 mr-1 h-3.5 w-3.5 text-slate-400" />
-            <button
-              type="button"
-              onClick={() => setAppLang("en")}
-              className={`rounded-md px-2 py-1 transition cursor-pointer ${
-                lang === "en" ? "bg-slate-900 text-white" : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              EN
-            </button>
             <button
               type="button"
               onClick={() => setAppLang("tr")}
               className={`rounded-md px-2 py-1 transition cursor-pointer ${
-                lang === "tr" ? "bg-slate-900 text-white" : "text-slate-600 hover:text-slate-900"
+                lang === "tr" ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"
               }`}
             >
               TR
+            </button>
+            <button
+              type="button"
+              onClick={() => setAppLang("en")}
+              className={`rounded-md px-2 py-1 transition cursor-pointer ${
+                lang === "en" ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"
+              }`}
+            >
+              EN
             </button>
           </div>
 
@@ -1498,15 +1464,15 @@ export default function ConverterWorkbench({
               onClick={() => setShowAccountModal(true)}
               className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
                 accountTier.isPaid
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-                  : "border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100"
+                  ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25"
+                  : "border-blue-400/40 bg-blue-500/15 text-blue-200 hover:bg-blue-500/25"
               }`}
             >
               <UserCheck className="h-3.5 w-3.5" />
               <span className="max-w-[120px] truncate">
                 {storedProfile?.customerName || storedProfile?.customerEmail || "Account"}
               </span>
-              <span className="opacity-75">&middot; {accountTier.isPaid ? "Pro" : "Free"}</span>
+              <span className="opacity-75">&middot; {accountTier.isPaid ? "Pro" : lang === "tr" ? "Ücretsiz" : "Free"}</span>
             </button>
           ) : (
             <div className="flex items-center gap-1.5">
@@ -1518,9 +1484,9 @@ export default function ConverterWorkbench({
                   setUpgradeReason("");
                   setShowAuthModal(true);
                 }}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-100 cursor-pointer"
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-700 cursor-pointer"
               >
-                <KeyRound className="h-3 w-3 text-slate-500" />
+                <KeyRound className="h-3 w-3 text-slate-400" />
                 {lang === "tr" ? "Giriş" : "Log In"}
               </button>
               <button
@@ -1531,10 +1497,10 @@ export default function ConverterWorkbench({
                   setUpgradeReason("");
                   setShowAuthModal(true);
                 }}
-                className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-2xs transition hover:bg-blue-700 cursor-pointer"
+                className="inline-flex items-center gap-1 rounded-lg bg-emerald-400 px-3 py-1.5 text-xs font-bold text-slate-950 transition hover:bg-emerald-300 cursor-pointer"
               >
                 <User className="h-3 w-3" />
-                {lang === "tr" ? "Ücretsiz Başla" : "Sign Up Free"}
+                {lang === "tr" ? "Ücretsiz Üye Ol" : "Sign Up Free"}
               </button>
             </div>
           )}
@@ -1549,9 +1515,17 @@ export default function ConverterWorkbench({
       )}
 
       {/* =========================================================================
-          MODULE 2: LIVE MARKET & POSITION RISK TERMINAL
+          MODULE 2: LIVE MARKET & POSITION RISK TERMINAL (WITH SVG WEALTH CURVE)
          ========================================================================= */}
-      {activeSuiteModule === "market" && <MarketRiskTerminal lang={lang} />}
+      {activeSuiteModule === "market" && (
+        <MarketRiskTerminal
+          lang={lang}
+          monthlyLeakSaved={forensics.savedMonthlyTotal}
+          statementCurrency={metadata.currency}
+          onJumpToConverter={() => setActiveSuiteModule("converter")}
+          onJumpToAudit={() => setActiveSuiteModule("audit")}
+        />
+      )}
 
       {/* =========================================================================
           MODULE 1: PDF STATEMENT CONVERTER (Focused, Clean, Zero Clutter)
