@@ -12,25 +12,16 @@ import {
   TrendingUp,
   Zap,
 } from "lucide-react";
-import ConverterWorkbench from "@/components/ConverterWorkbench";
+import MarketRiskTerminal from "@/components/MarketRiskTerminal";
 import NavbarAuthButtons from "@/components/NavbarAuthButtons";
 import { useAppLang } from "@/lib/useAppLang";
-import type { SeoBankEntry } from "@/lib/types";
 
 export interface FaqEntry {
   question: string;
   answer: string;
 }
 
-interface RegionCountItem {
-  region: string;
-  count: number;
-}
-
 interface HomeLandingClientProps {
-  totalBanks: number;
-  featuredBanks: SeoBankEntry[];
-  regionCounts: RegionCountItem[];
   passCheckout: string;
   proCheckout: string;
   faqsEn: FaqEntry[];
@@ -60,7 +51,7 @@ const FAQS_TR: FaqEntry[] = [
   {
     question: "Ücretsiz sürüm ile $12 / $29 Pro lisans arasındaki fark nedir?",
     answer:
-      "BTC, ETH, SOL, BNB ve PAXG (Altın) üzerinde 1H ve 4H zaman dilimlerinde 6-strateji backtesti, tüm risk kaydırıcıları ve 1 adet ücretsiz 36-kombinasyon Auto-Optimize taraması ücretsizdir. $12 7 Günlük Paket ve $29/yıl Pro lisans ise 10 varlığın tamamını (XRP, AVAX, DOGE, SUI, LINK), 15m scalping / 1D makro dilimleri, sınırsız Auto-Optimize ve CSV işlem dökümünü açar.",
+      "BTC, ETH, SOL, BNB ve PAXG (Altın) üzerinde 1H ve 4H zaman dilimlerinde 6-strateji backtesti, tüm risk kaydırıcıları ve 1 adet ücretsiz 36-kombinasyon Auto-Optimize taraması ücretsizdir. $12 7 Günlük Paket ve $29/yıl Pro lisans ise 12 varlıklı canlı Alpha Radar'ın tamamını (XRP, DOGE, AVAX, SUI, LINK, ADA, ARB), 15m scalping / 1D makro dilimleri, sınırsız Auto-Optimize ve CSV işlem dökümünü açar.",
   },
   {
     question: "Otomatik Yenileme (Auto-Renewal) tuzağı var mı?",
@@ -70,7 +61,6 @@ const FAQS_TR: FaqEntry[] = [
 ];
 
 export default function HomeLandingClient({
-  totalBanks,
   passCheckout,
   proCheckout,
   faqsEn,
@@ -145,9 +135,9 @@ export default function HomeLandingClient({
               </p>
             </div>
 
-            {/* Embedded Interactive Quant Backtester Terminal */}
+            {/* Embedded Standalone Quant Backtester & Alpha Radar */}
             <div id="workbench" className="mt-8 scroll-mt-20">
-              <ConverterWorkbench defaultPreset="garanti" />
+              <MarketRiskTerminal lang={lang} />
             </div>
           </div>
         </section>
@@ -283,8 +273,8 @@ COST Deduct (0.08% x 2 x leverage) round-trip fee`}
               </h2>
               <p className="mt-3 text-sm text-slate-400 sm:text-base">
                 {lang === "tr"
-                  ? "İlk 36-kombinasyon taramanı ve temel pariteleri tamamen ücretsiz dene. Tüm varlıklar, 15m/1D dilimler ve sınırsız optimizasyon için tek seferde yükselt."
-                  : "Test 6 strategies and your 1st 36-combination Auto-Optimize sweep completely free. Unlock all 10 pairs, 15m/1D timeframes, and CSV export with one-time passes."}
+                  ? "İlk 36-kombinasyon taramanı ve temel pariteleri tamamen ücretsiz dene. 12 varlıklı Alpha Radar, 15m/1D dilimler ve sınırsız optimizasyon için tek seferde yükselt."
+                  : "Test 6 strategies and your 1st 36-combination Auto-Optimize sweep completely free. Unlock all 12 pairs, 15m/1D timeframes, and CSV export with one-time passes."}
               </p>
             </div>
 
@@ -364,15 +354,15 @@ COST Deduct (0.08% x 2 x leverage) round-trip fee`}
                   </div>
                   <p className="mt-2 text-sm text-slate-400">
                     {lang === "tr"
-                      ? "Tüm 10 varlık, 15m/1D zaman dilimleri ve sınırsız 36-kombinasyon taraması."
-                      : "Full access to all 10 coins, 15m scalping / 1D macro bars & unlimited optimizations."}
+                      ? "12 varlıklı Alpha Radar, 15m/1D zaman dilimleri ve sınırsız 36-kombinasyon taraması."
+                      : "Full access to all 12 coins, 15m scalping / 1D macro bars & unlimited optimizations."}
                   </p>
                   <ul className="mt-6 space-y-3 text-sm text-slate-200">
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-400 shrink-0" />
                       {lang === "tr"
-                        ? "10 varlığın tamamı (XRP, AVAX, DOGE, SUI, LINK dahil)"
-                        : "All 10 assets including XRP, AVAX, DOGE, SUI & LINK"}
+                        ? "12 varlığın tamamı (XRP, DOGE, AVAX, SUI, LINK, ADA, ARB)"
+                        : "All 12 assets including XRP, DOGE, AVAX, SUI, LINK, ADA & ARB"}
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-400 shrink-0" />
@@ -430,8 +420,8 @@ COST Deduct (0.08% x 2 x leverage) round-trip fee`}
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-400 shrink-0" />
                       {lang === "tr"
-                        ? "Tüm ekstre PDF → Excel/QBO & Kaçak araçları dahil"
-                        : "Full PDF Statement Converter & Audit tools also included"}
+                        ? "Çoklu Zaman Dilimi Alpha Tarayıcı & Kopyalanabilir Emir Bileti"
+                        : "Multi-Timeframe Alpha Scanner & Copyable Order Setup"}
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-400 shrink-0" />
@@ -494,9 +484,6 @@ COST Deduct (0.08% x 2 x leverage) round-trip fee`}
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-5">
-            <Link href="/convert" className="hover:text-white transition-colors">
-              {lang === "tr" ? `Ekstre Araçları (${totalBanks})` : `Statement Tools (${totalBanks})`}
-            </Link>
             <Link href="/privacy" className="hover:text-white transition-colors">
               {lang === "tr" ? "Gizlilik" : "Privacy"}
             </Link>

@@ -1,6 +1,5 @@
 import HomeLandingClient, { type FaqEntry } from "@/components/HomeLandingClient";
 import { CHECKOUT_URLS } from "@/lib/licensing";
-import { SEO_BANKS } from "@/lib/seoCatalog";
 
 const HOME_FAQS_EN: FaqEntry[] = [
   {
@@ -26,7 +25,7 @@ const HOME_FAQS_EN: FaqEntry[] = [
   {
     question: "What is included Free vs. 7-Day Pass & Annual Pro?",
     answer:
-      "Full 6-strategy backtests on BTC, ETH, SOL, BNB, and PAXG Gold (1H & 4H) plus 1 free 36-setup Auto-Optimize sweep are free. Upgrading to the $12 7-Day Pass or $29/year Annual Pro unlocks all 10 assets, 15m/1D bars, unlimited optimizations, and CSV trade exports.",
+      "Full 6-strategy backtests on BTC, ETH, SOL, BNB, and PAXG Gold (1H & 4H) plus 1 free 36-setup Auto-Optimize sweep are free. Upgrading to the $12 7-Day Pass or $29/year Annual Pro unlocks all 12 Alpha Radar assets, 15m/1D bars, unlimited optimizations, and CSV trade exports.",
   },
   {
     question: "Are there any recurring auto-renewal charges?",
@@ -35,25 +34,7 @@ const HOME_FAQS_EN: FaqEntry[] = [
   },
 ];
 
-const FEATURED_SLUGS = [
-  "chase-pdf-to-excel",
-  "wise-pdf-to-excel",
-  "mercury-pdf-to-excel",
-  "revolut-pdf-to-excel",
-];
-
-const REGION_COUNTS = (["US", "UK", "EU", "Canada", "Australia", "Global", "Format"] as const).map(
-  (region) => ({
-    region,
-    count: SEO_BANKS.filter((b) => b.region === region).length,
-  })
-);
-
 export default function HomePage() {
-  const featuredBanks = FEATURED_SLUGS.map((slug) =>
-    SEO_BANKS.find((entry) => entry.slug === slug)
-  ).filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
-
   const passCheckout =
     CHECKOUT_URLS.pass7Day === "#pricing" ? "#workbench" : CHECKOUT_URLS.pass7Day;
   const proCheckout =
@@ -81,18 +62,18 @@ export default function HomePage() {
       step: [
         {
           "@type": "HowToStep",
-          name: "Pick an asset and timeframe",
-          text: "Select BTC, ETH, SOL, BNB, PAXG Gold, or Pro altcoins across 15m, 1H, 4H, or 1D real candle feeds.",
+          name: "Pick an asset from the 12-Asset Alpha Radar",
+          text: "Scan BTC, ETH, SOL, BNB, PAXG Gold, and Pro altcoins across 15m, 1H, 4H, or 1D real candle feeds.",
         },
         {
           "@type": "HowToStep",
-          name: "Inspect the 6-strategy tournament leaderboard",
-          text: "Compare Net Profit %, Alpha vs. Buy & Hold, Win Rate, Profit Factor, and Max Drawdown across all 6 engines simultaneously.",
+          name: "Inspect the OHLC candlestick chart and 6-strategy tournament",
+          text: "Hover any candle for exact Buy/TP/SL markers and compare Net Profit %, Win Rate, Profit Factor, and Max Drawdown across all 6 algorithms.",
         },
         {
           "@type": "HowToStep",
           name: "Run the 36-setup Auto-Optimizer",
-          text: "Sweep 36 SL/TP and strategy pairings in under 25ms to surface optimal risk-adjusted parameters and live entry/SL/TP levels.",
+          text: "Sweep 36 SL/TP and strategy pairings in under 25ms to surface optimal risk-adjusted parameters and actionable order levels.",
         },
       ],
     },
@@ -105,9 +86,6 @@ export default function HomePage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(homeSchemas) }}
       />
       <HomeLandingClient
-        totalBanks={SEO_BANKS.length}
-        featuredBanks={featuredBanks}
-        regionCounts={REGION_COUNTS}
         passCheckout={passCheckout}
         proCheckout={proCheckout}
         faqsEn={HOME_FAQS_EN}

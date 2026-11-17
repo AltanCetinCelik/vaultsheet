@@ -74,6 +74,29 @@ export interface BacktestResult {
   activeEntryPrice: number | null;
   suggestedStopPrice: number;
   suggestedTargetPrice: number;
+  overlayUpper: number[];
+  overlayLower: number[];
+  overlayLabel: string;
+}
+
+export interface CoinRadarRow {
+  symbol: string;
+  base: string;
+  price: number;
+  change24hPct: number;
+  bestStrategyId: StrategyId;
+  bestStrategyNameTr: string;
+  bestStrategyNameEn: string;
+  netProfitPct: number;
+  winRatePct: number;
+  profitFactor: number;
+  maxDrawdownPct: number;
+  totalTrades: number;
+  currentSignal: "LONG" | "FLAT" | "ENTRY_NOW";
+  entryPrice: number;
+  stopPrice: number;
+  targetPrice: number;
+  proOnly?: boolean;
 }
 
 interface StrategyMeta {
@@ -140,6 +163,8 @@ const ASSET_BASE_PRICES: Record<string, number> = {
   SUIUSDT: 3.45,
   PAXGUSDT: 2640,
   LINKUSDT: 15.2,
+  ADAUSDT: 0.68,
+  ARBUSDT: 0.78,
 };
 
 const INTERVAL_MS: Record<TimeframeId, number> = {
@@ -367,6 +392,9 @@ export function runStrategyBacktest(
       activeEntryPrice: null,
       suggestedStopPrice: 0,
       suggestedTargetPrice: 0,
+      overlayUpper: [],
+      overlayLower: [],
+      overlayLabel: "Indicator Bands",
     };
   }
 
@@ -596,6 +624,24 @@ export function runStrategyBacktest(
     }
   }
 
+  let overlayUpper: number[];
+  let overlayLower: number[];
+  let overlayLabel: string;
+
+  if (config.strategyId === "donchian_breakout") {
+    overlayUpper = dcEntry.priorHigh;
+    overlayLower = dcExit.priorLow;
+    overlayLabel = `Donchian (${Math.max(10, slowPeriod)}/${Math.max(5, Math.floor(slowPeriod / 2))})`;
+  } else if (config.strategyId === "bollinger_bounce") {
+    overlayUpper = bb.upper;
+    overlayLower = bb.lower;
+    overlayLabel = `Bollinger 2σ (${Math.max(12, slowPeriod)})`;
+  } else {
+    overlayUpper = emaFast;
+    overlayLower = emaSlow;
+    overlayLabel = `EMA (${fastPeriod}/${slowPeriod})`;
+  }
+
   return {
     strategyId: config.strategyId,
     nameTr: meta.nameTr,
@@ -619,6 +665,9 @@ export function runStrategyBacktest(
     activeEntryPrice,
     suggestedStopPrice,
     suggestedTargetPrice,
+    overlayUpper,
+    overlayLower,
+    overlayLabel,
   };
 }
 
@@ -695,4 +744,39 @@ export function optimizeStrategyConfig(
   }
 
   return { best, testedCount };
+}
+
+/**
+ * Evaluates a coin across the 6-strategy tournament (default 2.5% SL / 7% TP @ 2x)
+ * to rank active market signals across multiple assets rapidly.
+ */
+export function buildCoinRadarRow(
+  symbol: string,
+  base: string,
+  candles: OHLCVCandle[],
+  change24hPct: number,
+  proOnly = false
+): CoinRadarRow {
+  const { best } = optimizeStrategyConfig(candles, 10000, 2);
+  const lastPrice = candles[candles.length - 1]?.close ?? 0;
+
+  return {
+    symbol,
+    base,
+    price: lastPrice,
+    change24hPct,
+    bestStrategyId: best.strategyId,
+    bestStrategyNameTr: best.nameTr,
+    bestStrategyNameEn: best.nameEn,
+    netProfitPct: best.netProfitPct,
+    winRatePct: best.winRatePct,
+    profitFactor: best.profitFactor,
+    maxDrawdownPct: best.maxDrawdownPct,
+    totalTrades: best.totalTrades,
+    currentSignal: best.currentSignal,
+    entryPrice: best.activeEntryPrice ?? lastPrice,
+    stopPrice: best.suggestedStopPrice,
+    targetPrice: best.suggestedTargetPrice,
+    proOnly,
+  };
 }

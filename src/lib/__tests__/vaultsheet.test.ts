@@ -23,6 +23,7 @@ import {
   generateLegalActionNotice,
 } from "@/lib/financialForensics";
 import {
+  buildCoinRadarRow,
   generateFallbackCandles,
   optimizeStrategyConfig,
   runStrategyBacktest,
@@ -426,7 +427,21 @@ describe("Quantitative Backtester, 6-Strategy Tournament & Auto-Optimizer", () =
     expect(testedCount).toBe(36);
     expect(best.totalTrades).toBeGreaterThan(0);
     expect(best.equityCurve).toHaveLength(300);
+    expect(best.overlayUpper).toHaveLength(300);
+    expect(best.overlayLower).toHaveLength(300);
+    expect(best.overlayLabel.length).toBeGreaterThan(3);
     expect(best.suggestedStopPrice).toBeGreaterThan(0);
     expect(best.suggestedTargetPrice).toBeGreaterThan(best.suggestedStopPrice);
+  });
+
+  it("builds multi-coin Alpha Radar summaries cleanly", () => {
+    const btcCandles = generateFallbackCandles("BTCUSDT", "4h", 160);
+    const radar = buildCoinRadarRow("BTCUSDT", "BTC", btcCandles, 2.45, false);
+
+    expect(radar.symbol).toBe("BTCUSDT");
+    expect(radar.price).toBeGreaterThan(0);
+    expect(radar.totalTrades).toBeGreaterThan(0);
+    expect(radar.winRatePct).toBeGreaterThanOrEqual(0);
+    expect(radar.bestStrategyNameTr.length).toBeGreaterThan(3);
   });
 });
