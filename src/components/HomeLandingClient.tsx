@@ -3,14 +3,14 @@
 import Link from "next/link";
 import {
   Activity,
-  ArrowRight,
+  Award,
   Check,
-  CheckCircle2,
-  FileSpreadsheet,
   Lock,
-  Shield,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
+  TrendingUp,
+  Zap,
 } from "lucide-react";
 import ConverterWorkbench from "@/components/ConverterWorkbench";
 import NavbarAuthButtons from "@/components/NavbarAuthButtons";
@@ -38,41 +38,39 @@ interface HomeLandingClientProps {
 
 const FAQS_TR: FaqEntry[] = [
   {
-    question: "Banka PDF ekstrelerim gerçekten sunucuya gönderilmiyor mu?",
+    question: "Bu backtestler gerçek piyasa verisiyle mi çalışıyor?",
     answer:
-      "Kesinlikle hayır. VaultSheet PDF koordinat çözümleme, yerel Tesseract OCR, kuruş mutabakatı ve vergi/kaçak analizini tamamen tarayıcı belleğinde (RAM) çalıştırır. Wi-Fi kapalıyken veya Chrome DevTools -> Network sekmesi açıkken tek bayt veri çıkmadığını doğrulayabilirsin.",
+      "Evet. Seçtiğin varlık ve zaman dilimi (15m, 1H, 4H, 1D) için doğrudan canlı Binance API'sinden son 300 gerçek OHLCV mumu çekilir. Ağ erişimi olmayan ortamlarda deterministik piyasa simülasyon verisi otomatik yedek olarak devreye girer.",
   },
   {
-    question: "Piyasa & Kasa Riski Terminali ile Ekstre Röntgeni nasıl birlikte çalışıyor?",
+    question: "TradingView veya ChatGPT'den farkı nedir?",
     answer:
-      "Ekstre Denetim Stüdyosu'nda kestiğin tekrarlayan abonelik ve gizli banka masrafları otomatik olarak Canlı Piyasa Terminali'ndeki 20 işlem / 12 ay bileşik portföy büyüme eğrine eklenir. Tek bir işlem riski veya kazanma oranı kaydırıcısını oynatarak etkisini canlı görürsün.",
+      "ChatGPT geçmiş mumları çekip mum içi High/Low Stop-Loss ve Take-Profit ihlallerini bar bazında test edemez. TradingView'da ise Pine Script yazmadan tek tıkla 6 algoritmayı aynı anda yarıştırıp 36 SL/TP kombinasyonunu tarayan bir turnuva motoru yoktur.",
   },
   {
-    question: "Ücretsiz kullanım ile $12 / $29 Pro paket arasındaki fark nedir?",
+    question: "Motor komisyon ve mum içi Stop-Loss (SL) ihlallerini hesaba katıyor mu?",
     answer:
-      "Canlı Piyasa Tarayıcısı, Pozisyon Riski Motoru, Para Kaçağı & Vergi Kalkanı hesaplayıcıları, yasal iptal/iade dilekçesi üretimi ve ilk yüklediğin tam ekstre için 100 satıra kadar Excel (.xlsx) indirme tamamen ücretsizdir. $12 7 Günlük Paket ve $29/yıl Pro lisans ise sınırsız satır, çoklu PDF birleştirme, sınırsız Excel/QuickBooks (.QBO) ve CPA Denetim PDF çıktısını açar.",
+      "Evet. Her işlemde gidiş-dönüş borsa komisyonu düşülür ve pozisyon açıldıktan sonraki her mumda önce mumun Low değerinin Stop-Loss'u, ardından High değerinin Take-Profit'i vurup vurmadığı kontrol edilir.",
   },
   {
-    question: "Taranmış (resim) veya şifreli banka PDF'lerini okuyabiliyor mu?",
+    question: "Borsa API anahtarımı girmem gerekiyor mu?",
     answer:
-      "Evet. Şifreli bir ekstre attığında yerel şifre çözme penceresi açılır; metin katmanı olmayan taranmış veya kamera çekimi PDF'lerde ise sunucuya yüklemeden tarayıcı içi yerel OCR (Türkçe + İngilizce) motoru devreye girer.",
+      "Kesinlikle hayır. VaultSheet salt okunur piyasa verilerini tarayıcına çeker ve tüm hesaplamaları kendi cihazının belleğinde (RAM) çalıştırır. Hiçbir cüzdan bağlantısı veya borsa API anahtarı istenmez.",
   },
   {
-    question: "Türk bankaları ve uluslararası kurumlarla uyumlu mu?",
+    question: "Ücretsiz sürüm ile $12 / $29 Pro lisans arasındaki fark nedir?",
     answer:
-      "Garanti BBVA, İş Bankası, Yapı Kredi, Akbank, Ziraat, Enpara/QNB dahil TRY/TL ekstrelerin (B)/(A), Devreden Bakiye ve GG.AA.YYYY formatlarının yanı sıra Chase, Wise, Mercury, Revolut, HSBC gibi 64+ global bankayı otomatik normalleştirir.",
+      "BTC, ETH, SOL, BNB ve PAXG (Altın) üzerinde 1H ve 4H zaman dilimlerinde 6-strateji backtesti, tüm risk kaydırıcıları ve 1 adet ücretsiz 36-kombinasyon Auto-Optimize taraması ücretsizdir. $12 7 Günlük Paket ve $29/yıl Pro lisans ise 10 varlığın tamamını (XRP, AVAX, DOGE, SUI, LINK), 15m scalping / 1D makro dilimleri, sınırsız Auto-Optimize ve CSV işlem dökümünü açar.",
   },
   {
-    question: "6502 TKHK ve BDDK iptal / ücret iade dilekçeleri nasıl üretiliyor?",
+    question: "Otomatik Yenileme (Auto-Renewal) tuzağı var mı?",
     answer:
-      "Kaçak, Vergi & Rapor modülünde tespit edilen herhangi bir abonelik veya EFT/işletim masrafı için Dilekçe Üret butonuna bastığında banka adı, hesap son 4 hanesi, işlem tutarı ve tarih otomatik doldurularak kopyalanabilir ve .txt olarak indirilebilir resmi metin hazırlanır.",
+      "Hayır. $12 7 Günlük Paket ve $29 Yıllık Pro tamamen tek seferlik geçiştir. Süren bittiğinde kartından haberin olmadan para çekilmez.",
   },
 ];
 
 export default function HomeLandingClient({
   totalBanks,
-  featuredBanks,
-  regionCounts,
   passCheckout,
   proCheckout,
   faqsEn,
@@ -81,28 +79,28 @@ export default function HomeLandingClient({
   const faqs = lang === "tr" ? FAQS_TR : faqsEn;
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f8fafc] text-slate-900">
+    <div className="min-h-screen flex flex-col bg-[#050811] text-slate-100">
       {/* Obsidian-Glass Sticky Header */}
-      <header className="sticky top-0 z-40 border-b border-slate-800/90 bg-slate-950/95 text-white backdrop-blur-xl">
+      <header className="sticky top-0 z-40 border-b border-slate-800/80 bg-[#050811]/90 text-white backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6 lg:px-8">
           <Link href="/" className="flex items-center gap-2.5 group">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-blue-600 text-slate-950 shadow-sm transition group-hover:scale-105">
               <ShieldCheck className="h-4 w-4 stroke-[2.5]" />
             </span>
             <span className="text-base font-bold tracking-tight text-white">
-              VaultSheet
+              VaultSheet <span className="text-emerald-400 font-semibold text-xs">Quant</span>
             </span>
           </Link>
 
           <nav className="hidden md:flex items-center gap-6 text-xs font-semibold text-slate-300">
             <a href="#workbench" className="hover:text-white transition-colors">
-              {lang === "tr" ? "Çalışma Alanı" : "Workspace"}
+              {lang === "tr" ? "Backtest Terminali" : "Backtest Terminal"}
             </a>
-            <Link href="/convert" className="hover:text-white transition-colors">
-              {totalBanks} {lang === "tr" ? "Banka" : "Banks"}
-            </Link>
+            <a href="#engines" className="hover:text-white transition-colors">
+              {lang === "tr" ? "6 Algoritma" : "6 Algorithms"}
+            </a>
             <a href="#security" className="hover:text-white transition-colors">
-              {lang === "tr" ? "Gizlilik Kanıtı" : "Privacy Proof"}
+              {lang === "tr" ? "Deterministik Motor" : "Verification"}
             </a>
             <a href="#pricing" className="hover:text-white transition-colors">
               {lang === "tr" ? "Fiyatlandırma" : "Pricing"}
@@ -119,306 +117,274 @@ export default function HomeLandingClient({
       </header>
 
       <main className="flex-1">
-        {/* Deep Obsidian Glow Hero + Live 3-Engine Workbench */}
-        <section className="relative overflow-hidden border-b border-slate-800 bg-slate-950 text-white">
+        {/* Deep Obsidian Glow Hero + Quant Terminal */}
+        <section className="relative overflow-hidden border-b border-slate-800/80 bg-[#050811]">
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 top-0 h-[520px] bg-[radial-gradient(ellipse_75%_55%_at_50%_-10%,rgba(16,185,129,0.18),rgba(37,99,235,0.12)_50%,transparent_80%)]"
+            className="pointer-events-none absolute inset-x-0 top-0 h-[560px] bg-[radial-gradient(ellipse_75%_55%_at_50%_-10%,rgba(16,185,129,0.20),rgba(37,99,235,0.14)_50%,transparent_80%)]"
           />
-          <div className="relative mx-auto max-w-7xl px-4 pt-10 pb-14 sm:px-6 lg:px-8 lg:pt-14">
+          <div className="relative mx-auto max-w-7xl px-4 pt-9 pb-14 sm:px-6 lg:px-8 lg:pt-12">
             <div className="mx-auto max-w-4xl text-center">
               <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1 text-[11px] font-bold uppercase tracking-widest text-emerald-300">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 {lang === "tr"
-                  ? "VaultSheet Suite · %100 Yerel Gizlilik · 3 Finansal Motor Tek Çatıda"
-                  : "VaultSheet Suite · 100% Local Privacy · 3 Engines Under One Roof"}
+                  ? "VaultSheet Quant · 300 Canlı Mum · 6 Algoritma · 36 Otomatik Test"
+                  : "VaultSheet Quant · 300 Live Candles · 6 Algorithms · 36-Setup Sweep"}
               </span>
 
               <h1 className="mt-4 text-3xl font-extrabold tracking-tight text-white sm:text-5xl sm:leading-[1.08]">
                 {lang === "tr"
-                  ? "Paranı Yönet, Kaçakları Kes, Ekstrelerini Saniyeler İçinde Denetle"
-                  : "Size Your Market Risk, Cut Hidden Money Leaks & Reconcile Any Bank PDF"}
+                  ? "Tahmin Etmeyi Bırak — 6 Algoritmayı Gerçek Mumlarda Saniyede Backtest Et"
+                  : "Stop Guessing — Backtest & Auto-Optimize 6 Quant Strategies on Live Candles in Seconds"}
               </h1>
 
               <p className="mx-auto mt-4 max-w-2xl text-sm text-slate-300 sm:text-base leading-relaxed">
                 {lang === "tr"
-                  ? "Canlı 24s piyasa radarı ve kasa risk simülatörü, kuruşu kuruşuna PDF → Excel/QBO çevirici (yerel OCR + şifre çözme), %20 KDV & vergi kalkanı ve 6502/BDDK dilekçe motoru tarayıcında çalışır."
-                  : "Live 24h market breakout scanner & position risk curve, cent-reconciled PDF → Excel/QBO converter (local OCR + password unlock), KDV/Tax write-off shield, and legal demand engine inside browser RAM."}
+                  ? "Canlı 300 OHLCV mum verisi üstünde Donchian, Dual EMA, Wilder RSI, Bollinger, MACD ve Hacim Kırılımı stratejilerini mum içi Stop-Loss / TP + komisyon dahil yarıştır. En kârlı SL/TP ayarını tek tıkla 25 ms'de bul."
+                  : "Compete Donchian, Dual EMA, Wilder RSI, Bollinger, MACD & Volume Spike on 300 live OHLCV bars with intrabar SL/TP and exchange fees. Sweep 36 parameter combinations in 25ms."}
               </p>
             </div>
 
-            {/* Embedded Live Suite */}
+            {/* Embedded Interactive Quant Backtester Terminal */}
             <div id="workbench" className="mt-8 scroll-mt-20">
               <ConverterWorkbench defaultPreset="garanti" />
             </div>
           </div>
         </section>
 
-        {/* 3 Core Suite Pillars Overview */}
-        <section id="how-it-works" className="border-b border-slate-200 bg-white py-14">
+        {/* 3 Quant Pillars Section */}
+        <section id="engines" className="border-b border-slate-800/80 bg-[#070B14] py-16 scroll-mt-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="grid gap-6 md:grid-cols-3">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-6 transition hover:border-emerald-300 hover:bg-white hover:shadow-md">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950 text-emerald-400">
+            <div className="mx-auto max-w-2xl text-center">
+              <p className="text-xs font-bold uppercase tracking-widest text-emerald-400">
+                {lang === "tr" ? "Nicel Motor Mimarisi" : "Quantitative Architecture"}
+              </p>
+              <h2 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                {lang === "tr"
+                  ? "Kod Yazmadan Kurumsal Seviye Backtest ve Sinyal Optimizasyonu"
+                  : "Institutional Backtesting & Parameter Sweeps Without Writing Pine Script"}
+              </h2>
+            </div>
+
+            <div className="mt-10 grid gap-6 md:grid-cols-3">
+              <div className="rounded-2xl border border-slate-800 bg-[#0B1120] p-6 transition hover:border-emerald-500/40">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                  <Award className="h-5 w-5" />
+                </div>
+                <h3 className="mt-4 text-base font-bold text-white">
+                  {lang === "tr"
+                    ? "1. 6-Strateji Performans Ligi"
+                    : "1. 6-Strategy Quant Tournament"}
+                </h3>
+                <p className="mt-2 text-xs text-slate-400 leading-relaxed">
+                  {lang === "tr"
+                    ? "Donchian Kırılımı, Dual EMA, Wilder RSI, Bollinger Alt Bant, MACD İvme ve Balina Hacim algoritmaları aynı anda çalıştırılır; Net Kâr, Alpha, Profit Factor ve Max Drawdown'a göre sıralanır."
+                    : "Runs Donchian, Dual EMA, Wilder RSI, Bollinger, MACD, and Volume Spike simultaneously on identical candles—ranking the true winner by risk-adjusted return and Profit Factor."}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-800 bg-[#0B1120] p-6 transition hover:border-blue-500/40">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/15 text-blue-400 border border-blue-500/30">
+                  <Zap className="h-5 w-5" />
+                </div>
+                <h3 className="mt-4 text-base font-bold text-white">
+                  {lang === "tr"
+                    ? "2. 36 Kombinasyon Auto-Optimizer"
+                    : "2. 36-Setup Auto-Optimizer"}
+                </h3>
+                <p className="mt-2 text-xs text-slate-400 leading-relaxed">
+                  {lang === "tr"
+                    ? "Hangi Stop-Loss (%1.5–%4) ve Take-Profit (%4–%12) oranının o coinde en az erimeyle en yüksek getiriyi verdiğini tahmin etme — 36 senaryoyu saniyede tarat."
+                    : "Stop guessing Stop-Loss or Take-Profit ratios. One click sweeps 36 strategy + SL/TP pairs in milliseconds to isolate the highest Sharpe and lowest Max Drawdown setup."}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-800 bg-[#0B1120] p-6 transition hover:border-indigo-500/40">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
                   <Activity className="h-5 w-5" />
                 </div>
-                <h2 className="mt-4 text-base font-bold text-slate-900">
+                <h3 className="mt-4 text-base font-bold text-white">
                   {lang === "tr"
-                    ? "1. Canlı Piyasa & Kasa Riski Terminali"
-                    : "1. Live Market & Wealth Curve Terminal"}
-                </h2>
-                <p className="mt-2 text-xs text-slate-600 leading-relaxed">
+                    ? "3. Canlı AL/SAT Noktaları & Kasa Eğrisi"
+                    : "3. Live Execution Markers & Equity Curve"}
+                </h3>
+                <p className="mt-2 text-xs text-slate-400 leading-relaxed">
                   {lang === "tr"
-                    ? "Anlık 24s fiyat bandı kırılımlarını ve dip bölgelerini tarar; R:R oranı, başabaş yüzdesi ve 20 işlem sonu bileşik portföy eğrisini hesaplar."
-                    : "Tracks live 24h range breakouts, oversold dip zones, and volatility spikes—then simulates exact position sizes, R:R ratios, and 20-trade compounded wealth curves."}
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-6 transition hover:border-blue-300 hover:bg-white hover:shadow-md">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white">
-                  <FileSpreadsheet className="h-5 w-5" />
-                </div>
-                <h2 className="mt-4 text-base font-bold text-slate-900">
-                  {lang === "tr"
-                    ? "2. Sıfır Hata PDF → Excel & QBO Çevirici"
-                    : "2. Zero-Upload PDF → Excel & QBO Engine"}
-                </h2>
-                <p className="mt-2 text-xs text-slate-600 leading-relaxed">
-                  {lang === "tr"
-                    ? "Dijital, taranmış (yerel Tesseract OCR) veya şifreli PDF'leri tarayıcı RAM'inde çözer. Orijinal sayfayla yan yana görüp ilk dosyanı ücretsiz .xlsx al."
-                    : "Decrypts password PDFs, runs browser-local Tesseract OCR on scans, checks Opening + Deposits − Withdrawals = Closing to 0.00 diff, and exports Excel (1st file free) or QBO."}
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-6 transition hover:border-indigo-300 hover:bg-white hover:shadow-md">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white">
-                  <Shield className="h-5 w-5" />
-                </div>
-                <h2 className="mt-4 text-base font-bold text-slate-900">
-                  {lang === "tr"
-                    ? "3. Kaçak Avcısı, Vergi Kalkanı & Dilekçe"
-                    : "3. Spend Leak, Tax Shield & Legal Studio"}
-                </h2>
-                <p className="mt-2 text-xs text-slate-600 leading-relaxed">
-                  {lang === "tr"
-                    ? "Sessiz SaaS aboneliklerini ve EFT masraflarını tespit eder; %20 KDV + GVK vergi kalkanını hesaplar ve tek tıkla 6502/BDDK iade ihtarnamesi üretir."
-                    : "Spots recurring SaaS & wire fee drains, models KDV (20%) & Schedule C / GVK write-offs, generates formal cancel/refund notices, and copies verified CPA audit reports."}
+                    ? "300 mum grafiği üzerinde her giriş, kârlı TP çıkışı ve SL noktasını nokta atışı gör; strateji kasa eğrisini Al-Tut getirisi ve güncel stop/hedef seviyeleriyle kıyasla."
+                    : "Inspect every Buy entry, TP win, and SL exit directly plotted on 300 real candles alongside live Strategy Equity vs. Buy & Hold trajectories and current SL/TP levels."}
                 </p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Security & Architecture Proof */}
-        <section id="security" className="border-b border-slate-200 bg-[#f8fafc] py-16 scroll-mt-20">
+        {/* Deterministic Math & API Safety Proof */}
+        <section id="security" className="border-b border-slate-800/80 bg-[#050811] py-16 scroll-mt-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="grid gap-6 lg:grid-cols-3">
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-2xs">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-100">
-                  <Lock className="h-5 w-5" />
-                </div>
-                <h3 className="mt-4 text-lg font-bold text-slate-900">
-                  {lang === "tr" ? "%100 Cihaz İçi Gizlilik" : "100% On-Device Privacy"}
-                </h3>
-                <p className="mt-2 text-sm text-slate-600 leading-relaxed">
-                  {lang === "tr"
-                    ? "Banka ekstrelerin asla bir bulut sunucusuna yüklenmez. Wi-Fi kapalıyken bile her satır tarayıcı belleğinde çözülür."
-                    : "Financial statements never touch a remote cloud server. Coordinate parsing and reconciliation run strictly inside local browser RAM."}
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-2xs">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100">
-                  <CheckCircle2 className="h-5 w-5" />
-                </div>
-                <h3 className="mt-4 text-lg font-bold text-slate-900">
-                  {lang === "tr"
-                    ? "Kuruşu Kuruşuna Matematik Mutabakatı"
-                    : "Automatic Cent-Level Reconciliation"}
-                </h3>
-                <p className="mt-2 text-sm text-slate-600 leading-relaxed">
-                  {lang === "tr"
-                    ? "ChatGPT gibi satır atlamaz veya rakam uydurmaz; Açılış + Giriş − Çıkış = Kapanış formülünü her işlemde doğrular."
-                    : "VaultSheet checks Opening Balance + Deposits − Withdrawals = Closing Balance row-by-row so you never import a broken ledger."}
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-2xs">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-900 border border-slate-200">
-                  <FileSpreadsheet className="h-5 w-5" />
-                </div>
-                <h3 className="mt-4 text-lg font-bold text-slate-900">
-                  {lang === "tr"
-                    ? "8 Muhasebe Formatı & CPA Sertifikası"
-                    : "8 Accounting Formats & CPA Certificate"}
-                </h3>
-                <p className="mt-2 text-sm text-slate-600 leading-relaxed">
-                  {lang === "tr"
-                    ? "3 sayfalı Excel (.xlsx), OL-222 hatasız QuickBooks (.qbo), Xero CSV, OFX, JSON ve denetime hazır PDF Audit Sertifikası üretir."
-                    : "Exports 3-sheet Excel workbooks (.xlsx), OL-222 compliant Web Connect .QBO, QuickBooks CSV, Xero CSV, OFX, JSON, and Audit Certificate PDFs."}
-                </p>
-              </div>
-            </div>
-
-            {/* Verifiable Local-Processing Proof Card */}
-            <div className="mt-8 grid items-center gap-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs sm:p-8 lg:grid-cols-2">
+            <div className="grid items-center gap-8 rounded-2xl border border-slate-800 bg-[#0B1120] p-6 sm:p-8 lg:grid-cols-2">
               <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-blue-600">
-                  {lang === "tr"
-                    ? "Chrome DevTools Üzerinden Doğrulanabilir"
-                    : "Verifiable In Chrome DevTools"}
+                <p className="text-xs font-bold uppercase tracking-widest text-emerald-400">
+                  {lang === "tr" ? "Borsa API Anahtarı Yok · Halüsinasyon Yok" : "Zero API Keys · Zero AI Hallucinations"}
                 </p>
-                <h3 className="mt-2 text-xl font-bold text-slate-900">
+                <h3 className="mt-2 text-2xl font-bold text-white">
                   {lang === "tr"
-                    ? "Gizliliğe Sadece Sözle Güvenme — Network Sekmesini Kendin Kontrol Et"
-                    : "Don't Take Privacy on Faith — Inspect the Network Tab Yourself"}
+                    ? "Non-Repainting Bar Simülasyonu & Sıfır Borsa Riski"
+                    : "Strict Intrabar SL/TP Execution in Your Browser"}
                 </h3>
-                <p className="mt-2.5 text-sm text-slate-600 leading-relaxed">
+                <p className="mt-3 text-sm text-slate-300 leading-relaxed">
                   {lang === "tr"
-                    ? "Chrome DevTools → Network sekmesini aç, istersen interneti kes ve çok sayfalı ekstreni sürükle. Sunucuya 0 bayt gider; tüm pdfjs ve Tesseract OCR işlemleri bilgisayarında çalışır."
-                    : "Open Chrome DevTools → Network tab, disconnect Wi-Fi if you want, and drop any PDF. Zero upload requests fire because coordinate extraction, OCR, and XLSX assembly run locally."}
+                    ? "Stratejiler geçmişe dönük yeniden boyama (repainting) yapmaz; mum açıldıktan sonra Low/High fitillerini sırayla kontrol eder, gidiş-dönüş komisyonu düşer ve borsa API anahtarını asla istemez."
+                    : "Indicators read prior closed bars with zero repainting. Every trade deducts round-trip exchange fees, checks intrabar Low/High stop/target triggers chronologically, and never touches your exchange credentials."}
                 </p>
+                <div className="mt-5 flex flex-wrap gap-3 text-xs text-slate-300">
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5">
+                    <SlidersHorizontal className="h-3.5 w-3.5 text-blue-400" />
+                    0.08% Fee/Side Deducted
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5">
+                    <Lock className="h-3.5 w-3.5 text-emerald-400" />
+                    No API Keys or Wallet Needed
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5">
+                    <TrendingUp className="h-3.5 w-3.5 text-indigo-400" />
+                    Intrabar SL / TP Priority
+                  </span>
+                </div>
               </div>
 
-              <div className="rounded-xl bg-slate-950 p-4 font-mono text-xs text-slate-200 shadow-inner">
+              <div className="rounded-xl border border-slate-800 bg-[#050811] p-4 font-mono text-xs text-slate-300 shadow-inner">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-2 text-[11px] text-slate-400">
-                  <span>DevTools &rarr; Network Filter: Fetch/XHR</span>
-                  <span className="text-emerald-400 font-semibold">0 bytes uploaded</span>
+                  <span>quantBacktester.ts &rarr; Intrabar Audit</span>
+                  <span className="text-emerald-400 font-semibold">36 Sweeps &lt; 25ms</span>
                 </div>
                 <pre className="mt-3 overflow-x-auto leading-relaxed text-[11px] text-slate-300">
-{`POST /api/upload-pdf        [NONE - Does Not Exist]
-POST /api/ocr-extract       [NONE - Local pdfjs + Tesseract]
-RAM  Statement Buffer   ->  100% In-Browser Parsing
-OUT  garanti-ekim.xlsx  ->  Local Blob Download`}
+{`GET  api.binance.com/api/v3/klines?limit=300
+RULE Non-repainting prior-bar Donchian / EMA / RSI / BB
+EXEC Check candle.low <= stopPrice  -> Exit SL (First)
+EXEC Check candle.high >= targetPrice -> Exit TP
+COST Deduct (0.08% x 2 x leverage) round-trip fee`}
                 </pre>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Pricing Section */}
-        <section id="pricing" className="border-b border-slate-200 bg-white py-16 scroll-mt-20">
+        {/* Quant Pricing Section */}
+        <section id="pricing" className="border-b border-slate-800/80 bg-[#070B14] py-16 scroll-mt-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-2xl text-center">
-              <p className="text-xs font-bold uppercase tracking-widest text-blue-600">
+              <p className="text-xs font-bold uppercase tracking-widest text-blue-400">
                 {lang === "tr" ? "Fiyatlandırma" : "Pricing"}
               </p>
-              <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+              <h2 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">
                 {lang === "tr"
-                  ? "Otomatik Yenileme Tuzağı Yok — Tek Seferlik Net Paketler"
-                  : "Simple, One-Time Passes — Zero Subscription Traps"}
+                  ? "Aylık Abonelik Tuzağı Yok — Tek Seferlik Net Erişim"
+                  : "Zero Subscription Traps — One-Time Quant Passes"}
               </h2>
-              <p className="mt-3 text-sm text-slate-600 sm:text-base">
+              <p className="mt-3 text-sm text-slate-400 sm:text-base">
                 {lang === "tr"
-                  ? "Piyasa terminali, kaçak/vergi röntgeni ve ilk tam Excel (.xlsx) ekstren ücretsiz. Sadece sınırsız toplu çıktı gerektiğinde yükselt."
-                  : "Use the Market Risk Terminal, Leak & Tax Studio, and export your 1st full Excel (.xlsx) statement free. Upgrade only for unlimited scale."}
+                  ? "İlk 36-kombinasyon taramanı ve temel pariteleri tamamen ücretsiz dene. Tüm varlıklar, 15m/1D dilimler ve sınırsız optimizasyon için tek seferde yükselt."
+                  : "Test 6 strategies and your 1st 36-combination Auto-Optimize sweep completely free. Unlock all 10 pairs, 15m/1D timeframes, and CSV export with one-time passes."}
               </p>
             </div>
 
             <div className="mt-10 grid gap-6 lg:grid-cols-3">
               {/* Free Tier */}
-              <div className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-7 shadow-2xs">
+              <div className="flex flex-col justify-between rounded-2xl border border-slate-800 bg-[#0B1120] p-7">
                 <div>
                   <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-bold text-slate-900">
+                    <h3 className="text-lg font-bold text-white">
                       {lang === "tr" ? "Ücretsiz Başlangıç" : "Free Starter"}
                     </h3>
-                    <span className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-600">
+                    <span className="rounded-md border border-slate-700 bg-slate-900 px-2.5 py-0.5 text-xs font-medium text-slate-300">
                       {lang === "tr" ? "Her Zaman $0" : "$0 Forever"}
                     </span>
                   </div>
                   <div className="mt-4 flex items-baseline gap-1">
-                    <span className="text-4xl font-extrabold text-slate-900 mono-nums">$0</span>
-                    <span className="text-sm text-slate-500">
+                    <span className="text-4xl font-extrabold text-white mono-nums">$0</span>
+                    <span className="text-sm text-slate-400">
                       {lang === "tr" ? "/ süresiz" : "forever"}
                     </span>
                   </div>
-                  <p className="mt-2 text-sm text-slate-600">
+                  <p className="mt-2 text-sm text-slate-400">
                     {lang === "tr"
-                      ? "Canlı Piyasa Terminali, Kaçak & Vergi Röntgeni ve 100 satıra kadar 1. tam Excel (.xlsx) çıktısı ücretsiz."
-                      : "Full Market & Risk Terminal, Spend Leak & Tax Studio, and your 1st full Excel (.xlsx) export free (up to 100 rows)."}
+                      ? "BTC, ETH, SOL, BNB ve Altın (PAXG) üzerinde canlı backtest + 1 adet ücretsiz Auto-Optimize taraması."
+                      : "Full 6-strategy backtests on BTC, ETH, SOL, BNB & PAXG (1H/4H) + 1 free 36-setup Auto-Optimize run."}
                   </p>
-                  <ul className="mt-6 space-y-3 text-sm text-slate-700">
+                  <ul className="mt-6 space-y-3 text-sm text-slate-300">
                     <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <Check className="h-4 w-4 text-emerald-400 shrink-0" />
+                      {lang === "tr"
+                        ? "5 ana varlıkta 300 mum canlı backtest"
+                        : "300-bar live backtest across 5 core pairs"}
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-emerald-400 shrink-0" />
                       <span>
                         <strong>
                           {lang === "tr"
-                            ? "1. tam Excel (.xlsx) çıktısı ücretsiz"
-                            : "1st full Excel (.xlsx) export free"}
-                        </strong>{" "}
-                        ({lang === "tr" ? "100 satıra kadar" : "up to 100 rows"})
+                            ? "1. 36-Kombinasyon Auto-Optimize ücretsiz"
+                            : "1st 36-Setup Auto-Optimize free"}
+                        </strong>
                       </span>
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <Check className="h-4 w-4 text-emerald-400 shrink-0" />
                       {lang === "tr"
-                        ? "Canlı Piyasa Tarayıcısı & Kasa Eğrisi Simülatörü"
-                        : "Live Market Scanner & Equity Curve Simulator"}
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-emerald-600 shrink-0" />
-                      {lang === "tr"
-                        ? "Vergi & KDV Kalkanı + 1 tıkla iptal/iade dilekçesi"
-                        : "Tax & VAT Shield + 1-click legal cancel/refund notices"}
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-emerald-600 shrink-0" />
-                      {lang === "tr"
-                        ? "Taranmış OCR & şifreli PDF yerel açma"
-                        : "Local Tesseract OCR & password-protected PDF unlock"}
+                        ? "Canlı AL/SAT noktaları & kasa eğrisi"
+                        : "Buy/TP/SL plot markers & equity curve"}
                     </li>
                   </ul>
                 </div>
                 <a
                   href="#workbench"
-                  className="mt-8 inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 transition-colors"
+                  className="mt-8 inline-flex items-center justify-center rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 transition-colors"
                 >
-                  {lang === "tr" ? "Hemen Ücretsiz Kullan" : "Launch Workspace Free"}
+                  {lang === "tr" ? "Terminalde Ücretsiz Dene" : "Launch Free Terminal"}
                 </a>
               </div>
 
-              {/* 7-Day Pass */}
-              <div className="flex flex-col justify-between rounded-2xl border-2 border-blue-600 bg-white p-7 shadow-lg shadow-blue-950/5">
+              {/* 7-Day Quant Pass */}
+              <div className="flex flex-col justify-between rounded-2xl border-2 border-emerald-400 bg-[#0B1120] p-7 shadow-xl shadow-emerald-950/30">
                 <div>
                   <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-bold text-slate-900">
-                      {lang === "tr" ? "7 Günlük Tam Yetki Paketi" : "7-Day Full Suite Pass"}
+                    <h3 className="text-lg font-bold text-white">
+                      {lang === "tr" ? "7 Günlük Quant Pro Paket" : "7-Day Quant Pass"}
                     </h3>
-                    <span className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-2.5 py-0.5 text-xs font-semibold text-white">
+                    <span className="inline-flex items-center gap-1 rounded-md bg-emerald-400 px-2.5 py-0.5 text-xs font-bold text-slate-950">
                       <Sparkles className="h-3 w-3" />{" "}
                       {lang === "tr" ? "En Popüler" : "Most Popular"}
                     </span>
                   </div>
                   <div className="mt-4 flex items-baseline gap-1">
-                    <span className="text-4xl font-extrabold text-slate-900 mono-nums">$12</span>
-                    <span className="text-sm text-slate-500">
+                    <span className="text-4xl font-extrabold text-white mono-nums">$12</span>
+                    <span className="text-sm text-slate-400">
                       {lang === "tr" ? "tek seferlik" : "one-time pass"}
                     </span>
                   </div>
-                  <p className="mt-2 text-sm text-slate-600">
+                  <p className="mt-2 text-sm text-slate-400">
                     {lang === "tr"
-                      ? "Vergi dönemi, kredi başvurusu veya yoğun muhasebe kapatmaları için otomatik yenilemesiz tam erişim."
-                      : "Built for quarterly close, mortgage underwriting, or tax sprints. No recurring billing."}
+                      ? "Tüm 10 varlık, 15m/1D zaman dilimleri ve sınırsız 36-kombinasyon taraması."
+                      : "Full access to all 10 coins, 15m scalping / 1D macro bars & unlimited optimizations."}
                   </p>
-                  <ul className="mt-6 space-y-3 text-sm text-slate-700">
+                  <ul className="mt-6 space-y-3 text-sm text-slate-200">
                     <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <Check className="h-4 w-4 text-emerald-400 shrink-0" />
                       {lang === "tr"
-                        ? "Sınırsız satır & çoklu aylık PDF birleştirme"
-                        : "Unlimited rows & multi-file PDF statement merge"}
+                        ? "10 varlığın tamamı (XRP, AVAX, DOGE, SUI, LINK dahil)"
+                        : "All 10 assets including XRP, AVAX, DOGE, SUI & LINK"}
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <Check className="h-4 w-4 text-emerald-400 shrink-0" />
                       {lang === "tr"
-                        ? "8 format (.XLSX, .QBO, Xero, OFX) + CPA Audit PDF"
-                        : "All 8 export formats + CPA Audit Certificate (.pdf)"}
+                        ? "15m, 1H, 4H, 1D tüm zaman dilimleri açık"
+                        : "Unlock 15m scalping & 1D swing timeframes"}
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <Check className="h-4 w-4 text-emerald-400 shrink-0" />
                       {lang === "tr"
-                        ? "Anında lisans anahtarı & e-posta aktivasyonu"
-                        : "Instant license key delivery (VS-...) via Polar"}
+                        ? "Sınırsız Auto-Optimize & İşlem Dökümü (.csv)"
+                        : "Unlimited Auto-Optimize sweeps & CSV trade export"}
                     </li>
                   </ul>
                 </div>
@@ -426,52 +392,52 @@ OUT  garanti-ekim.xlsx  ->  Local Blob Download`}
                   href={passCheckout}
                   target={passCheckout.startsWith("http") ? "_blank" : undefined}
                   rel={passCheckout.startsWith("http") ? "noopener noreferrer" : undefined}
-                  className="mt-8 inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-blue-700 transition-colors"
+                  className="mt-8 inline-flex items-center justify-center rounded-xl bg-emerald-400 px-4 py-2.5 text-sm font-bold text-slate-950 shadow-xs hover:bg-emerald-300 transition-colors"
                 >
-                  {lang === "tr" ? "7 Günlük Paket Al ($12)" : "Get 7-Day Pass ($12)"}
+                  {lang === "tr" ? "7 Günlük Quant Paketi Al ($12)" : "Get 7-Day Quant Pass ($12)"}
                 </a>
               </div>
 
               {/* Annual Pro */}
-              <div className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-7 shadow-2xs">
+              <div className="flex flex-col justify-between rounded-2xl border border-slate-800 bg-[#0B1120] p-7">
                 <div>
                   <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-bold text-slate-900">
-                      {lang === "tr" ? "Yıllık Pro Lisans" : "Annual Pro License"}
+                    <h3 className="text-lg font-bold text-white">
+                      {lang === "tr" ? "Yıllık Quant Pro Lisans" : "Annual Quant Pro"}
                     </h3>
-                    <span className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-600">
-                      {lang === "tr" ? "Müşavir & Ofisler" : "Firms & Traders"}
+                    <span className="rounded-md border border-slate-700 bg-slate-900 px-2.5 py-0.5 text-xs font-medium text-slate-300">
+                      {lang === "tr" ? "365 Gün Tam Erişim" : "Full Year"}
                     </span>
                   </div>
                   <div className="mt-4 flex items-baseline gap-1">
-                    <span className="text-4xl font-extrabold text-slate-900 mono-nums">$29</span>
-                    <span className="text-sm text-slate-500">
+                    <span className="text-4xl font-extrabold text-white mono-nums">$29</span>
+                    <span className="text-sm text-slate-400">
                       {lang === "tr" ? "/ yıl" : "/ year"}
                     </span>
                   </div>
-                  <p className="mt-2 text-sm text-slate-600">
+                  <p className="mt-2 text-sm text-slate-400">
                     {lang === "tr"
-                      ? "12 ay boyunca tek seferlik ödeme — yıl boyu defterler ve portföy yönetimi için."
-                      : "One-time annual pass — zero auto-renewal. Built for year-round books and risk discipline."}
+                      ? "12 ay tek seferlik ödeme — yıl boyu strateji optimizasyonu ve sınırsız kullanım."
+                      : "One-time annual pass — zero auto-renewal. Ideal for year-round systematic trading."}
                   </p>
-                  <ul className="mt-6 space-y-3 text-sm text-slate-700">
+                  <ul className="mt-6 space-y-3 text-sm text-slate-300">
                     <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <Check className="h-4 w-4 text-emerald-400 shrink-0" />
                       {lang === "tr"
-                        ? "7 Günlük Paketteki tüm özellikler 365 gün açık"
-                        : "Everything in 7-Day Pass unlocked for 12 full months"}
+                        ? "7 Günlük Paketteki tüm Pro özellikler 1 yıl açık"
+                        : "Everything in 7-Day Pass unlocked for 365 days"}
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <Check className="h-4 w-4 text-emerald-400 shrink-0" />
                       {lang === "tr"
-                        ? "Çoklu müşteri / şirket ticari kullanım lisansı"
-                        : "Commercial multi-client bookkeeping license"}
+                        ? "Tüm ekstre PDF → Excel/QBO & Kaçak araçları dahil"
+                        : "Full PDF Statement Converter & Audit tools also included"}
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <Check className="h-4 w-4 text-emerald-400 shrink-0" />
                       {lang === "tr"
-                        ? "Özel banka ekstre şablonları için öncelikli destek"
-                        : "Priority custom bank layout request turnaround"}
+                        ? "Anında VS-... lisans anahtarı & e-posta aktivasyonu"
+                        : "Instant Polar email activation & VS-... license key"}
                     </li>
                   </ul>
                 </div>
@@ -479,87 +445,23 @@ OUT  garanti-ekim.xlsx  ->  Local Blob Download`}
                   href={proCheckout}
                   target={proCheckout.startsWith("http") ? "_blank" : undefined}
                   rel={proCheckout.startsWith("http") ? "noopener noreferrer" : undefined}
-                  className="mt-8 inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-slate-800 transition-colors"
+                  className="mt-8 inline-flex items-center justify-center rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-slate-950 shadow-xs hover:bg-slate-200 transition-colors"
                 >
-                  {lang === "tr" ? "Yıllık Pro Al ($29/yıl)" : "Get Annual Pro Pass ($29/yr)"}
+                  {lang === "tr" ? "Yıllık Quant Pro Al ($29/yıl)" : "Get Annual Quant Pro ($29/yr)"}
                 </a>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Global Bank Directory Preview */}
-        <section className="bg-white py-16">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <h2 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-                  {lang === "tr"
-                    ? `${totalBanks} Küresel Banka ve Format İçin Özel Profiller`
-                    : `Dedicated Converters for ${totalBanks} Global Banks & Formats`}
-                </h2>
-                <p className="mt-2 text-sm text-slate-600">
-                  {lang === "tr"
-                    ? "ABD, İngiltere, Avrupa, Kanada, Avustralya ve Türk bankaları için hazır tarih, kur ve sütun tanıma ayarları."
-                    : "Pre-tuned date conventions, decimal separators, and column detection profiles across US, UK, EU, Canadian, Australian, and global fintech institutions."}
-                </p>
-              </div>
-              <Link
-                href="/convert"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-800 shadow-2xs hover:bg-slate-50 transition-colors shrink-0"
-              >
-                {lang === "tr"
-                  ? `${totalBanks} Bankanın Tamamını Gör`
-                  : `View All ${totalBanks} Converters`}
-                <ArrowRight className="h-3.5 w-3.5 text-blue-600" />
-              </Link>
-            </div>
-
-            <div className="mt-6 flex flex-wrap gap-2">
-              {regionCounts.map((item) => (
-                <Link
-                  key={item.region}
-                  href="/convert"
-                  className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-blue-300 hover:bg-blue-50/40 hover:text-slate-900 transition-colors"
-                >
-                  {item.region}: <span className="font-bold text-blue-600">{item.count}</span>
-                </Link>
-              ))}
-            </div>
-
-            <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {featuredBanks.map((bank) => (
-                <Link
-                  key={bank.slug}
-                  href={`/convert/${bank.slug}`}
-                  className="group rounded-xl border border-slate-200 bg-white p-5 shadow-2xs hover:border-blue-400 hover:shadow-md transition-all"
-                >
-                  <div className="flex items-center justify-between text-xs text-slate-500">
-                    <span className="font-medium">{bank.region}</span>
-                    <span className="mono-nums rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
-                      {bank.currency}
-                    </span>
-                  </div>
-                  <h3 className="mt-2.5 text-base font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
-                    {bank.bankName} &rarr; Excel &amp; QBO
-                  </h3>
-                  <p className="mt-1.5 text-xs text-slate-600 line-clamp-2">
-                    {bank.metaDescription}
-                  </p>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Bilingual FAQ Section */}
-        <section id="faq" className="border-t border-slate-200 bg-[#f8fafc] py-16 scroll-mt-20">
+        {/* Quant FAQ Section */}
+        <section id="faq" className="bg-[#050811] py-16 scroll-mt-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-2xl text-center">
-              <p className="text-xs font-bold uppercase tracking-widest text-blue-600">
+              <p className="text-xs font-bold uppercase tracking-widest text-emerald-400">
                 {lang === "tr" ? "Sık Sorulan Sorular" : "FAQ"}
               </p>
-              <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+              <h2 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">
                 {lang === "tr" ? "Merak Edilenler" : "Frequently Asked Questions"}
               </h2>
             </div>
@@ -568,10 +470,10 @@ OUT  garanti-ekim.xlsx  ->  Local Blob Download`}
               {faqs.map((faq) => (
                 <div
                   key={faq.question}
-                  className="rounded-2xl border border-slate-200 bg-white p-6 shadow-2xs"
+                  className="rounded-2xl border border-slate-800 bg-[#0B1120] p-6"
                 >
-                  <h3 className="text-sm font-bold text-slate-900">{faq.question}</h3>
-                  <p className="mt-2 text-xs text-slate-600 leading-relaxed">{faq.answer}</p>
+                  <h3 className="text-sm font-bold text-white">{faq.question}</h3>
+                  <p className="mt-2 text-xs text-slate-400 leading-relaxed">{faq.answer}</p>
                 </div>
               ))}
             </div>
@@ -579,44 +481,29 @@ OUT  garanti-ekim.xlsx  ->  Local Blob Download`}
         </section>
       </main>
 
-      <footer className="border-t border-slate-200 bg-white py-10">
-        <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+      <footer className="border-t border-slate-800/80 bg-[#050811] py-10">
+        <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 text-xs text-slate-400 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
           <div className="flex items-center gap-2.5">
-            <ShieldCheck className="h-4 w-4 text-slate-900" />
-            <span className="font-bold text-slate-900">VaultSheet</span>
+            <ShieldCheck className="h-4 w-4 text-emerald-400" />
+            <span className="font-bold text-white">VaultSheet Quant</span>
             <span>
               &middot;{" "}
               {lang === "tr"
-                ? "%100 Cihaz İçi Finansal Risk & Ekstre Platformu"
-                : "100% Client-Side Financial Risk & Statement Suite"}
+                ? "Tarayıcı İçi Nicel Backtest & Optimizasyon Terminali"
+                : "Client-Side Quantitative Backtest & Auto-Optimizer"}
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-5">
-            <Link href="/convert" className="hover:text-slate-900 transition-colors">
-              {lang === "tr" ? `Bankalar (${totalBanks})` : `Supported Banks (${totalBanks})`}
+            <Link href="/convert" className="hover:text-white transition-colors">
+              {lang === "tr" ? `Ekstre Araçları (${totalBanks})` : `Statement Tools (${totalBanks})`}
             </Link>
-            <Link
-              href="/convert/pdf-bank-statement-to-qbo"
-              className="hover:text-slate-900 transition-colors"
-            >
-              PDF to QBO
-            </Link>
-            <Link
-              href="/convert/pdf-bank-statement-to-xero-csv"
-              className="hover:text-slate-900 transition-colors"
-            >
-              PDF to Xero
-            </Link>
-            <Link href="/privacy" className="hover:text-slate-900 transition-colors">
+            <Link href="/privacy" className="hover:text-white transition-colors">
               {lang === "tr" ? "Gizlilik" : "Privacy"}
             </Link>
-            <Link href="/terms" className="hover:text-slate-900 transition-colors">
+            <Link href="/terms" className="hover:text-white transition-colors">
               {lang === "tr" ? "Koşullar & İade" : "Terms & Refunds"}
             </Link>
-            <a href="/llms.txt" className="hover:text-slate-900 transition-colors">
-              llms.txt
-            </a>
-            <a href="/sitemap.xml" className="hover:text-slate-900 transition-colors">
+            <a href="/sitemap.xml" className="hover:text-white transition-colors">
               sitemap.xml
             </a>
           </div>

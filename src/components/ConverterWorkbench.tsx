@@ -1351,9 +1351,11 @@ export default function ConverterWorkbench({
       onDragOver={handleDragOverShell}
       onDragLeave={() => setIsDragging(false)}
       onDrop={handleDropOnShell}
-      className={`w-full overflow-hidden rounded-2xl border bg-white shadow-[0_20px_50px_-12px_rgba(15,23,42,0.1)] transition ${
-        isDragging ? "border-blue-600 ring-4 ring-blue-500/15" : "border-slate-200"
-      }`}
+      className={`w-full overflow-hidden rounded-2xl border shadow-[0_24px_60px_-15px_rgba(2,6,23,0.45)] transition ${
+        activeSuiteModule === "market"
+          ? "border-slate-800 bg-[#070B14]"
+          : "border-slate-200 bg-white"
+      } ${isDragging ? "ring-4 ring-blue-500/25" : ""}`}
     >
       {/* Hidden shared file input so both Top Bar & Dropzone work identically */}
       <input
@@ -1393,7 +1395,9 @@ export default function ConverterWorkbench({
                 activeSuiteModule === "market" ? "text-emerald-600" : "text-emerald-400"
               }`}
             />
-            <span>{lang === "tr" ? "Canlı Piyasa & Kasa Riski" : "Live Market & Wealth Curve"}</span>
+            <span>
+              {lang === "tr" ? "Quant Backtest & Optimizasyon" : "Quant Backtest & Optimizer"}
+            </span>
           </button>
 
           <button
@@ -1515,15 +1519,18 @@ export default function ConverterWorkbench({
       )}
 
       {/* =========================================================================
-          MODULE 2: LIVE MARKET & POSITION RISK TERMINAL (WITH SVG WEALTH CURVE)
+          QUANT BACKTEST, 6-STRATEGY TOURNAMENT & AUTO-OPTIMIZER TERMINAL
          ========================================================================= */}
       {activeSuiteModule === "market" && (
         <MarketRiskTerminal
           lang={lang}
-          monthlyLeakSaved={forensics.savedMonthlyTotal}
-          statementCurrency={metadata.currency}
-          onJumpToConverter={() => setActiveSuiteModule("converter")}
-          onJumpToAudit={() => setActiveSuiteModule("audit")}
+          isPaid={accountTier.isPaid}
+          onRequireUpgrade={(reason) => {
+            setUpgradeReason(reason);
+            setAuthTab("key");
+            setAuthError(null);
+            setShowAuthModal(true);
+          }}
         />
       )}
 

@@ -4,34 +4,34 @@ import { SEO_BANKS } from "@/lib/seoCatalog";
 
 const HOME_FAQS_EN: FaqEntry[] = [
   {
-    question: "Are my PDF bank statements ever uploaded to a server?",
+    question: "Does this backtester use real market OHLCV candles?",
     answer:
-      "Never. VaultSheet runs pdfjs-dist extraction, local Tesseract OCR, balance reconciliation, and tax/leak forensics strictly inside your local browser memory (RAM). You can disconnect Wi-Fi or inspect Chrome DevTools -> Network tab to confirm zero bytes leave your computer.",
+      "Yes. It pulls the latest 300 real historical OHLCV candles (15m, 1H, 4H, 1D) from Binance market data, with a deterministic seeded fallback when offline.",
   },
   {
-    question: "How do the Live Market Terminal and Statement Leak Studio connect?",
+    question: "Why use VaultSheet Quant instead of ChatGPT or TradingView?",
     answer:
-      "Any recurring subscriptions or hidden bank fees you flag or cut in the Leaks, Tax & Legal Audit Studio automatically boost your 12-month / 20-trade portfolio curve inside the Live Market & Risk Terminal.",
+      "ChatGPT cannot fetch 300 OHLCV bars and simulate intrabar High/Low Stop-Loss & Take-Profit execution deterministically. VaultSheet runs 6 proven algorithms side-by-side and sweeps 36 SL/TP combinations in under 25ms without writing Pine Script.",
   },
   {
-    question: "What is included Free vs. Paid 7-Day Pass & Annual Pro?",
+    question: "Are exchange trading fees and intrabar SL/TP checks included?",
     answer:
-      "The Live Market & Risk Terminal, Spend Leak & Tax Shield calculators, legal notice generator, and 1st full uploaded statement Excel (.xlsx) export (up to 100 rows) are free. Upgrading to the $12 7-Day Pass or $29/year Pro License unlocks unlimited rows, multi-PDF merging, unlimited Excel (.xlsx), QuickBooks (.qbo), and CPA Audit Certificate PDFs.",
+      "Yes. Every simulated trade deducts round-trip exchange fees (0.08% per side x leverage) and checks each subsequent candle's low against Stop-Loss before checking high against Take-Profit.",
   },
   {
-    question: "How does VaultSheet prevent missing transactions or OCR math errors?",
+    question: "Do I need to enter my exchange API keys?",
     answer:
-      "Every parsed statement runs through deterministic cent-level reconciliation: Opening Balance + Deposits - Withdrawals = Closing Balance. Multi-line wrapped descriptions are stitched automatically and any cent discrepancy is highlighted inline.",
+      "Never. All candle fetches are read-only public market feeds and 100% of indicator math and equity curve calculations run inside local browser memory.",
   },
   {
-    question: "Which accounting software formats and banks are supported?",
+    question: "What is included Free vs. 7-Day Pass & Annual Pro?",
     answer:
-      "VaultSheet supports 64+ bank and format profiles including Chase, Bank of America, Wells Fargo, Mercury, Wise, Revolut, Monzo, HSBC, RBC, and Garanti BBVA (TRY)—exporting 3-sheet .XLSX, QuickBooks .QBO (without OL-222 errors), QuickBooks CSV, Xero CSV, OFX, JSON, and Audit Certificate PDFs.",
+      "Full 6-strategy backtests on BTC, ETH, SOL, BNB, and PAXG Gold (1H & 4H) plus 1 free 36-setup Auto-Optimize sweep are free. Upgrading to the $12 7-Day Pass or $29/year Annual Pro unlocks all 10 assets, 15m/1D bars, unlimited optimizations, and CSV trade exports.",
   },
   {
-    question: "What if a statement is scanned or password-protected?",
+    question: "Are there any recurring auto-renewal charges?",
     answer:
-      "Password-protected PDFs trigger a local unlock modal cleanly in browser RAM, while image/scanned PDFs run browser-local Tesseract OCR without sending pages to external servers.",
+      "No. Both the $12 7-Day Pass and $29 Annual Pro license are strictly one-time payments powered by Polar.",
   },
 ];
 
@@ -40,14 +40,6 @@ const FEATURED_SLUGS = [
   "wise-pdf-to-excel",
   "mercury-pdf-to-excel",
   "revolut-pdf-to-excel",
-  "bank-of-america-pdf-to-excel",
-  "hsbc-pdf-to-excel",
-  "monzo-pdf-to-excel",
-  "n26-pdf-to-excel",
-  "rbc-royal-bank-pdf-to-excel",
-  "commbank-pdf-to-excel",
-  "payoneer-pdf-to-excel",
-  "pdf-bank-statement-to-qbo",
 ];
 
 const REGION_COUNTS = (["US", "UK", "EU", "Canada", "Australia", "Global", "Format"] as const).map(
@@ -83,24 +75,24 @@ export default function HomePage() {
     {
       "@context": "https://schema.org",
       "@type": "HowTo",
-      name: "How to Manage Risk, Cut Spend Leaks, and Convert Bank PDFs Locally",
+      name: "How to Backtest & Auto-Optimize Crypto & Gold Trading Strategies on Live Candles",
       description:
-        "Size market positions with live anomaly scanning, uncover subscription leaks & tax write-offs, and convert PDF bank statements to Excel (.xlsx) & QuickBooks (.qbo) strictly in browser RAM.",
+        "Simulate 6 quantitative algorithms across 300 real OHLCV candles with intrabar Stop-Loss/Take-Profit execution, fee deduction, and 36-setup parameter sweeps.",
       step: [
         {
           "@type": "HowToStep",
-          name: "Scan live market pairs or upload your bank PDF",
-          text: "Monitor 24h market range momentum in the Risk Terminal or drop digital, scanned OCR, and encrypted bank PDFs locally in browser RAM.",
+          name: "Pick an asset and timeframe",
+          text: "Select BTC, ETH, SOL, BNB, PAXG Gold, or Pro altcoins across 15m, 1H, 4H, or 1D real candle feeds.",
         },
         {
           "@type": "HowToStep",
-          name: "Verify cent-level math and audit leaks & tax shields",
-          text: "Confirm Opening + Deposits - Withdrawals = Closing balance with 0.00 diff, cut recurring subscriptions, and calculate KDV & income tax shields.",
+          name: "Inspect the 6-strategy tournament leaderboard",
+          text: "Compare Net Profit %, Alpha vs. Buy & Hold, Win Rate, Profit Factor, and Max Drawdown across all 6 engines simultaneously.",
         },
         {
           "@type": "HowToStep",
-          name: "Download Excel (.xlsx), QuickBooks (.qbo), or Legal Notices",
-          text: "Export clean spreadsheets (1st full file free), Web Connect (.qbo), Xero CSV, CPA Audit PDFs, or formal 6502/BDDK notices in one click.",
+          name: "Run the 36-setup Auto-Optimizer",
+          text: "Sweep 36 SL/TP and strategy pairings in under 25ms to surface optimal risk-adjusted parameters and live entry/SL/TP levels.",
         },
       ],
     },

@@ -22,6 +22,12 @@ import {
   analyzeStatementForensics,
   generateLegalActionNotice,
 } from "@/lib/financialForensics";
+import {
+  generateFallbackCandles,
+  optimizeStrategyConfig,
+  runStrategyBacktest,
+  runStrategyTournament,
+} from "@/lib/quantBacktester";
 import type { PositionedTextItem, SamplePresetId, TransactionRow } from "@/lib/types";
 
 const PRESET_IDS: SamplePresetId[] = ["chase", "wise", "mercury", "revolut", "garanti"];
@@ -361,5 +367,66 @@ describe("AI CFO Financial Forensics, Money Leak Radar & Tax Shield Engine", () 
     expect(enSubNotice.title).toContain("Termination");
     expect(enSubNotice.body).toContain("Refund");
     expect(enSubNotice.body).toContain(subLeak!.merchant);
+  });
+});
+
+describe("Quantitative Backtester, 6-Strategy Tournament & Auto-Optimizer", () => {
+  it("generates 300 deterministic OHLCV candles with valid High/Low/Close bounds", () => {
+    const candles = generateFallbackCandles("BTCUSDT", "4h", 300);
+    expect(candles).toHaveLength(300);
+    for (const c of candles) {
+      expect(c.high).toBeGreaterThanOrEqual(c.low);
+      expect(c.high).toBeGreaterThanOrEqual(c.close);
+      expect(c.low).toBeLessThanOrEqual(c.close);
+      expect(c.close).toBeGreaterThan(0);
+      expect(c.volume).toBeGreaterThan(0);
+    }
+  });
+
+  it("runs all 6 strategies in tournament mode with intrabar SL/TP execution and equity curves", () => {
+    const candles = generateFallbackCandles("ETHUSDT", "4h", 300);
+    const results = runStrategyTournament(candles, {
+      capital: 10000,
+      leverage: 2,
+      stopLossPct: 2.5,
+      takeProfitPct: 7.0,
+      feePct: 0.08,
+      fastPeriod: 9,
+      slowPeriod: 21,
+      rsiOversold: 32,
+      rsiOverbought: 70,
+    });
+
+    expect(results).toHaveLength(6);
+    for (const r of results) {
+      expect(r.equityCurve).toHaveLength(300);
+      expect(r.finalEquity).toBeGreaterThan(0);
+      expect(r.maxDrawdownPct).toBeGreaterThanOrEqual(0);
+    }
+
+    const single = runStrategyBacktest(candles, {
+      strategyId: "donchian_breakout",
+      capital: 10000,
+      leverage: 2,
+      stopLossPct: 2.5,
+      takeProfitPct: 7.0,
+      feePct: 0.08,
+      fastPeriod: 9,
+      slowPeriod: 21,
+      rsiOversold: 32,
+      rsiOverbought: 70,
+    });
+    expect(single.trades.length).toBeGreaterThan(0);
+  });
+
+  it("sweeps 36 combinations in optimizeStrategyConfig and selects a ranked winner", () => {
+    const candles = generateFallbackCandles("SOLUSDT", "1h", 300);
+    const { best, testedCount } = optimizeStrategyConfig(candles, 10000, 2);
+
+    expect(testedCount).toBe(36);
+    expect(best.totalTrades).toBeGreaterThan(0);
+    expect(best.equityCurve).toHaveLength(300);
+    expect(best.suggestedStopPrice).toBeGreaterThan(0);
+    expect(best.suggestedTargetPrice).toBeGreaterThan(best.suggestedStopPrice);
   });
 });
