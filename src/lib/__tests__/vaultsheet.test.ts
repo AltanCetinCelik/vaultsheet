@@ -18,6 +18,10 @@ import {
 } from "@/lib/exporters";
 import { computeKeyChecksum, verifyLicenseKey } from "@/lib/licensing";
 import { getSeoBankBySlug, SEO_BANKS } from "@/lib/seoCatalog";
+import {
+  analyzeStatementForensics,
+  generateLegalActionNotice,
+} from "@/lib/financialForensics";
 import type { PositionedTextItem, SamplePresetId, TransactionRow } from "@/lib/types";
 
 const PRESET_IDS: SamplePresetId[] = ["chase", "wise", "mercury", "revolut", "garanti"];
@@ -287,5 +291,75 @@ describe("Commercial Hardening: Multi-Section, Split Runs, OCR Paste & QuickBook
     expect(parseLocalizedNumber("1.250,40 TL (B)")).toBe(-1250.4);
     expect(parseLocalizedNumber("4.800,00 ₺ (A)")).toBe(4800);
     expect(normalizeDateString("14 Ekim 2026")).toBe("2026-10-14");
+  });
+});
+
+describe("AI CFO Financial Forensics, Money Leak Radar & Tax Shield Engine", () => {
+  it("detects recurring subscriptions, bank fees, 5-yr wealth impact, and Tax/VAT shields for Garanti BBVA & Chase", () => {
+    const garantiBytes = generateSampleStatementPdf("garanti");
+    const garanti = parsePdfBytesDeterministic(garantiBytes, "garanti-bbva-ekim.pdf", true);
+    const reportTr = analyzeStatementForensics(garanti, {
+      taxBracketPct: 25,
+      includeVat: true,
+    });
+
+    expect(reportTr.leaks.some((l) => l.leakType === "bank_fee")).toBe(true);
+    expect(reportTr.leaks.some((l) => l.leakType === "subscription")).toBe(true);
+    expect(reportTr.totalDetectedLeaksAnnual).toBeGreaterThan(0);
+    expect(reportTr.savedFiveYearCompounded).toBeGreaterThan(reportTr.savedAnnualTotal);
+    expect(reportTr.totalVatShield).toBeGreaterThan(0);
+    expect(reportTr.totalIncomeTaxShield).toBeGreaterThan(0);
+    expect(reportTr.totalTaxCashback).toBeCloseTo(
+      reportTr.totalVatShield + reportTr.totalIncomeTaxShield,
+      2
+    );
+    expect(reportTr.taxItems.some((t) => t.lawRefTr.includes("GVK Md. 40"))).toBe(true);
+    expect(reportTr.healthScore).toBeGreaterThanOrEqual(12);
+    expect(reportTr.healthScore).toBeLessThanOrEqual(98);
+
+    const chaseBytes = generateSampleStatementPdf("chase");
+    const chase = parsePdfBytesDeterministic(chaseBytes, "chase-oct.pdf", true);
+    const reportUs = analyzeStatementForensics(chase, {
+      taxBracketPct: 30,
+      includeVat: false,
+    });
+    expect(reportUs.totalVatShield).toBe(0);
+    expect(reportUs.totalIncomeTaxShield).toBeGreaterThan(0);
+    expect(reportUs.taxItems.some((t) => t.lawRefEn.includes("IRS Schedule C"))).toBe(true);
+
+    const cutTargets = reportTr.leaks.slice(0, 2).map((l) => l.id);
+    const cutSim = analyzeStatementForensics(garanti, { cutLeakIds: cutTargets });
+    expect(cutSim.savedMonthlyTotal).toBeCloseTo(
+      reportTr.leaks.slice(0, 2).reduce((sum, l) => sum + l.monthlyAmount, 0),
+      2
+    );
+  });
+
+  it("generates formal Turkish (BDDK/6502 TKHK) and English legal cancellation/refund notices", () => {
+    const garanti = parsePdfBytesDeterministic(
+      generateSampleStatementPdf("garanti"),
+      "garanti-bbva-ekim.pdf",
+      true
+    );
+    const forensics = analyzeStatementForensics(garanti);
+    const feeLeak = forensics.leaks.find((l) => l.leakType === "bank_fee");
+    const subLeak = forensics.leaks.find((l) => l.leakType === "subscription");
+    expect(feeLeak).toBeDefined();
+    expect(subLeak).toBeDefined();
+
+    const trFeeNotice = generateLegalActionNotice(feeLeak!, garanti.metadata, "tr", "₺12.40");
+    expect(trFeeNotice.title).toContain("6502");
+    expect(trFeeNotice.body).toContain("BDDK");
+    expect(trFeeNotice.body).toContain(feeLeak!.merchant);
+    expect(trFeeNotice.body).toContain(garanti.metadata.accountLast4);
+
+    const trSubNotice = generateLegalActionNotice(subLeak!, garanti.metadata, "tr", "₺1,890.50");
+    expect(trSubNotice.title).toContain("6502");
+    expect(trSubNotice.body).toContain("İptal");
+
+    const enSubNotice = generateLegalActionNotice(subLeak!, garanti.metadata, "en", "$145.20");
+    expect(enSubNotice.title).toContain("Termination");
+    expect(enSubNotice.body).toContain("Refund");
+    expect(enSubNotice.body).toContain(subLeak!.merchant);
   });
 });

@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import ConverterWorkbench from "@/components/ConverterWorkbench";
 import NavbarAuthButtons from "@/components/NavbarAuthButtons";
-import { ANONYMOUS_ROW_LIMIT, CHECKOUT_URLS, FREE_ROW_LIMIT } from "@/lib/licensing";
+import { CHECKOUT_URLS } from "@/lib/licensing";
 import { SEO_BANKS } from "@/lib/seoCatalog";
 
 const HOME_FAQS = [
@@ -21,9 +21,9 @@ const HOME_FAQS = [
       "Never. VaultSheet runs pdfjs-dist extraction, coordinate alignment, and balance reconciliation strictly inside your local browser memory (RAM). You can disconnect Wi-Fi or inspect Chrome DevTools -> Network tab to confirm zero bytes leave your computer.",
   },
   {
-    question: "What is the difference between Guest Preview, Free Account, and Paid Pro?",
+    question: "What is included Free vs. Paid 7-Day Pass & Annual Pro?",
     answer:
-      "Guests can parse unlimited PDFs locally and export up to 10 CSV rows per statement with no sign-up. Creating a Free Account unlocks 25 free rows per PDF plus saved conversion history. Upgrading to the $12 7-Day Pass or $29/year Pro Pass unlocks unlimited rows, multi-PDF merging, 3-sheet Excel (.xlsx), QuickBooks (.qbo), and CPA Audit Certificate PDFs.",
+      "All AI CFO financial forensics—Money Leak Radar, 5-Year Wealth Simulator, Tax & VAT Shield, and 1-click legal notices—work free on your statements, plus 1st full uploaded statement Excel (.xlsx) export free (up to 100 rows). Guests can export 10 CSV rows and Free Accounts unlock 25 rows + saved history. Upgrading to the $12 7-Day Pass or $29/year Pro Pass unlocks unlimited rows, multi-PDF merging, unlimited Excel (.xlsx), QuickBooks (.qbo), and CPA Audit Certificate PDFs.",
   },
   {
     question: "How does VaultSheet prevent missing transactions or OCR math errors?",
@@ -164,72 +164,71 @@ export default function HomePage() {
         {/* Daylight Editorial Hero + Embedded 2-Stage Workbench */}
         <section className="relative overflow-hidden border-b border-slate-200 grid-backdrop">
           <div className="mx-auto max-w-7xl px-4 pt-10 pb-12 sm:px-6 lg:px-8 lg:pt-14">
-            <div className="mx-auto max-w-3xl text-center">
+            <div className="mx-auto max-w-4xl text-center">
               <p className="text-xs font-bold uppercase tracking-widest text-blue-600">
-                Client-Side Bank Statement Converter &middot; Zero Server Uploads
+                100% LOCAL AI CFO &amp; FINANCIAL FORENSICS &middot; ZERO SERVER UPLOADS
               </p>
 
-              <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-5xl sm:leading-[1.12]">
-                Convert PDF Bank Statements to Clean Excel, QuickBooks &amp; Xero
+              <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-5xl sm:leading-[1.1]">
+                Uncover Hidden Money Leaks, Forgotten Subscriptions &amp; Tax Write-Offs From Any Bank PDF
               </h1>
 
               <p className="mt-4 text-base text-slate-600 sm:text-lg leading-relaxed">
-                Drop any bank or credit card PDF below. VaultSheet extracts every transaction,
-                verifies your running balance to the exact cent, and exports accounting-ready files
-                strictly inside your browser.
+                Drop any bank or credit card statement (TR &amp; Global). Instantly detect recurring drains,
+                calculate your KDV &amp; income tax shield, generate 1-click cancellation &amp; refund
+                notices, and export reconciled Excel/QBO files 100% locally in your browser.
               </p>
 
               <p className="mt-3 text-xs font-medium text-slate-500">
-                Cent-Reconciled Math &nbsp;&middot;&nbsp; 8 Accounting Formats &nbsp;&middot;&nbsp;{" "}
-                {ANONYMOUS_ROW_LIMIT} Free Guest Rows / {FREE_ROW_LIMIT} Rows with Free Account
+                Money Leak Radar &nbsp;&middot;&nbsp; 5-Yr Wealth Recovery Simulator &nbsp;&middot;&nbsp; KDV &amp; Income Tax Shield &nbsp;&middot;&nbsp; 1st Full .XLSX Export Free
               </p>
             </div>
 
-            {/* Live Interactive Workbench Right in Hero */}
+            {/* Live Interactive AI CFO Cockpit Right in Hero */}
             <div id="workbench" className="mt-8 scroll-mt-20">
-              <ConverterWorkbench defaultPreset="chase" />
+              <ConverterWorkbench defaultPreset="garanti" />
             </div>
           </div>
         </section>
 
-        {/* How VaultSheet Works in 3 Steps */}
+        {/* How VaultSheet Finds Cash & Tax Write-Offs in 3 Steps */}
         <section id="how-it-works" className="border-b border-slate-200 bg-[#f8fafc] py-12">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="grid gap-5 md:grid-cols-3">
               <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-2xs">
-                <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-xs font-bold text-white">
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-rose-600 text-xs font-bold text-white">
                   1
                 </span>
                 <h2 className="mt-3 text-base font-bold text-slate-900">
-                  1. Select Your Bank PDF
+                  1. Money Leak &amp; Subscription Radar
                 </h2>
                 <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">
-                  Drop single or multi-month PDFs from 64+ supported banks (or paste OCR text).
-                  Zero files are ever sent over the network.
+                  Drop digital or scanned PDFs from 64+ TR &amp; Global banks. Instantly spot
+                  silent SaaS renewals, EFT/wire commissions, and 5-year compounded wealth drain.
                 </p>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-2xs">
-                <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-xs font-bold text-white">
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-xs font-bold text-white">
                   2
                 </span>
                 <h2 className="mt-3 text-base font-bold text-slate-900">
-                  2. Confirm $0.00 Balance Diff
+                  2. Tax &amp; VAT Shield + 1-Click Legal Notices
                 </h2>
                 <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">
-                  See Opening, Deposits, Withdrawals, and Closing totals checked row-by-row before
-                  you export a single line.
+                  Calculate KDV (20%) &amp; GVK / Schedule C write-offs on the fly and generate
+                  ready-to-send BDDK / 6502 TKHK fee-refund and subscription cancellation notices.
                 </p>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-2xs">
-                <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-xs font-bold text-white">
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-600 text-xs font-bold text-white">
                   3
                 </span>
                 <h2 className="mt-3 text-base font-bold text-slate-900">
-                  3. Export Excel, .QBO or Xero
+                  3. Side-by-Side PDF + Excel &amp; QBO Export
                 </h2>
                 <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">
-                  Download clean Excel (.xlsx) workbooks, QuickBooks Web Connect (.qbo), Xero CSV,
-                  or CPA Audit Certificate PDFs in one click.
+                  Inspect original PDF pages alongside verified 0.00-diff transactions and export
+                  Excel (.xlsx — 1st full file free!), QuickBooks (.qbo), Xero, or CPA Audit PDFs.
                 </p>
               </div>
             </div>
@@ -429,24 +428,24 @@ OUT  chase-oct-2026.qbo ->  Local Blob Download`}
                     <span className="text-sm text-slate-500">forever</span>
                   </div>
                   <p className="mt-2 text-sm text-slate-600">
-                    1st full uploaded statement Excel (.xlsx) export free (up to 100 rows), plus {FREE_ROW_LIMIT} CSV rows/PDF with a free account.
+                    Full AI CFO money-leak audit, Tax Shield &amp; 1st uploaded statement Excel (.xlsx) export free (up to 100 rows).
                   </p>
                   <ul className="mt-6 space-y-3 text-sm text-slate-700">
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-600 shrink-0" />
-                      <span><strong>1st full Excel (.xlsx) export free</strong> (up to 100 rows)</span>
+                      <span><strong>Money Leak Radar &amp; 5-Yr Wealth Simulator</strong></span>
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-600 shrink-0" />
-                      Side-by-side live PDF preview &amp; reconciliation audit
+                      Tax &amp; VAT Shield + 1-click legal cancel/refund notices
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <span><strong>1st full Excel (.xlsx) export free</strong> + Side-by-side PDF</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-600 shrink-0" />
                       Local Tesseract OCR (scanned PDFs) &amp; password PDF unlock
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-emerald-600 shrink-0" />
-                      Export {ANONYMOUS_ROW_LIMIT} CSV rows (guest) / {FREE_ROW_LIMIT} rows (free account)
                     </li>
                   </ul>
                 </div>
@@ -478,15 +477,15 @@ OUT  chase-oct-2026.qbo ->  Local Blob Download`}
                   <ul className="mt-6 space-y-3 text-sm text-slate-700">
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-600 shrink-0" />
-                      Unlimited rows &amp; multi-file statement merge
+                      Unlimited rows, batch multi-month PDF merge &amp; Tax Shield export
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-600 shrink-0" />
-                      All 8 export formats (XLSX, QBO, QB CSV, Xero, OFX)
+                      All 8 export formats + CPA Audit Certificate (.pdf)
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-600 shrink-0" />
-                      Instant license key delivery (VS-...)
+                      Unlimited legal notices, wealth recovery &amp; instant VS-... key
                     </li>
                   </ul>
                 </div>
