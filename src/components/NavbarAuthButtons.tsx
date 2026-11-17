@@ -121,12 +121,12 @@ export default function NavbarAuthButtons({ dark = false }: { dark?: boolean }) 
   if (profile) {
     const isPaid = profile.plan === "pass_7d" || profile.plan === "pro_monthly";
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 sm:gap-2">
         {langSwitch}
         <button
           type="button"
           onClick={() => triggerEvent("vaultsheet-open-account")}
-          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold shadow-2xs transition cursor-pointer ${
+          className={`inline-flex items-center gap-1.5 rounded border px-2 py-1 text-[11px] font-semibold transition sm:px-2.5 sm:text-xs cursor-pointer ${
             isPaid
               ? dark
                 ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25"
@@ -136,8 +136,8 @@ export default function NavbarAuthButtons({ dark = false }: { dark?: boolean }) 
                 : "border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100"
           }`}
         >
-          <User className="h-3.5 w-3.5" />
-          <span className="max-w-[140px] truncate">
+          <User className="h-3.5 w-3.5 shrink-0" />
+          <span className="max-w-[96px] truncate sm:max-w-[140px]">
             {profile.customerName ||
               profile.customerEmail ||
               (lang === "tr" ? "Hesabım" : "My Account")}
@@ -152,29 +152,29 @@ export default function NavbarAuthButtons({ dark = false }: { dark?: boolean }) 
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1.5 sm:gap-2">
       {langSwitch}
       <button
         type="button"
         onClick={() => triggerEvent("vaultsheet-open-auth", { mode: "login" })}
-        className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
+        className={`inline-flex items-center whitespace-nowrap rounded border px-2 py-1 text-[11px] font-semibold transition sm:px-2.5 sm:text-xs cursor-pointer ${
           dark
-            ? "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 hover:text-white"
+            ? "border-white/[0.1] bg-[#121822] text-slate-200 hover:border-white/[0.2] hover:text-white"
             : "border-slate-300 bg-white text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900"
         }`}
       >
-        {lang === "tr" ? "Giriş Yap" : "Log In"}
+        {lang === "tr" ? "Giriş" : "Log In"}
       </button>
       <button
         type="button"
         onClick={() => triggerEvent("vaultsheet-open-auth", { mode: "signup" })}
-        className={`inline-flex items-center rounded-lg px-3.5 py-1.5 text-xs font-semibold shadow-xs transition cursor-pointer ${
+        className={`inline-flex items-center whitespace-nowrap rounded px-2.5 py-1 text-[11px] font-semibold transition sm:px-3 sm:text-xs cursor-pointer ${
           dark
             ? "bg-emerald-400 text-slate-950 hover:bg-emerald-300"
             : "bg-blue-600 text-white hover:bg-blue-700"
         }`}
       >
-        {lang === "tr" ? "Ücretsiz Başla" : "Sign Up Free"}
+        {lang === "tr" ? "Başla" : "Sign Up"}
       </button>
     </div>
   );
