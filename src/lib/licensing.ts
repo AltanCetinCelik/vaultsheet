@@ -38,6 +38,12 @@ export interface StoredLicenseProfile {
   alertChannel?: "discord" | "telegram" | "webhook";
   alertWebhookUrl?: string;
   telegramChatId?: string;
+  hasSavedTelegramToken?: boolean;
+  sentinelActive?: boolean;
+  sentinelSymbols?: string[];
+  sentinelTf?: "15m" | "1h" | "4h" | "1d";
+  sentinelDir?: "both" | "long" | "short";
+  sentinelTriggerUrl?: string;
 }
 
 const LICENSE_STORAGE_KEY = "vaultsheet_pro_license_v1";

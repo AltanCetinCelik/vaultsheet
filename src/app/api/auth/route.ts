@@ -1,5 +1,10 @@
 import crypto from "crypto";
 import { NextResponse } from "next/server";
+import {
+  encryptCloudSecret,
+  getServerSigningSecret,
+  signSentinelToken,
+} from "@/lib/cryptoSettings";
 
 export const dynamic = "force-dynamic";
 
@@ -105,26 +110,68 @@ async function resolveCustomerEntitlements(customer: PolarCustomer, token: strin
 
   const activeKey = grantedKeys[0];
 
+  const extractAlertPreferences = (cust: PolarCustomer) => {
+    const rawChannel = cust.metadata?.vs_alert_channel;
+    const alertChannel =
+      rawChannel === "discord" || rawChannel === "telegram" || rawChannel === "webhook"
+        ? (rawChannel as "discord" | "telegram" | "webhook")
+        : undefined;
+    const alertWebhookUrl =
+      typeof cust.metadata?.vs_webhook_url === "string"
+        ? cust.metadata.vs_webhook_url
+        : undefined;
+    const telegramChatId =
+      typeof cust.metadata?.vs_tg_chat_id === "string"
+        ? cust.metadata.vs_tg_chat_id
+        : undefined;
+    const hasSavedTelegramToken =
+      typeof cust.metadata?.vs_tg_token_enc === "string" &&
+      cust.metadata.vs_tg_token_enc.startsWith("v1:");
+    const sentinelActive = cust.metadata?.vs_sentinel_active === "1";
+    const rawSymbols =
+      typeof cust.metadata?.vs_sentinel_symbols === "string"
+        ? cust.metadata.vs_sentinel_symbols
+        : "BTCUSDT,ETHUSDT,SOLUSDT";
+    const sentinelSymbols = rawSymbols
+      .split(",")
+      .map((s) => s.trim().toUpperCase())
+      .filter(Boolean);
+    const rawTf = cust.metadata?.vs_sentinel_tf;
+    const sentinelTf =
+      rawTf === "15m" || rawTf === "1h" || rawTf === "4h" || rawTf === "1d"
+        ? (rawTf as "15m" | "1h" | "4h" | "1d")
+        : "4h";
+    const rawDir = cust.metadata?.vs_sentinel_dir;
+    const sentinelDir =
+      rawDir === "both" || rawDir === "long" || rawDir === "short"
+        ? (rawDir as "both" | "long" | "short")
+        : "both";
+
+    const cryptoSecret = getServerSigningSecret() || token;
+    const sig = signSentinelToken(cust.id, cryptoSecret);
+    const sentinelTriggerUrl = `/api/cron/sentinel?uid=${encodeURIComponent(cust.id)}&sig=${sig}`;
+
+    return {
+      alertChannel,
+      alertWebhookUrl,
+      telegramChatId,
+      hasSavedTelegramToken,
+      sentinelActive,
+      sentinelSymbols,
+      sentinelTf,
+      sentinelDir,
+      sentinelTriggerUrl,
+    };
+  };
+
+  const prefs = extractAlertPreferences(customer);
+
   if (activeOrder) {
     const orderMs = Date.parse(activeOrder.created_at) || Date.now();
     const isPass7d = activeOrder.product_id === PASS_7D_PRODUCT_ID;
     const isAnnual = activeOrder.product_id === PRO_ANNUAL_PRODUCT_ID;
     const durationDays = isPass7d ? 7 : 365;
     const expiresAt = new Date(orderMs + durationDays * 86_400_000).toISOString();
-
-    const rawChannel = customer.metadata?.vs_alert_channel;
-    const alertChannel =
-      rawChannel === "discord" || rawChannel === "telegram" || rawChannel === "webhook"
-        ? rawChannel
-        : undefined;
-    const alertWebhookUrl =
-      typeof customer.metadata?.vs_webhook_url === "string"
-        ? customer.metadata.vs_webhook_url
-        : undefined;
-    const telegramChatId =
-      typeof customer.metadata?.vs_tg_chat_id === "string"
-        ? customer.metadata.vs_tg_chat_id
-        : undefined;
 
     if (Date.parse(expiresAt) > Date.now()) {
       return {
@@ -142,9 +189,7 @@ async function resolveCustomerEntitlements(customer: PolarCustomer, token: strin
         purchasedAt: activeOrder.created_at,
         expiresAt,
         portalUrl: POLAR_PORTAL_URL,
-        alertChannel,
-        alertWebhookUrl,
-        telegramChatId,
+        ...prefs,
       };
     }
   }
@@ -158,20 +203,7 @@ async function resolveCustomerEntitlements(customer: PolarCustomer, token: strin
     key: "",
     displayKey: "",
     portalUrl: POLAR_PORTAL_URL,
-    alertChannel:
-      customer.metadata?.vs_alert_channel === "discord" ||
-      customer.metadata?.vs_alert_channel === "telegram" ||
-      customer.metadata?.vs_alert_channel === "webhook"
-        ? customer.metadata.vs_alert_channel
-        : undefined,
-    alertWebhookUrl:
-      typeof customer.metadata?.vs_webhook_url === "string"
-        ? customer.metadata.vs_webhook_url
-        : undefined,
-    telegramChatId:
-      typeof customer.metadata?.vs_tg_chat_id === "string"
-        ? customer.metadata.vs_tg_chat_id
-        : undefined,
+    ...prefs,
   };
 }
 
@@ -185,7 +217,12 @@ export async function POST(request: Request) {
       customerId?: string;
       alertChannel?: "discord" | "telegram" | "webhook";
       alertWebhookUrl?: string;
+      telegramBotToken?: string;
       telegramChatId?: string;
+      sentinelActive?: boolean;
+      sentinelSymbols?: string[];
+      sentinelTf?: "15m" | "1h" | "4h" | "1d";
+      sentinelDir?: "both" | "long" | "short";
     };
 
     const action = body.action;
@@ -246,19 +283,31 @@ export async function POST(request: Request) {
         );
       }
 
+      const nextMeta: Record<string, string | number | boolean> = {
+        ...(existingCustomer.metadata ?? {}),
+        vs_alert_channel: body.alertChannel ?? "discord",
+        vs_webhook_url: (body.alertWebhookUrl ?? "").slice(0, 320),
+        vs_tg_chat_id: (body.telegramChatId ?? "").slice(0, 64),
+        vs_sentinel_active: body.sentinelActive ? "1" : "0",
+        vs_sentinel_symbols: (body.sentinelSymbols ?? ["BTCUSDT", "ETHUSDT", "SOLUSDT"])
+          .slice(0, 12)
+          .join(","),
+        vs_sentinel_tf: body.sentinelTf ?? "4h",
+        vs_sentinel_dir: body.sentinelDir ?? "both",
+      };
+
+      const cleanTgToken = (body.telegramBotToken ?? "").trim();
+      const cryptoSecret = getServerSigningSecret() || token;
+      if (cleanTgToken) {
+        nextMeta.vs_tg_token_enc = encryptCloudSecret(cleanTgToken, cryptoSecret);
+      }
+
       const patchRes = await polarRequest<PolarCustomer>(
         `/v1/customers/${encodeURIComponent(existingCustomer.id)}`,
         token,
         {
           method: "PATCH",
-          body: JSON.stringify({
-            metadata: {
-              ...(existingCustomer.metadata ?? {}),
-              vs_alert_channel: body.alertChannel ?? "discord",
-              vs_webhook_url: (body.alertWebhookUrl ?? "").slice(0, 320),
-              vs_tg_chat_id: (body.telegramChatId ?? "").slice(0, 64),
-            },
-          }),
+          body: JSON.stringify({ metadata: nextMeta }),
         }
       );
 
@@ -267,7 +316,7 @@ export async function POST(request: Request) {
       return NextResponse.json({
         valid: true,
         profile,
-        message: "Alert webhook config synced to your cloud account.",
+        message: "Cloud Sentinel & Alert config encrypted & synced to your account.",
       });
     }
 

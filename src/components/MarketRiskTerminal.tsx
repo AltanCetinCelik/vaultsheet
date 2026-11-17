@@ -14,10 +14,12 @@ import {
   Check,
   CheckCircle2,
   ClipboardCheck,
+  Cloud,
   Copy,
   Download,
   ExternalLink,
   Flame,
+  Layers,
   Lock,
   LogOut,
   Radar,
@@ -43,6 +45,11 @@ import {
   type StoredLicenseProfile,
 } from "@/lib/licensing";
 import {
+  QUANT_ASSETS,
+  type MarketDataSource,
+  type MtfConfluenceEntry,
+} from "@/lib/marketData";
+import {
   assessDerivativesSqueeze,
   buildCoinRadarRow,
   buildFallbackDerivativesPulse,
@@ -65,31 +72,6 @@ export interface MarketRiskTerminalProps {
   isPaid?: boolean;
   onRequireUpgrade?: (reason: string) => void;
 }
-
-interface AssetSpec {
-  symbol: string;
-  label: string;
-  proOnly?: boolean;
-}
-
-const ASSETS: AssetSpec[] = [
-  { symbol: "BTCUSDT", label: "BTC" },
-  { symbol: "ETHUSDT", label: "ETH" },
-  { symbol: "SOLUSDT", label: "SOL" },
-  { symbol: "BNBUSDT", label: "BNB" },
-  { symbol: "PAXGUSDT", label: "PAXG Gold" },
-  { symbol: "XRPUSDT", label: "XRP", proOnly: true },
-  { symbol: "DOGEUSDT", label: "DOGE", proOnly: true },
-  { symbol: "AVAXUSDT", label: "AVAX", proOnly: true },
-  { symbol: "SUIUSDT", label: "SUI", proOnly: true },
-  { symbol: "LINKUSDT", label: "LINK", proOnly: true },
-  { symbol: "ADAUSDT", label: "ADA", proOnly: true },
-  { symbol: "ARBUSDT", label: "ARB", proOnly: true },
-];
-
-const RADAR_SYMBOLS_QUERY = encodeURIComponent(
-  JSON.stringify(ASSETS.map((a) => a.symbol))
-);
 
 const TIMEFRAMES: { id: TimeframeId; label: string; proOnly?: boolean }[] = [
   { id: "15m", label: "15m", proOnly: true },
@@ -274,40 +256,39 @@ function formatExpiryShort(iso?: string): string {
 }
 
 function buildInitialRadar(): CoinRadarRow[] {
-  return ASSETS.map((a) => {
-    const c = generateFallbackCandles(a.symbol, "4h", 200);
+  return QUANT_ASSETS.map((a) => {
+    const c = generateFallbackCandles(a.symbol, "4h", 300);
     const first = c[0]?.close ?? 1;
     const last = c[c.length - 1]?.close ?? 1;
     const chg = Math.round(((last - first) / first) * 10000) / 100;
-    return buildCoinRadarRow(a.symbol, a.label, c, chg, a.proOnly, 0, "both");
+    return buildCoinRadarRow(a.symbol, a.label, c, chg, a.proOnly, 0, "both", "4h");
   });
 }
 
-interface Binance24hDto {
-  symbol: string;
-  lastPrice: string;
-  priceChangePercent: string;
+function buildInitialMtf(candles: OHLCVCandle[]): MtfConfluenceEntry[] {
+  const tfs: TimeframeId[] = ["15m", "1h", "4h", "1d"];
+  return tfs.map((tf) => {
+    const bars = tf === "4h" ? candles : generateFallbackCandles("BTCUSDT", tf, 300);
+    const { best } = optimizeStrategyConfig(bars, 10000, 2, "both", 0, tf);
+    return {
+      timeframe: tf,
+      bestStrategyId: best.strategyId,
+      strategyNameTr: best.nameTr,
+      strategyNameEn: best.nameEn,
+      currentSignal: best.currentSignal,
+      activeSide: best.activeSide,
+      netProfitPct: best.netProfitPct,
+      outOfSampleReturnPct: best.outOfSampleReturnPct,
+      isRobustOos: best.isRobustOos,
+    };
+  });
 }
 
-interface BinancePremiumIndexDto {
-  symbol: string;
-  markPrice: string;
-  indexPrice: string;
-  lastFundingRate: string;
-}
-
-interface BinanceOiDto {
-  openInterest: string;
-}
-
-interface BinanceLongShortDto {
-  longAccount: string;
-  shortAccount: string;
-  longShortRatio: string;
-}
-
-interface BinanceTakerDto {
-  buySellRatio: string;
+function formatSourceTag(src: MarketDataSource, barsCount: number, lang: AppLang): string {
+  if (src === "binance_vision") return `BINANCE VISION · ${barsCount}B`;
+  if (src === "binance_spot") return `BINANCE SPOT · ${barsCount}B`;
+  if (src === "bybit_linear") return `BYBIT PERP · ${barsCount}B`;
+  return lang === "tr" ? `SİMÜLASYON · ${barsCount}B` : `SIMULATED · ${barsCount}B`;
 }
 
 export default function MarketRiskTerminal({
@@ -319,14 +300,17 @@ export default function MarketRiskTerminal({
   const [timeframe, setTimeframe] = useState<TimeframeId>("4h");
   const [directionMode, setDirectionMode] = useState<TradeDirectionMode>("both");
   const [candles, setCandles] = useState<OHLCVCandle[]>(() =>
-    generateFallbackCandles("BTCUSDT", "4h", 300)
+    generateFallbackCandles("BTCUSDT", "4h", 1000)
   );
-  const [feedMode, setFeedMode] = useState<"live" | "simulated">("simulated");
+  const [feedSource, setFeedSource] = useState<MarketDataSource>("simulated");
   const [isLoadingFeed, setIsLoadingFeed] = useState<boolean>(false);
 
   // Live Perpetual Futures Derivatives Pulse (Funding / OI / Whale Ratio / Squeeze)
   const [derivativesPulse, setDerivativesPulse] = useState<DerivativesPulse>(() =>
-    buildFallbackDerivativesPulse("BTCUSDT", generateFallbackCandles("BTCUSDT", "4h", 300), "FLAT")
+    buildFallbackDerivativesPulse("BTCUSDT", generateFallbackCandles("BTCUSDT", "4h", 1000), "FLAT")
+  );
+  const [mtfEntries, setMtfEntries] = useState<MtfConfluenceEntry[]>(() =>
+    buildInitialMtf(generateFallbackCandles("BTCUSDT", "4h", 300))
   );
 
   // 12-Coin Alpha & Futures Radar State
@@ -348,14 +332,19 @@ export default function MarketRiskTerminal({
   const [optMessage, setOptMessage] = useState<string | null>(null);
   const [copiedTicket, setCopiedTicket] = useState<boolean>(false);
 
-  // Webhook Alert Bridge & 60s Live Sentinel State
+  // Webhook Alert Bridge & 24/7 Cloud Sentinel State
   const [alertChannelDraft, setAlertChannelDraft] = useState<
     "discord" | "telegram" | "webhook" | null
   >(null);
   const [alertWebhookDraft, setAlertWebhookDraft] = useState<string | null>(null);
   const [telegramTokenDraft, setTelegramTokenDraft] = useState<string | null>(null);
   const [telegramChatDraft, setTelegramChatDraft] = useState<string | null>(null);
+  const [sentinelSymbolsDraft, setSentinelSymbolsDraft] = useState<string[] | null>(null);
+  const [sentinelCloudActiveDraft, setSentinelCloudActiveDraft] = useState<boolean | null>(null);
   const [isSendingAlert, setIsSendingAlert] = useState<boolean>(false);
+  const [isSyncingCloud, setIsSyncingCloud] = useState<boolean>(false);
+  const [isRunningCloudScan, setIsRunningCloudScan] = useState<boolean>(false);
+  const [copiedCronUrl, setCopiedCronUrl] = useState<boolean>(false);
   const [alertStatus, setAlertStatus] = useState<{ ok: boolean; msg: string } | null>(null);
   const [sentinelEnabled, setSentinelEnabled] = useState<boolean>(false);
   const [lastSentinelScan, setLastSentinelScan] = useState<string | null>(null);
@@ -466,6 +455,10 @@ export default function MarketRiskTerminal({
   const alertWebhookUrl = alertWebhookDraft ?? savedAlertConfig.webhookUrl;
   const telegramBotToken = telegramTokenDraft ?? savedAlertConfig.telegramBotToken;
   const telegramChatId = telegramChatDraft ?? savedAlertConfig.telegramChatId;
+  const sentinelSymbols =
+    sentinelSymbolsDraft ?? storedProfile?.sentinelSymbols ?? ["BTCUSDT", "ETHUSDT", "SOLUSDT"];
+  const sentinelCloudActive =
+    sentinelCloudActiveDraft ?? storedProfile?.sentinelActive ?? false;
 
   const persistAlertConfigLocal = useCallback(
     (next: SavedAlertConfig) => {
@@ -575,217 +568,68 @@ export default function MarketRiskTerminal({
     };
   }, [showToast]);
 
-  const loadDerivativesPulse = useCallback(
-    async (sym: string, tf: TimeframeId, refCandles: OHLCVCandle[]) => {
-      const fb = buildFallbackDerivativesPulse(sym, refCandles, "FLAT");
-      try {
-        const [premRes, oiRes, whaleRes, takerRes] = await Promise.all([
-          fetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${encodeURIComponent(sym)}`, {
-            cache: "no-store",
-          }),
-          fetch(`https://fapi.binance.com/fapi/v1/openInterest?symbol=${encodeURIComponent(sym)}`, {
-            cache: "no-store",
-          }),
-          fetch(
-            `https://fapi.binance.com/futures/data/topLongShortPositionRatio?symbol=${encodeURIComponent(sym)}&period=${encodeURIComponent(tf)}&limit=1`,
-            { cache: "no-store" }
-          ),
-          fetch(
-            `https://fapi.binance.com/futures/data/takerlongshortRatio?symbol=${encodeURIComponent(sym)}&period=${encodeURIComponent(tf)}&limit=1`,
-            { cache: "no-store" }
-          ),
-        ]);
-
-        if (!premRes.ok || !oiRes.ok) throw new Error("Futures API unavailable");
-        const prem = (await premRes.json()) as BinancePremiumIndexDto;
-        const oi = (await oiRes.json()) as BinanceOiDto;
-        const whaleList = whaleRes.ok ? ((await whaleRes.json()) as BinanceLongShortDto[]) : [];
-        const takerList = takerRes.ok ? ((await takerRes.json()) as BinanceTakerDto[]) : [];
-
-        const markPrice = Number.parseFloat(prem.markPrice) || fb.markPrice;
-        const indexPrice = Number.parseFloat(prem.indexPrice) || fb.indexPrice;
-        const fundingRatePct =
-          Math.round((Number.parseFloat(prem.lastFundingRate) || 0) * 100 * 10000) / 10000;
-        const basisPct =
-          indexPrice > 0
-            ? Math.round(((markPrice - indexPrice) / indexPrice) * 100 * 10000) / 10000
-            : 0;
-        const openInterestCoins = Number.parseFloat(oi.openInterest) || 0;
-        const openInterestUsd = Math.round(openInterestCoins * markPrice);
-
-        const whaleTop = whaleList[0];
-        const whaleLongPct = whaleTop
-          ? Math.round(Number.parseFloat(whaleTop.longAccount) * 1000) / 10
-          : fb.whaleLongPct;
-        const whaleShortPct = Math.round((100 - whaleLongPct) * 10) / 10;
-        const whaleRatio = whaleTop
-          ? Math.round(Number.parseFloat(whaleTop.longShortRatio) * 100) / 100
-          : fb.whaleRatio;
-        const takerBuySellRatio = takerList[0]
-          ? Math.round(Number.parseFloat(takerList[0].buySellRatio) * 100) / 100
-          : fb.takerBuySellRatio;
-
-        const squeeze = assessDerivativesSqueeze(
-          fundingRatePct,
-          whaleLongPct,
-          takerBuySellRatio,
-          "LONG"
-        );
-
-        setDerivativesPulse({
-          symbol: sym,
-          fundingRatePct,
-          markPrice,
-          indexPrice,
-          basisPct,
-          openInterestUsd,
-          whaleLongPct,
-          whaleShortPct,
-          whaleRatio,
-          takerBuySellRatio,
-          ...squeeze,
-          isLiveDerivatives: true,
-        });
-      } catch {
-        setDerivativesPulse(fb);
-      }
-    },
-    []
-  );
-
   const loadCandles = useCallback(
-    async (sym: string, tf: TimeframeId): Promise<OHLCVCandle[]> => {
+    async (
+      sym: string,
+      tf: TimeframeId,
+      dir: TradeDirectionMode = "both",
+      lev = 2
+    ): Promise<OHLCVCandle[]> => {
       setIsLoadingFeed(true);
       try {
         const res = await fetch(
-          `https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(sym)}&interval=${encodeURIComponent(tf)}&limit=300`,
+          `/api/market?mode=detail&symbol=${encodeURIComponent(sym)}&tf=${encodeURIComponent(tf)}&dir=${encodeURIComponent(dir)}&limit=1000&leverage=${lev}`,
           { cache: "no-store" }
         );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const raw = (await res.json()) as unknown[][];
-        if (!Array.isArray(raw) || raw.length < 50) throw new Error("Insufficient bars");
+        const data = (await res.json()) as {
+          ok?: boolean;
+          candles?: OHLCVCandle[];
+          source?: MarketDataSource;
+          derivatives?: DerivativesPulse;
+          mtf?: MtfConfluenceEntry[];
+        };
+        if (!data?.ok || !Array.isArray(data.candles) || data.candles.length < 60) {
+          throw new Error("Insufficient server bars");
+        }
 
-        const parsed: OHLCVCandle[] = raw.map((row) => ({
-          time: Number(row[0]),
-          open: Number.parseFloat(String(row[1])),
-          high: Number.parseFloat(String(row[2])),
-          low: Number.parseFloat(String(row[3])),
-          close: Number.parseFloat(String(row[4])),
-          volume: Number.parseFloat(String(row[5])),
-        }));
-
-        setCandles(parsed);
-        setFeedMode("live");
-        void loadDerivativesPulse(sym, tf, parsed);
-        return parsed;
+        setCandles(data.candles);
+        setFeedSource(data.source ?? "binance_vision");
+        if (data.derivatives) setDerivativesPulse(data.derivatives);
+        if (Array.isArray(data.mtf) && data.mtf.length > 0) {
+          setMtfEntries(data.mtf);
+        }
+        return data.candles;
       } catch {
-        const fb = generateFallbackCandles(sym, tf, 300);
+        const fb = generateFallbackCandles(sym, tf, 1000);
         setCandles(fb);
-        setFeedMode("simulated");
-        void loadDerivativesPulse(sym, tf, fb);
+        setFeedSource("simulated");
+        setDerivativesPulse(buildFallbackDerivativesPulse(sym, fb, "FLAT"));
         return fb;
       } finally {
         setIsLoadingFeed(false);
       }
     },
-    [loadDerivativesPulse]
+    []
   );
 
-  // Refresh live 24h prices, futures funding & REAL klines for ALL 12 assets
+  // Refresh live 12-coin Alpha & Futures Radar via multi-exchange /api/market proxy
   const refreshAlphaRadar = useCallback(
     async (tf: TimeframeId, dir: TradeDirectionMode) => {
       setIsScanningRadar(true);
       try {
-        const [tickerRes, premRes] = await Promise.all([
-          fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${RADAR_SYMBOLS_QUERY}`, {
-            cache: "no-store",
-          }),
-          fetch(`https://fapi.binance.com/fapi/v1/premiumIndex`, { cache: "no-store" }).catch(
-            () => null
-          ),
-        ]);
-
-        if (!tickerRes.ok) throw new Error(`HTTP ${tickerRes.status}`);
-        const dtoList = (await tickerRes.json()) as Binance24hDto[];
-        const priceMap = new Map<string, { price: number; chg: number }>();
-        for (const item of dtoList) {
-          priceMap.set(item.symbol, {
-            price: Number.parseFloat(item.lastPrice),
-            chg: Number.parseFloat(item.priceChangePercent),
-          });
-        }
-
-        const fundingMap = new Map<string, number>();
-        if (premRes && premRes.ok) {
-          const premList = (await premRes.json()) as BinancePremiumIndexDto[];
-          if (Array.isArray(premList)) {
-            for (const p of premList) {
-              const ratePct =
-                Math.round((Number.parseFloat(p.lastFundingRate) || 0) * 100 * 10000) / 10000;
-              fundingMap.set(p.symbol, ratePct);
-            }
-          }
-        }
-
-        // Fetch real Binance OHLCV klines in parallel for ALL 12 assets (Free + Pro)
-        const nextRows = await Promise.all(
-          ASSETS.map(async (asset) => {
-            const live24 = priceMap.get(asset.symbol);
-            const fundingPct = fundingMap.get(asset.symbol) ?? 0;
-            let series: OHLCVCandle[] | null = null;
-            try {
-              const kRes = await fetch(
-                `https://api.binance.com/api/v3/klines?symbol=${asset.symbol}&interval=${tf}&limit=200`,
-                { cache: "no-store" }
-              );
-              if (kRes.ok) {
-                const raw = (await kRes.json()) as unknown[][];
-                if (Array.isArray(raw) && raw.length >= 60) {
-                  series = raw.map((row) => ({
-                    time: Number(row[0]),
-                    open: Number.parseFloat(String(row[1])),
-                    high: Number.parseFloat(String(row[2])),
-                    low: Number.parseFloat(String(row[3])),
-                    close: Number.parseFloat(String(row[4])),
-                    volume: Number.parseFloat(String(row[5])),
-                  }));
-                }
-              }
-            } catch {
-              // fallback below if network error
-            }
-
-            if (!series) {
-              const fb = generateFallbackCandles(asset.symbol, tf, 200);
-              if (live24 && Number.isFinite(live24.price) && live24.price > 0) {
-                const lastClose = fb[fb.length - 1]?.close || 1;
-                const scale = live24.price / lastClose;
-                series = fb.map((bar) => ({
-                  ...bar,
-                  open: bar.open * scale,
-                  high: bar.high * scale,
-                  low: bar.low * scale,
-                  close: bar.close * scale,
-                }));
-              } else {
-                series = fb;
-              }
-            }
-
-            const chg = live24?.chg ?? 0;
-            return buildCoinRadarRow(
-              asset.symbol,
-              asset.label,
-              series,
-              chg,
-              asset.proOnly,
-              fundingPct,
-              dir
-            );
-          })
+        const res = await fetch(
+          `/api/market?mode=radar&tf=${encodeURIComponent(tf)}&dir=${encodeURIComponent(dir)}`,
+          { cache: "no-store" }
         );
-
-        setRadarRows(nextRows);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as {
+          ok?: boolean;
+          rows?: CoinRadarRow[];
+        };
+        if (data?.ok && Array.isArray(data.rows) && data.rows.length > 0) {
+          setRadarRows(data.rows);
+        }
       } catch {
         // keep existing deterministic radar rows
       } finally {
@@ -800,7 +644,7 @@ export default function MarketRiskTerminal({
     const init = async () => {
       if (!active) return;
       await Promise.all([
-        loadCandles(symbol, timeframe),
+        loadCandles(symbol, timeframe, directionMode, leverage),
         refreshAlphaRadar(timeframe, directionMode),
       ]);
     };
@@ -808,7 +652,7 @@ export default function MarketRiskTerminal({
     return () => {
       active = false;
     };
-  }, [symbol, timeframe, directionMode, loadCandles, refreshAlphaRadar]);
+  }, [symbol, timeframe, directionMode, leverage, loadCandles, refreshAlphaRadar]);
 
   const tournament = useMemo<BacktestResult[]>(() => {
     return runStrategyTournament(candles, {
@@ -816,7 +660,10 @@ export default function MarketRiskTerminal({
       leverage,
       stopLossPct,
       takeProfitPct,
-      feePct: 0.08,
+      feePct: 0.06,
+      slippagePct: 0.04,
+      fundingRatePct: derivativesPulse.fundingRatePct,
+      timeframe,
       fastPeriod,
       slowPeriod,
       rsiOversold: 32,
@@ -829,6 +676,8 @@ export default function MarketRiskTerminal({
     leverage,
     stopLossPct,
     takeProfitPct,
+    derivativesPulse.fundingRatePct,
+    timeframe,
     fastPeriod,
     slowPeriod,
     directionMode,
@@ -847,7 +696,10 @@ export default function MarketRiskTerminal({
       leverage,
       stopLossPct,
       takeProfitPct,
-      feePct: 0.08,
+      feePct: 0.06,
+      slippagePct: 0.04,
+      fundingRatePct: derivativesPulse.fundingRatePct,
+      timeframe,
       fastPeriod,
       slowPeriod,
       rsiOversold: 32,
@@ -862,6 +714,8 @@ export default function MarketRiskTerminal({
     leverage,
     stopLossPct,
     takeProfitPct,
+    derivativesPulse.fundingRatePct,
+    timeframe,
     fastPeriod,
     slowPeriod,
     directionMode,
@@ -909,7 +763,9 @@ export default function MarketRiskTerminal({
       candles,
       capital,
       leverage,
-      directionMode
+      directionMode,
+      derivativesPulse.fundingRatePct,
+      timeframe
     );
     setSelectedStrategyId(best.strategyId);
     setHasPickedStrategyManually(true);
@@ -925,8 +781,8 @@ export default function MarketRiskTerminal({
 
     setOptMessage(
       lang === "tr"
-        ? `${testedCount} kombinasyon tarandı → Kazanan: ${best.nameTr} (Genel %${best.netProfitPct >= 0 ? "+" : ""}${best.netProfitPct} · OOS %30: %${best.outOfSampleReturnPct >= 0 ? "+" : ""}${best.outOfSampleReturnPct})`
-        : `Swept ${testedCount} setups → Winner: ${best.nameEn} (Net ${best.netProfitPct >= 0 ? "+" : ""}${best.netProfitPct}% · OOS 30%: ${best.outOfSampleReturnPct >= 0 ? "+" : ""}${best.outOfSampleReturnPct}%)`
+        ? `Sıfır-Sızıntılı Kör OOS: İlk %70 eğitimde ${testedCount} kombinasyon yarıştı → Kazanan: ${best.nameTr} | Görünmemiş %30 OOS: %${best.outOfSampleReturnPct >= 0 ? "+" : ""}${best.outOfSampleReturnPct}`
+        : `Strict Zero-Leakage OOS: Ranked ${testedCount} setups on first 70% only → Winner: ${best.nameEn} | Blind 30% OOS: ${best.outOfSampleReturnPct >= 0 ? "+" : ""}${best.outOfSampleReturnPct}%`
     );
   };
 
@@ -1151,23 +1007,6 @@ export default function MarketRiskTerminal({
       };
       persistAlertConfigLocal(nextCfg);
 
-      if (storedProfile?.customerId && storedProfile?.customerEmail) {
-        void fetch("/api/auth", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "save_settings",
-            email: storedProfile.customerEmail,
-            customerId: storedProfile.customerId,
-            alertChannel: nextCfg.channel,
-            alertWebhookUrl: nextCfg.webhookUrl,
-            telegramChatId: nextCfg.telegramChatId,
-          }),
-        }).catch(() => {
-          // Non-blocking cloud sync
-        });
-      }
-
       if (!autoTriggered) {
         setIsSendingAlert(true);
         setAlertStatus(null);
@@ -1182,6 +1021,8 @@ export default function MarketRiskTerminal({
             webhookUrl: nextCfg.webhookUrl,
             telegramBotToken: nextCfg.telegramBotToken,
             telegramChatId: nextCfg.telegramChatId,
+            customerId: storedProfile?.customerId,
+            customerEmail: storedProfile?.customerEmail,
             signal: {
               symbol,
               timeframe,
@@ -1245,12 +1086,127 @@ export default function MarketRiskTerminal({
     ]
   );
 
+  const handleSaveCloudSentinel = async (activeOverride?: boolean) => {
+    const nextCfg: SavedAlertConfig = {
+      channel: alertChannel,
+      webhookUrl: alertWebhookUrl.trim(),
+      telegramBotToken: telegramBotToken.trim(),
+      telegramChatId: telegramChatId.trim(),
+    };
+    persistAlertConfigLocal(nextCfg);
+
+    if (!storedProfile?.customerId || !storedProfile?.customerEmail) {
+      triggerUpgrade(
+        lang === "tr"
+          ? "7/24 bulut sinyal ayarlarını şifreli kaydetmek ve kişisel Cron URL'si almak için ücretsiz hesap aç/giriş yap."
+          : "Sign in or create a free account to encrypt & save your 24/7 Cloud Sentinel watchlist."
+      );
+      return;
+    }
+
+    const nextActive = activeOverride ?? sentinelCloudActive;
+    setIsSyncingCloud(true);
+    setAlertStatus(null);
+    try {
+      const res = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "save_settings",
+          email: storedProfile.customerEmail,
+          customerId: storedProfile.customerId,
+          alertChannel: nextCfg.channel,
+          alertWebhookUrl: nextCfg.webhookUrl,
+          telegramBotToken: nextCfg.telegramBotToken,
+          telegramChatId: nextCfg.telegramChatId,
+          sentinelActive: nextActive,
+          sentinelSymbols,
+          sentinelTf: timeframe,
+          sentinelDir: directionMode,
+        }),
+      });
+      const data = (await res.json()) as {
+        valid?: boolean;
+        profile?: StoredLicenseProfile;
+        message?: string;
+      };
+      if (res.ok && data?.valid && data?.profile) {
+        saveStoredLicenseProfile(data.profile);
+        setSentinelCloudActiveDraft(null);
+        setSentinelSymbolsDraft(null);
+        window.dispatchEvent(new Event(LICENSE_CHANGE_EVENT));
+        setAlertStatus({
+          ok: true,
+          msg:
+            lang === "tr"
+              ? `Şifreli Bulut Nöbetçi kaydedildi (${sentinelSymbols.length} coin · ${timeframe.toUpperCase()}).`
+              : `Encrypted Cloud Sentinel saved (${sentinelSymbols.length} coins · ${timeframe.toUpperCase()}).`,
+        });
+      } else {
+        setAlertStatus({
+          ok: false,
+          msg: data?.message || "Could not sync settings.",
+        });
+      }
+    } catch {
+      setAlertStatus({ ok: false, msg: "Network error syncing cloud settings." });
+    } finally {
+      setIsSyncingCloud(false);
+    }
+  };
+
+  const handleTriggerCloudSentinelNow = async () => {
+    if (!storedProfile?.sentinelTriggerUrl) {
+      await handleSaveCloudSentinel(true);
+      return;
+    }
+    setIsRunningCloudScan(true);
+    setAlertStatus(null);
+    try {
+      const res = await fetch(`${storedProfile.sentinelTriggerUrl}&force=1`, {
+        cache: "no-store",
+      });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        evaluatedPairs?: number;
+        dispatchedCount?: number;
+        reports?: { triggered?: string[]; dispatched?: string[]; errors?: string[] }[];
+        message?: string;
+      };
+      const rep = data.reports?.[0];
+      if (res.ok && data?.ok) {
+        const errs = rep?.errors ?? [];
+        if (errs.length > 0 && (data.dispatchedCount ?? 0) === 0) {
+          setAlertStatus({ ok: false, msg: errs[0] });
+        } else {
+          const trig = rep?.triggered?.length ?? 0;
+          setAlertStatus({
+            ok: true,
+            msg:
+              lang === "tr"
+                ? `Bulut taraması tamamlandı: ${data.evaluatedPairs ?? 0} parite tarandı, ${trig} sinyal bulundu, ${data.dispatchedCount ?? 0} alarm iletildi.`
+                : `Cloud sweep finished: ${data.evaluatedPairs ?? 0} pairs scanned, ${trig} active signals, ${data.dispatchedCount ?? 0} alerts delivered.`,
+          });
+        }
+      } else {
+        setAlertStatus({
+          ok: false,
+          msg: data?.message || "Cloud sentinel execution failed.",
+        });
+      }
+    } catch {
+      setAlertStatus({ ok: false, msg: "Network error reaching cloud sentinel." });
+    } finally {
+      setIsRunningCloudScan(false);
+    }
+  };
+
   // 60-Second Live Signal Sentinel (refreshes bars + radar & alerts on fresh bar signals)
   useEffect(() => {
     if (!sentinelEnabled) return;
     const timer = window.setInterval(() => {
       void (async () => {
-        const freshBars = await loadCandles(symbol, timeframe);
+        const freshBars = await loadCandles(symbol, timeframe, directionMode, leverage);
         await refreshAlphaRadar(timeframe, directionMode);
         const nowStr = new Date().toLocaleTimeString([], {
           hour: "2-digit",
@@ -1265,7 +1221,10 @@ export default function MarketRiskTerminal({
           leverage,
           stopLossPct,
           takeProfitPct,
-          feePct: 0.08,
+          feePct: 0.06,
+          slippagePct: 0.04,
+          fundingRatePct: derivativesPulse.fundingRatePct,
+          timeframe,
           fastPeriod,
           slowPeriod,
           rsiOversold: 32,
@@ -1284,7 +1243,11 @@ export default function MarketRiskTerminal({
           showToast(
             `${symbol} ${freshEval.currentSignal} (${formatPrice(freshEval.activeEntryPrice ?? 0)})`
           );
-          if (alertWebhookUrl.trim() || telegramBotToken.trim()) {
+          if (
+            alertWebhookUrl.trim() ||
+            telegramBotToken.trim() ||
+            storedProfile?.hasSavedTelegramToken
+          ) {
             void handleDispatchAlert(true);
           }
         }
@@ -1304,8 +1267,10 @@ export default function MarketRiskTerminal({
     takeProfitPct,
     fastPeriod,
     slowPeriod,
+    derivativesPulse.fundingRatePct,
     alertWebhookUrl,
     telegramBotToken,
+    storedProfile?.hasSavedTelegramToken,
     loadCandles,
     refreshAlphaRadar,
     handleDispatchAlert,
@@ -1445,7 +1410,7 @@ export default function MarketRiskTerminal({
         {/* Top Asset Pill Row + Direction Toggle + Timeframe + Auto-Optimizer */}
         <div className="flex flex-col gap-3 border-b border-slate-800/90 pb-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex flex-wrap items-center gap-1.5">
-            {ASSETS.map((a) => {
+            {QUANT_ASSETS.map((a) => {
               const selected = symbol === a.symbol;
               return (
                 <button
@@ -1518,20 +1483,12 @@ export default function MarketRiskTerminal({
 
             <button
               type="button"
-              onClick={() => void loadCandles(symbol, timeframe)}
+              onClick={() => void loadCandles(symbol, timeframe, directionMode, leverage)}
               disabled={isLoadingFeed}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-white cursor-pointer disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-[11px] font-bold text-slate-200 hover:bg-slate-800 hover:text-white cursor-pointer disabled:opacity-50"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isLoadingFeed ? "animate-spin" : ""}`} />
-              <span>
-                {feedMode === "live"
-                  ? lang === "tr"
-                    ? "Canlı Akış"
-                    : "Live Feed"
-                  : lang === "tr"
-                    ? "Simülasyon"
-                    : "Simulated"}
-              </span>
+              <span>{formatSourceTag(feedSource, candles.length, lang)}</span>
             </button>
 
             <button
@@ -1541,7 +1498,7 @@ export default function MarketRiskTerminal({
             >
               <Zap className="h-3.5 w-3.5 fill-slate-950" />
               <span>
-                {lang === "tr" ? "En Karlı Ayarı Bul (36 Test)" : "Auto-Optimize (36 Setups)"}
+                {lang === "tr" ? "Kör OOS Optimize (36 Test)" : "Zero-Leak OOS Sweep (36)"}
               </span>
               {!isPaid && !freeOptUsed ? (
                 <span className="rounded bg-slate-950/15 px-1.5 py-0.5 text-[10px] font-black">
@@ -1644,6 +1601,67 @@ export default function MarketRiskTerminal({
           </div>
         </div>
 
+        {/* Multi-Timeframe Confluence Strip (15m · 1H · 4H · 1D) */}
+        <div className="flex flex-col gap-2 rounded-xl border border-slate-800/90 bg-[#050811] px-3.5 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 text-xs">
+            <Layers className="h-3.5 w-3.5 text-blue-400" />
+            <span className="font-bold text-slate-200">
+              {lang === "tr"
+                ? `${symbol} Çoklu Zaman Dilimi (MTF) Uyumu:`
+                : `${symbol} Multi-Timeframe Confluence:`}
+            </span>
+            {(() => {
+              const bullCount = mtfEntries.filter(
+                (m) => m.currentSignal === "LONG" || m.currentSignal === "ENTRY_NOW"
+              ).length;
+              const bearCount = mtfEntries.filter(
+                (m) => m.currentSignal === "SHORT" || m.currentSignal === "SHORT_NOW"
+              ).length;
+              return (
+                <span
+                  className={`rounded px-2 py-0.5 text-[10px] font-extrabold ${
+                    bullCount >= 3
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                      : bearCount >= 3
+                        ? "bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/40"
+                        : "bg-slate-800 text-slate-300"
+                  }`}
+                >
+                  {bullCount >= 3
+                    ? lang === "tr"
+                      ? `${bullCount}/4 GÜÇLÜ BOĞA`
+                      : `${bullCount}/4 STRONG BULL`
+                    : bearCount >= 3
+                      ? lang === "tr"
+                        ? `${bearCount}/4 GÜÇLÜ AYI`
+                        : `${bearCount}/4 STRONG BEAR`
+                      : lang === "tr"
+                        ? `${bullCount} Long · ${bearCount} Short`
+                        : `${bullCount} Long · ${bearCount} Short`}
+                </span>
+              );
+            })()}
+          </div>
+
+          <div className="grid grid-cols-4 gap-2">
+            {mtfEntries.map((m) => (
+              <div
+                key={m.timeframe}
+                className="flex items-center justify-between gap-1.5 rounded-lg border border-slate-800 bg-slate-900/80 px-2.5 py-1 text-[10px]"
+              >
+                <span className="font-bold uppercase text-slate-300">{m.timeframe}</span>
+                <span
+                  className={`rounded px-1.5 py-0.5 font-extrabold ${signalBadgeClass(
+                    m.currentSignal
+                  )}`}
+                >
+                  {signalBadgeText(m.currentSignal, lang)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Auto-Optimize Notification Banner */}
         {optMessage && (
           <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2.5 text-xs font-semibold text-emerald-300">
@@ -1666,7 +1684,7 @@ export default function MarketRiskTerminal({
           <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
             <div className="flex items-center justify-between gap-1">
               <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                {lang === "tr" ? "Net Getiri & OOS %30" : "Net Return & 30% OOS"}
+                {lang === "tr" ? "Net Getiri & Kör OOS %30" : "Net Return & Blind 30% OOS"}
               </span>
               <span
                 className={`rounded px-1.5 py-0.5 text-[9px] font-extrabold ${
@@ -1677,8 +1695,8 @@ export default function MarketRiskTerminal({
               >
                 {activeResult.isRobustOos
                   ? lang === "tr"
-                    ? "OOS DOĞRULANDI"
-                    : "OOS VERIFIED"
+                    ? "KÖR OOS DOĞRULANDI"
+                    : "BLIND OOS PASSED"
                   : lang === "tr"
                     ? "OVERFIT UYARI"
                     : "LOW OOS"}
@@ -1697,7 +1715,7 @@ export default function MarketRiskTerminal({
               </span>
             </span>
             <span className="mt-1 block text-[11px] text-slate-400">
-              {lang === "tr" ? "Son %30 Canlı Test:" : "Unseen 30% OOS:"}{" "}
+              {lang === "tr" ? "Kör %30 OOS:" : "Blind 30% OOS:"}{" "}
               <strong
                 className={
                   activeResult.outOfSampleReturnPct >= 0 ? "text-sky-300" : "text-rose-300"
@@ -1713,7 +1731,7 @@ export default function MarketRiskTerminal({
 
           <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
             <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              {lang === "tr" ? "Kazanma % & Profit Factor" : "Win Rate & Profit Factor"}
+              {lang === "tr" ? "Kazanma % · Expectancy · Kelly" : "Win % · Expectancy · Kelly"}
             </span>
             <span className="mono-nums mt-1 block text-xl font-extrabold text-white sm:text-2xl">
               {activeResult.winRatePct}%{" "}
@@ -1721,17 +1739,23 @@ export default function MarketRiskTerminal({
                 PF {activeResult.profitFactor}
               </span>
             </span>
-            <span className="mt-1 block text-[11px] text-slate-400">
-              {activeResult.totalTrades}{" "}
-              {lang === "tr"
-                ? `işlem (${directionMode.toUpperCase()}) · ${leverage}x`
-                : `trades (${directionMode.toUpperCase()}) · ${leverage}x`}
+            <span className="mono-nums mt-1 block text-[11px] text-slate-400">
+              {lang === "tr" ? "İşlem Başı:" : "Exp:"}{" "}
+              <strong
+                className={
+                  activeResult.expectancyUsd >= 0 ? "text-emerald-300" : "text-rose-300"
+                }
+              >
+                {activeResult.expectancyUsd >= 0 ? "+" : ""}
+                {formatUsd(activeResult.expectancyUsd)}
+              </strong>{" "}
+              &middot; Kelly {activeResult.kellyFractionPct}%
             </span>
           </div>
 
           <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
             <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              {lang === "tr" ? "Max Erime & Sharpe Oranı" : "Max Drawdown & Sharpe"}
+              {lang === "tr" ? "Max Erime & Maliyet Kesintisi" : "Max DD & Fees/Slippage"}
             </span>
             <span className="mono-nums mt-1 block text-xl font-extrabold text-rose-400 sm:text-2xl">
               -{activeResult.maxDrawdownPct}%{" "}
@@ -1739,9 +1763,10 @@ export default function MarketRiskTerminal({
                 S: {activeResult.sharpeRatio}
               </span>
             </span>
-            <span className="mt-1 block text-[11px] text-slate-400">
-              {lang === "tr" ? "Final Kasa:" : "Final Equity:"}{" "}
-              <strong className="text-white">{formatUsd(activeResult.finalEquity)}</strong>
+            <span className="mono-nums mt-1 block text-[11px] text-slate-400">
+              {lang === "tr" ? "Kasa:" : "Eq:"}{" "}
+              <strong className="text-white">{formatUsd(activeResult.finalEquity)}</strong>{" "}
+              &middot; {lang === "tr" ? "Kesinti" : "Costs"} -{formatUsd(activeResult.totalCostsUsd)}
             </span>
           </div>
 
@@ -1755,7 +1780,9 @@ export default function MarketRiskTerminal({
             }`}
           >
             <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              {lang === "tr" ? `Son Mum Sinyali (${symbol})` : `Latest Bar Signal (${symbol})`}
+              {lang === "tr"
+                ? `Son Mum Sinyali (${symbol} · ${candles.length}B)`
+                : `Latest Bar Signal (${symbol} · ${candles.length}B)`}
             </span>
             <span
               className={`mt-1 block text-lg font-extrabold sm:text-xl ${
@@ -1777,7 +1804,7 @@ export default function MarketRiskTerminal({
 
         {/* Main 12-Column Interactive Stage */}
         <div className="grid gap-5 lg:grid-cols-12">
-          {/* Left 8 Cols: Interactive Candlestick Chart + Equity Curve + Webhook Bridge */}
+          {/* Left 8 Cols: Interactive Candlestick Chart + Equity Curve + Webhook & 24/7 Cloud Sentinel */}
           <div className="lg:col-span-8 space-y-4">
             <QuantCandlestickChart
               symbol={symbol}
@@ -1864,15 +1891,15 @@ export default function MarketRiskTerminal({
               </div>
             </div>
 
-            {/* Live Webhook & 60s Sentinel Alert Dispatcher */}
+            {/* Live Webhook & 24/7 Encrypted Cloud Sentinel Panel */}
             <div className="rounded-xl border border-slate-800 bg-[#050811] p-4 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
                 <div className="flex items-center gap-2">
                   <Bell className="h-4 w-4 text-sky-400" />
                   <h3 className="text-xs font-bold uppercase tracking-wider text-white">
                     {lang === "tr"
-                      ? "Canlı Sinyal Alarmı & Webhook Bot Köprüsü"
-                      : "Live Signal Alerts & Webhook Bot Bridge"}
+                      ? "7/24 Bulut Sinyal Nöbetçisi & Şifreli Webhook Köprüsü"
+                      : "24/7 Cloud Signal Sentinel & Encrypted Webhook Bridge"}
                   </h3>
                 </div>
 
@@ -1893,11 +1920,11 @@ export default function MarketRiskTerminal({
                   <span>
                     {sentinelEnabled
                       ? lang === "tr"
-                        ? `60sn Nöbetçi AÇIK${lastSentinelScan ? ` (${lastSentinelScan})` : ""}`
-                        : `60s Sentinel ON${lastSentinelScan ? ` (${lastSentinelScan})` : ""}`
+                        ? `Sekme 60sn AÇIK${lastSentinelScan ? ` (${lastSentinelScan})` : ""}`
+                        : `60s Tab ON${lastSentinelScan ? ` (${lastSentinelScan})` : ""}`
                       : lang === "tr"
-                        ? "60sn Canlı Nöbetçiyi Aç"
-                        : "Enable 60s Live Sentinel"}
+                        ? "Sekme 60sn Oto-Tarama"
+                        : "60s Tab Auto-Scan"}
                   </span>
                 </button>
               </div>
@@ -1906,7 +1933,7 @@ export default function MarketRiskTerminal({
                 {(
                   [
                     { id: "discord", label: "Discord Webhook" },
-                    { id: "telegram", label: "Telegram Bot" },
+                    { id: "telegram", label: "Telegram Bot (AES-256 Cloud)" },
                     { id: "webhook", label: "Custom JSON Bot" },
                   ] as const
                 ).map((ch) => (
@@ -1931,7 +1958,11 @@ export default function MarketRiskTerminal({
                     type="password"
                     value={telegramBotToken}
                     onChange={(e) => setTelegramTokenDraft(e.target.value)}
-                    placeholder="Bot Token (123456789:AAH...)"
+                    placeholder={
+                      storedProfile?.hasSavedTelegramToken
+                        ? "•••••••• (Encrypted token saved in cloud)"
+                        : "Bot Token (123456789:AAH...)"
+                    }
                     className="mono-nums rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white focus:border-sky-400 focus:outline-none"
                   />
                   <input
@@ -1956,12 +1987,130 @@ export default function MarketRiskTerminal({
                 />
               )}
 
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <span className="text-[11px] text-slate-400">
-                  {lang === "tr"
-                    ? "Giriş, SL, TP, Tahmini Likidasyon, OOS %30 ve Fonlama Oranı anında gönderilir."
-                    : "Sends Entry, SL, TP, Est. Liq, 30% OOS & Live Funding directly to your channel."}
-                </span>
+              {/* Watchlist Coin Selector for 7/24 Cloud Sentinel */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] text-slate-400">
+                  <span>
+                    {lang === "tr"
+                      ? `7/24 Bulut İzleme Listesi (${sentinelSymbols.length} Parite · ${timeframe.toUpperCase()}):`
+                      : `24/7 Cloud Watchlist (${sentinelSymbols.length} Pairs · ${timeframe.toUpperCase()}):`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveCloudSentinel(!sentinelCloudActive)}
+                    className={`rounded px-2 py-0.5 text-[10px] font-bold cursor-pointer ${
+                      sentinelCloudActive
+                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                        : "bg-slate-800 text-slate-300 hover:text-white"
+                    }`}
+                  >
+                    {sentinelCloudActive
+                      ? lang === "tr"
+                        ? "Bulut Cron: AKTİF"
+                        : "Cloud Cron: ON"
+                      : lang === "tr"
+                        ? "Bulut Cron: KAPALI"
+                        : "Cloud Cron: OFF"}
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap gap-1">
+                  {QUANT_ASSETS.map((a) => {
+                    const activeWatch = sentinelSymbols.includes(a.symbol);
+                    return (
+                      <button
+                        key={`w-${a.symbol}`}
+                        type="button"
+                        onClick={() => {
+                          if (a.proOnly && !isPaid) {
+                            triggerUpgrade(
+                              lang === "tr"
+                                ? `${a.label} bulut takibi Pro lisansla açılır.`
+                                : `${a.label} cloud alerts require Pro license.`
+                            );
+                            return;
+                          }
+                          const nextList = activeWatch
+                            ? sentinelSymbols.filter((s) => s !== a.symbol)
+                            : [...sentinelSymbols, a.symbol];
+                          setSentinelSymbolsDraft(nextList.length > 0 ? nextList : [a.symbol]);
+                        }}
+                        className={`rounded px-2 py-1 text-[10px] font-bold transition cursor-pointer ${
+                          activeWatch
+                            ? "bg-blue-600/30 text-blue-200 border border-blue-400/50"
+                            : "bg-slate-900 text-slate-500 border border-slate-800 hover:text-slate-300"
+                        }`}
+                      >
+                        {a.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={isSyncingCloud}
+                    onClick={() => void handleSaveCloudSentinel(true)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-2 text-xs font-bold text-emerald-300 transition hover:bg-emerald-500/25 disabled:opacity-50 cursor-pointer"
+                  >
+                    <Cloud className="h-3.5 w-3.5" />
+                    <span>
+                      {isSyncingCloud
+                        ? lang === "tr"
+                          ? "Kaydediliyor..."
+                          : "Saving..."
+                        : lang === "tr"
+                          ? "7/24 Buluta Kaydet (Şifreli)"
+                          : "Save 24/7 Cloud Watchlist"}
+                    </span>
+                  </button>
+
+                  {storedProfile?.sentinelTriggerUrl && (
+                    <>
+                      <button
+                        type="button"
+                        disabled={isRunningCloudScan}
+                        onClick={() => void handleTriggerCloudSentinelNow()}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 cursor-pointer disabled:opacity-50"
+                      >
+                        <RefreshCw
+                          className={`h-3 w-3 ${isRunningCloudScan ? "animate-spin" : ""}`}
+                        />
+                        <span>
+                          {lang === "tr" ? "Bulutu Şimdi Tara" : "Run Cloud Watchlist"}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (typeof window !== "undefined" && storedProfile.sentinelTriggerUrl) {
+                            const fullCronUrl = `${window.location.origin}${storedProfile.sentinelTriggerUrl}`;
+                            void navigator.clipboard.writeText(fullCronUrl);
+                            setCopiedCronUrl(true);
+                            setTimeout(() => setCopiedCronUrl(false), 2000);
+                            showToast(
+                              lang === "tr"
+                                ? "Kişisel 7/24 Cron URL kopyalandı! (cron-job.org / UptimeRobot 5dk-15dk)"
+                                : "Personal 24/7 Cron URL copied! Paste into cron-job.org / UptimeRobot."
+                            );
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-950 px-2.5 py-2 text-[11px] font-semibold text-slate-300 hover:text-white cursor-pointer"
+                      >
+                        {copiedCronUrl ? (
+                          <Check className="h-3 w-3 text-emerald-400" />
+                        ) : (
+                          <Copy className="h-3 w-3" />
+                        )}
+                        <span>{lang === "tr" ? "Cron URL" : "Cron URL"}</span>
+                      </button>
+                    </>
+                  )}
+                </div>
 
                 <button
                   type="button"
@@ -2007,7 +2156,9 @@ export default function MarketRiskTerminal({
                     {lang === "tr" ? "6-Strateji Performans Ligi" : "6-Strategy Tournament"}
                   </h3>
                 </div>
-                <span className="text-[10px] text-slate-400">OOS 70/30</span>
+                <span className="text-[10px] text-slate-400">
+                  {candles.length}B &middot; Zero-Leak OOS
+                </span>
               </div>
 
               <div className="mt-2.5 space-y-1.5">

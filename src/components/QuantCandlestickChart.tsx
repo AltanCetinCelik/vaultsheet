@@ -41,7 +41,7 @@ export default function QuantCandlestickChart({
   result,
   lang,
 }: QuantCandlestickChartProps) {
-  const [visibleCount, setVisibleCount] = useState<number>(100);
+  const [visibleCount, setVisibleCount] = useState<number>(120);
   const [hoveredLocalIdx, setHoveredLocalIdx] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
 
@@ -104,7 +104,7 @@ export default function QuantCandlestickChart({
     const spanP = maxP - minP;
 
     const slotW = plotW / slicedCandles.length;
-    const candleW = Math.max(1.8, Math.min(8, slotW * 0.66));
+    const candleW = Math.max(0.85, Math.min(8, slotW * 0.68));
 
     const toX = (localIdx: number) =>
       Number((padLeft + (localIdx + 0.5) * slotW).toFixed(1));
@@ -287,9 +287,10 @@ export default function QuantCandlestickChart({
           <ZoomIn className="h-3.5 w-3.5 text-slate-400" />
           <div className="inline-flex rounded-lg border border-slate-800 bg-slate-900 p-0.5 text-[10px] font-bold">
             {[
-              { n: 80, label: lang === "tr" ? "80 Mum" : "80 Bars" },
-              { n: 150, label: lang === "tr" ? "150 Mum" : "150 Bars" },
+              { n: 120, label: lang === "tr" ? "120 Mum" : "120 Bars" },
               { n: 300, label: lang === "tr" ? "300 Mum" : "300 Bars" },
+              { n: 500, label: lang === "tr" ? "500 Mum" : "500 Bars" },
+              { n: 1000, label: lang === "tr" ? "1000 Mum" : "1000 Bars" },
             ].map((opt) => (
               <button
                 key={opt.n}
@@ -299,7 +300,7 @@ export default function QuantCandlestickChart({
                   setHoveredLocalIdx(null);
                 }}
                 className={`rounded-md px-2 py-1 transition cursor-pointer ${
-                  (visibleCount === 100 && opt.n === 80) || visibleCount === opt.n
+                  visibleCount === opt.n
                     ? "bg-slate-700 text-white"
                     : "text-slate-400 hover:text-white"
                 }`}

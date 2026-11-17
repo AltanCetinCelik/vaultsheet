@@ -29,34 +29,34 @@ interface HomeLandingClientProps {
 
 const FAQS_TR: FaqEntry[] = [
   {
-    question: "12 Parite Alpha Tarayıcısı ve Vadeli (Futures) Verisi gerçek mi?",
+    question: "12 Parite, 1.000 Mum Tarihçesi ve Vadeli Verisi engelli ülkelerde de çalışıyor mu?",
     answer:
-      "Evet. Hem ücretsiz 5 parite hem de 7 Pro paritenin tamamı doğrudan Binance Spot OHLCV API'sinden 200–300 gerçek mum ve Binance Futures (fapi.binance.com) üzerinden canlı Fonlama Oranı (Funding Rate), Open Interest, Balina Long/Short oranı ve Taker hacim akışını çeker.",
+      "Evet. Sunucu tarafında çalışan çoklu borsa proxy'si (/api/market); birincil olarak Binance Vision (1.000 gerçek OHLCV mum), yedek olarak Binance Spot ve Bybit Linear Perpetual API'lerini paralel sorgular. Binance Futures Funding, Open Interest ve Balina L/S verisi de aynı şekilde Bybit yedeğiyle desteklenir.",
   },
   {
-    question: "TradingView veya ChatGPT'den farkı nedir?",
+    question: "Kör Walk-Forward OOS (%70/%30) nasıl sıfır sızıntıyla çalışıyor?",
     answer:
-      "Standart grafiklerde geçmişe ezber (overfit) tuzaklarını göremezsiniz. VaultSheet Quant veriyi %70 Eğitim / %30 Canlı Doğrulama (Walk-Forward OOS) olarak böler, Long+Short çift yönlü mum içi SL/TP & likidasyon hesabı yapar ve bulduğu canlı sinyali Discord/Telegram botunuza tek tıkla yollar.",
+      "Auto-Optimizer 36 strateji + SL/TP ayarını YALNIZCA ilk %70 Eğitim (In-Sample) mumlarında yarıştırıp kilitler; son %30'a (görünmemiş gelecek dilime) hiç bakmaz. Ardından kazanan ayarı tam seride çalıştırıp son %30 Kör OOS getirisini, işlem başı Expectancy ve Half-Kelly kasa riskini gösterir.",
   },
   {
-    question: "Long + Short, Likidasyon ve Komisyon hesaba katılıyor mu?",
+    question: "Komisyon, kayma (slippage), fonlama ve likidasyon hesaba katılıyor mu?",
     answer:
-      "Evet. Her işlemde gidiş-dönüş borsa komisyonu düşülür; Long veya Short pozisyon açıldığında sonraki her mumda önce High/Low Stop-Loss ardından Take-Profit vurulup vurulmadığı kontrol edilir ve seçtiğiniz kaldıraca göre tahmini likidasyon fiyatı hesaplanır.",
+      "Evet. Her işlemde gidiş-dönüş %0.06/taraf borsa komisyonu, %0.04/taraf piyasa kayması (slippage) ve pozisyonun açık kaldığı 8 saatlik fonlama maliyetleri net getiriden düşülür; seçtiğiniz kaldıraca göre tahmini likidasyon fiyatı hesaplanır.",
   },
   {
-    question: "Discord / Telegram Webhook sinyalleri için borsa API şifresi gerekiyor mu?",
+    question: "Tarayıcı veya bilgisayar kapansa da Telegram / Discord alarmı gelir mi?",
     answer:
-      "Hayır. Hiçbir cüzdan veya borsa trade API anahtarı istenmez. İsterseniz Discord Webhook URL'nizi veya Telegram Bot Token'ınızı girip 60sn Canlı Nöbetçi ile yeni kırılım sinyallerini ve SL/TP emir planlarını kendi kanalınıza düşürebilirsiniz.",
+      "Evet. Hesabınıza giriş yaptığınızda Telegram Bot Token'ınız sunucuda AES-256-GCM ile şifrelenir. İzlemek istediğiniz coinleri ve kanalınızı buluta kaydedip kişisel imzalı 7/24 Cron URL'nizi (/api/cron/sentinel) veya günlük bulut tarayıcısını aktif edebilirsiniz.",
   },
   {
     question: "Ücretsiz sürüm ile $12 / $29 Pro lisans arasındaki fark nedir?",
     answer:
-      "BTC, ETH, SOL, BNB ve PAXG (Altın) üzerinde 1H ve 4H zaman dilimlerinde Long+Short backtest, canlı Futures Funding/OI/Whale/Squeeze barı, 1 adet ücretsiz 36-kombinasyon Auto-Optimize ve webhook test gönderimi ücretsizdir. $12 7 Günlük Paket ve $29/yıl Pro lisans ise 12 varlıklı canlı Alpha Radar'ın tamamını (XRP, DOGE, AVAX, SUI, LINK, ADA, ARB), 15m/1D dilimleri, sınırsız optimizasyonu ve CSV dökümünü açar.",
+      "BTC, ETH, SOL, BNB ve PAXG (Altın) üzerinde 1.000 mumluk Long+Short Sıfır-Sızıntılı OOS backtest, MTF 4 zaman dilimi uyumu, canlı Futures Squeeze barı ve 1 adet ücretsiz 36-test taraması ücretsizdir. $12 7 Günlük Paket ve $29/yıl Pro lisans ise tüm 12 coini (XRP, DOGE, AVAX, SUI, LINK, ADA, ARB), 15m/1D dilimleri, sınırsız tarama, bulut watchlist ve CSV ihracını açar.",
   },
   {
     question: "Otomatik Yenileme (Auto-Renewal) tuzağı var mı?",
     answer:
-      "Hayır. $12 7 Günlük Paket ve $29 Yıllık Pro tamamen tek seferlik geçiştir. Süren bittiğinde kartından haberin olmadan para çekilmez; e-posta ile açtığın hesapta webhook ayarların bulutta saklanır.",
+      "Hayır. $12 7 Günlük Paket ve $29 Yıllık Pro tamamen tek seferlik geçiştir. Süren bittiğinde kartından haberin olmadan para çekilmez.",
   },
 ];
 
@@ -118,20 +118,20 @@ export default function HomeLandingClient({
               <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1 text-[11px] font-bold uppercase tracking-widest text-emerald-300">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 {lang === "tr"
-                  ? "VaultSheet Quant · Long+Short OOS · Canlı Vadeli Squeeze · Discord/Telegram Bot"
-                  : "VaultSheet Quant · Long+Short OOS · Live Perp Squeeze · Webhook Alerts"}
+                  ? "VaultSheet Quant · 1.000 Mum · Sıfır-Sızıntılı Kör OOS · 7/24 Bulut Cron"
+                  : "VaultSheet Quant · 1,000 Bars · Zero-Leakage Blind OOS · 24/7 Cloud Sentinel"}
               </span>
 
               <h1 className="mt-4 text-3xl font-extrabold tracking-tight text-white sm:text-5xl sm:leading-[1.08]">
                 {lang === "tr"
-                  ? "Ezberi Boz — Long/Short OOS Backtest, Canlı Vadeli Squeeze & Anlık Bot Sinyali"
-                  : "Stop Overfitting — Bi-Directional OOS Backtest, Live Perp Squeeze & Webhook Alerts"}
+                  ? "Ezberi Boz — 1.000 Mum Kör OOS, MTF Uyum & 7/24 Bulut Bot Nöbetçisi"
+                  : "Zero-Leakage Quant — 1,000-Bar Blind OOS, Multi-Exchange Perps & 24/7 Cloud Alerts"}
               </h1>
 
               <p className="mx-auto mt-4 max-w-2xl text-sm text-slate-300 sm:text-base leading-relaxed">
                 {lang === "tr"
-                  ? "12 paritede gerçek OHLCV mumları + Binance Futures Fonlama, Open Interest ve Balina L/S oranını tara. Stratejini %70 Eğitim / %30 Canlı OOS testinden geçir ve sinyali tek tıkla Discord/Telegram'a yolla."
-                  : "Scan 12 live pairs with real OHLCV candles plus Binance Futures Funding, Open Interest & Whale L/S ratios. Validate setups on 70/30 Walk-Forward OOS splits and dispatch orders to Discord/Telegram."}
+                  ? "Binance Vision + Bybit yedeğiyle 12 paritede 1.000 gerçek mum, komisyon+kayma+fonlama kesintisi, Half-Kelly kasa riski, MTF uyumu ve sekmeyi kapatsan bile çalışan AES-256 şifreli Telegram/Discord nöbetçisi."
+                  : "Multi-exchange 1,000 OHLCV bars (Binance Vision + Bybit fallback) with strict first-70% training / blind-30% OOS, fees+slippage+funding drag, MTF confluence & encrypted 24/7 Discord/Telegram cloud webhooks."}
               </p>
             </div>
 
@@ -244,14 +244,14 @@ export default function HomeLandingClient({
 
               <div className="rounded-xl border border-slate-800 bg-[#050811] p-4 font-mono text-xs text-slate-300 shadow-inner">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-2 text-[11px] text-slate-400">
-                  <span>quantBacktester.ts &rarr; Long/Short OOS Audit</span>
-                  <span className="text-emerald-400 font-semibold">36 Sweeps &lt; 25ms</span>
+                  <span>marketData.ts + quantBacktester.ts &rarr; Institutional Audit</span>
+                  <span className="text-emerald-400 font-semibold">1,000 Bars · Zero Leak</span>
                 </div>
                 <pre className="mt-3 overflow-x-auto leading-relaxed text-[11px] text-slate-300">
-{`GET  api.binance.com/api/v3/klines + fapi.binance.com/premiumIndex
-SPLIT [0..70%] In-Sample  |  [70%..100%] Unseen Out-of-Sample
-EXEC Long: low <= SL -> TP  |  Short: high >= SL -> low <= TP
-POST /api/alerts -> Discord / Telegram / JSON Bot (Entry+SL+TP+Liq)`}
+{`GET  /api/market  -> Binance Vision (1000B) / Bybit Linear Fallback
+OPT  Optimize strictly inside [0..70%] Train -> Test [70%..100%] Blind OOS
+COST Deduct 0.06% fee + 0.04% slippage/side + 8h funding drag * lev
+CRON GET /api/cron/sentinel -> Encrypted AES-256 Telegram / Discord Push`}
                 </pre>
               </div>
             </div>

@@ -16,6 +16,12 @@ import {
   exportToQboOrOfx,
   getExportMimeAndFilename,
 } from "@/lib/exporters";
+import {
+  decryptCloudSecret,
+  encryptCloudSecret,
+  signSentinelToken,
+  verifySentinelToken,
+} from "@/lib/cryptoSettings";
 import { computeKeyChecksum, verifyLicenseKey } from "@/lib/licensing";
 import { getSeoBankBySlug, SEO_BANKS } from "@/lib/seoCatalog";
 import {
@@ -504,5 +510,53 @@ describe("Quantitative Backtester, 6-Strategy Tournament & Auto-Optimizer", () =
     expect(radar.winRatePct).toBeGreaterThanOrEqual(0);
     expect(radar.fundingRatePct).toBe(-0.009);
     expect(Number.isFinite(radar.outOfSampleReturnPct)).toBe(true);
+  });
+
+  it("enforces zero-leakage Walk-Forward selection, slippage/funding costs & Kelly sizing", () => {
+    const candles = generateFallbackCandles("SOLUSDT", "4h", 1000);
+    const { best, testedCount, strictZeroLeakage } = optimizeStrategyConfig(
+      candles,
+      10000,
+      2,
+      "both",
+      0.015,
+      "4h"
+    );
+
+    expect(testedCount).toBe(36);
+    expect(strictZeroLeakage).toBe(true);
+    expect(best.totalCostsUsd).toBeGreaterThan(0);
+    expect(Number.isFinite(best.expectancyUsd)).toBe(true);
+    expect(best.kellyFractionPct).toBeGreaterThanOrEqual(0.5);
+    expect(best.kellyFractionPct).toBeLessThanOrEqual(12.5);
+
+    // Selecting best config strictly on first 70% must match returning same winner regardless of OOS perturbation
+    const split = Math.floor(candles.length * 0.7);
+    const mutatedTailCandles = candles.map((c, idx) =>
+      idx >= split
+        ? { ...c, close: c.close * 0.92, low: c.low * 0.9, high: c.high * 0.95 }
+        : c
+    );
+    const rerun = optimizeStrategyConfig(mutatedTailCandles, 10000, 2, "both", 0.015, "4h");
+    expect(rerun.best.strategyId).toBe(best.strategyId);
+    expect(rerun.best.config.stopLossPct).toBe(best.config.stopLossPct);
+    expect(rerun.best.config.takeProfitPct).toBe(best.config.takeProfitPct);
+  });
+
+  it("encrypts/decrypts Telegram tokens with AES-256-GCM and verifies sentinel HMAC tokens", () => {
+    const secret = "test-polar-webhook-secret-256";
+    const sampleToken = "7123456789:AAFakeBotTokenForEncryptionTest1234";
+    const cipher = encryptCloudSecret(sampleToken, secret);
+
+    expect(cipher.startsWith("v1:")).toBe(true);
+    expect(cipher).not.toContain(sampleToken);
+    expect(decryptCloudSecret(cipher, secret)).toBe(sampleToken);
+    expect(decryptCloudSecret(cipher, "wrong-secret")).toBe("");
+
+    const sig = signSentinelToken("cust_abc123", secret);
+    expect(sig).toHaveLength(32);
+    expect(verifySentinelToken("cust_abc123", sig, secret)).toBe(true);
+    expect(verifySentinelToken("cust_abc999", sig, secret)).toBe(false);
+    expect(verifySentinelToken("cust_abc123", sig, "wrong-secret")).toBe(false);
   });
 });

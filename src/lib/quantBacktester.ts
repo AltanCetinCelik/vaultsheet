@@ -32,6 +32,9 @@ export interface StrategyConfig {
   stopLossPct: number;
   takeProfitPct: number;
   feePct: number;
+  slippagePct?: number;
+  fundingRatePct?: number;
+  timeframe?: TimeframeId;
   fastPeriod: number;
   slowPeriod: number;
   rsiOversold: number;
@@ -80,6 +83,9 @@ export interface BacktestResult {
   maxDrawdownPct: number;
   sharpeRatio: number;
   totalTrades: number;
+  totalCostsUsd: number;
+  expectancyUsd: number;
+  kellyFractionPct: number;
   currentSignal: SignalState;
   activeSide: "LONG" | "SHORT";
   activeEntryPrice: number | null;
@@ -557,6 +563,13 @@ export function buildFallbackDerivativesPulse(
   };
 }
 
+function getBarsPerFundingInterval(tf: TimeframeId): number {
+  if (tf === "15m") return 32;
+  if (tf === "1h") return 8;
+  if (tf === "4h") return 2;
+  return 0.3333; // 1d captures ~3 funding settlements per bar
+}
+
 export function runStrategyBacktest(
   candles: OHLCVCandle[],
   config: StrategyConfig
@@ -567,7 +580,11 @@ export function runStrategyBacktest(
   const leverage = Math.max(1, Math.min(20, config.leverage));
   const stopPct = Math.max(0.25, config.stopLossPct) / 100;
   const targetPct = Math.max(0.5, config.takeProfitPct) / 100;
-  const roundTripFeeRate = (Math.max(0, config.feePct) / 100) * 2;
+  const feeRatePerSide = Math.max(0, config.feePct) / 100;
+  const slippagePerSide = Math.max(0, config.slippagePct ?? 0.04) / 100;
+  const roundTripCostRate = (feeRatePerSide + slippagePerSide) * 2;
+  const fundingRateDecimal = (config.fundingRatePct ?? 0) / 100;
+  const barsPer8h = getBarsPerFundingInterval(config.timeframe ?? "4h");
   const defaultSide: "LONG" | "SHORT" = direction === "short" ? "SHORT" : "LONG";
 
   if (candles.length < 30) {
@@ -590,6 +607,9 @@ export function runStrategyBacktest(
       maxDrawdownPct: 0,
       sharpeRatio: 0,
       totalTrades: 0,
+      totalCostsUsd: 0,
+      expectancyUsd: 0,
+      kellyFractionPct: 0,
       currentSignal: "FLAT",
       activeSide: defaultSide,
       activeEntryPrice: null,
@@ -632,6 +652,7 @@ export function runStrategyBacktest(
   let equity = capital;
   let peakEquity = capital;
   let maxDrawdownPct = 0;
+  let totalCostsUsd = 0;
 
   let activeTrade: {
     side: "LONG" | "SHORT";
@@ -736,7 +757,16 @@ export function runStrategyBacktest(
           activeTrade.side === "LONG"
             ? (exitPrice - activeTrade.entryPrice) / activeTrade.entryPrice
             : (activeTrade.entryPrice - exitPrice) / activeTrade.entryPrice;
-        const netLevPct = Math.max(-0.98, (grossPct - roundTripFeeRate) * leverage);
+        const barsHeld = Math.max(1, i - activeTrade.entryIndex);
+        const fundingCycles = barsHeld / barsPer8h;
+        // Positive funding: longs pay shorts; negative funding: shorts pay longs
+        const fundingDragRate =
+          (activeTrade.side === "LONG" ? fundingRateDecimal : -fundingRateDecimal) *
+          fundingCycles;
+        const tradeCostRate = roundTripCostRate + fundingDragRate;
+        totalCostsUsd += Math.max(0, roundNum(equity * tradeCostRate * leverage, 2));
+
+        const netLevPct = Math.max(-0.98, (grossPct - tradeCostRate) * leverage);
         const pnlUsd = roundNum(equity * netLevPct, 2);
         equity = Math.max(10, roundNum(equity + pnlUsd, 2));
 
@@ -796,7 +826,7 @@ export function runStrategyBacktest(
         activeTrade.side === "LONG"
           ? (candle.close - activeTrade.entryPrice) / activeTrade.entryPrice
           : (activeTrade.entryPrice - candle.close) / activeTrade.entryPrice;
-      const netOpenLev = Math.max(-0.98, (openPct - roundTripFeeRate * 0.5) * leverage);
+      const netOpenLev = Math.max(-0.98, (openPct - roundTripCostRate * 0.5) * leverage);
       mtmEquity = Math.max(10, roundNum(equity * (1 + netOpenLev), 2));
     }
 
@@ -848,7 +878,14 @@ export function runStrategyBacktest(
       activeTrade.side === "LONG"
         ? (lastCandle.close - activeTrade.entryPrice) / activeTrade.entryPrice
         : (activeTrade.entryPrice - lastCandle.close) / activeTrade.entryPrice;
-    const netLevPct = Math.max(-0.98, (grossPct - roundTripFeeRate) * leverage);
+    const barsHeld = Math.max(1, candles.length - 1 - activeTrade.entryIndex);
+    const fundingDragRate =
+      (activeTrade.side === "LONG" ? fundingRateDecimal : -fundingRateDecimal) *
+      (barsHeld / barsPer8h);
+    const openCostRate = roundTripCostRate + fundingDragRate;
+    totalCostsUsd += Math.max(0, roundNum(equity * openCostRate * leverage, 2));
+
+    const netLevPct = Math.max(-0.98, (grossPct - openCostRate) * leverage);
     const pnlUsd = roundNum(equity * netLevPct, 2);
     const mtmFinal = Math.max(10, roundNum(equity + pnlUsd, 2));
 
@@ -895,8 +932,24 @@ export function runStrategyBacktest(
         ? 9.99
         : 0;
 
+  const expectancyUsd = trades.length > 0 ? roundNum(netProfitUsd / trades.length, 2) : 0;
+
+  // Half-Kelly risk allocation % based on historical win rate & average win/loss ratio
+  let kellyFractionPct = 1.5;
+  if (winningTrades.length >= 2 && losingTrades.length >= 1) {
+    const avgWin = grossProfit / winningTrades.length;
+    const avgLoss = Math.max(1, grossLoss / losingTrades.length);
+    const b = avgWin / avgLoss;
+    const w = winningTrades.length / trades.length;
+    const rawKelly = w - (1 - w) / b;
+    kellyFractionPct = roundNum(Math.max(0.5, Math.min(12.5, rawKelly * 0.5 * 100)), 1);
+  }
+
   // Walk-Forward Out-of-Sample Split (First 70% Train / Last 30% Unseen Validation)
-  const oosSplitIndex = Math.max(warmup + 5, Math.min(candles.length - 15, Math.floor(candles.length * 0.7)));
+  const oosSplitIndex = Math.max(
+    warmup + 5,
+    Math.min(candles.length - 15, Math.floor(candles.length * 0.7))
+  );
   const splitEquity = equityCurve[oosSplitIndex]?.strategyEquity ?? capital;
   const inSampleReturnPct = roundNum(((splitEquity - capital) / capital) * 100, 2);
   const outOfSampleReturnPct =
@@ -907,7 +960,10 @@ export function runStrategyBacktest(
       ? roundNum((oosTrades.filter((t) => t.pnlUsd > 0).length / oosTrades.length) * 100, 1)
       : winRatePct;
   const isRobustOos =
-    trades.length >= 2 && inSampleReturnPct > -2 && outOfSampleReturnPct > 0 && winRatePct >= 40;
+    trades.length >= 3 &&
+    inSampleReturnPct > -2 &&
+    outOfSampleReturnPct > 0 &&
+    winRatePct >= 40;
 
   // Approximate annualized trade-return Sharpe ratio
   let sharpeRatio = 0;
@@ -959,6 +1015,9 @@ export function runStrategyBacktest(
     maxDrawdownPct,
     sharpeRatio,
     totalTrades: trades.length,
+    totalCostsUsd: roundNum(totalCostsUsd, 2),
+    expectancyUsd,
+    kellyFractionPct,
     currentSignal,
     activeSide,
     activeEntryPrice,
@@ -974,6 +1033,17 @@ export function runStrategyBacktest(
     overlayLower,
     overlayLabel,
   };
+}
+
+function scoreInSampleOnly(r: BacktestResult): number {
+  const tradeBonus = r.totalTrades >= 3 ? 6 : r.totalTrades === 0 ? -60 : 0;
+  return (
+    r.netProfitPct -
+    r.maxDrawdownPct * 0.65 +
+    r.profitFactor * 1.8 +
+    r.sharpeRatio * 1.2 +
+    tradeBonus
+  );
 }
 
 function scoreBacktest(r: BacktestResult): number {
@@ -1001,12 +1071,20 @@ export function runStrategyTournament(
   return results;
 }
 
+/**
+ * STRICT ZERO-LEAKAGE WALK-FORWARD OPTIMIZER:
+ * Sweeps all 36 (6 strategy x 6 SL/TP) setups exclusively inside the first 70% In-Sample slice.
+ * Locks the winning config without ever peeking at the final 30%, then executes on the full series
+ * so the reported Out-of-Sample 30% return is genuinely blind validation.
+ */
 export function optimizeStrategyConfig(
   candles: OHLCVCandle[],
   baseCapital: number,
   leverage: number,
-  direction: TradeDirectionMode = "long"
-): { best: BacktestResult; testedCount: number } {
+  direction: TradeDirectionMode = "long",
+  fundingRatePct = 0,
+  timeframe: TimeframeId = "4h"
+): { best: BacktestResult; testedCount: number; strictZeroLeakage: boolean } {
   const strategyIds = Object.keys(STRATEGY_CATALOG) as StrategyId[];
   const slTpPairs: [number, number][] = [
     [1.5, 4.0],
@@ -1017,54 +1095,66 @@ export function optimizeStrategyConfig(
     [4.0, 12.0],
   ];
 
-  let best: BacktestResult | null = null;
+  const strictZeroLeakage = candles.length >= 120;
+  const splitIdx = strictZeroLeakage ? Math.floor(candles.length * 0.7) : candles.length;
+  const trainCandles = candles.slice(0, splitIdx);
+
+  let winnerConfig: StrategyConfig | null = null;
+  let bestTrainScore = -Infinity;
   let testedCount = 0;
 
   for (const strategyId of strategyIds) {
     for (const [stopLossPct, takeProfitPct] of slTpPairs) {
       testedCount += 1;
-      const res = runStrategyBacktest(candles, {
+      const cfg: StrategyConfig = {
         strategyId,
         capital: baseCapital,
         leverage,
         stopLossPct,
         takeProfitPct,
-        feePct: 0.08,
+        feePct: 0.06,
+        slippagePct: 0.04,
+        fundingRatePct,
+        timeframe,
         fastPeriod: 9,
         slowPeriod: 21,
         rsiOversold: 32,
         rsiOverbought: 70,
         direction,
-      });
-
-      if (!best || scoreBacktest(res) > scoreBacktest(best)) {
-        best = res;
+      };
+      const trainRes = runStrategyBacktest(trainCandles, cfg);
+      const score = scoreInSampleOnly(trainRes);
+      if (!winnerConfig || score > bestTrainScore) {
+        bestTrainScore = score;
+        winnerConfig = cfg;
       }
     }
   }
 
-  if (!best) {
-    best = runStrategyBacktest(candles, {
-      strategyId: "donchian_breakout",
-      capital: baseCapital,
-      leverage,
-      stopLossPct: 2.5,
-      takeProfitPct: 6.5,
-      feePct: 0.08,
-      fastPeriod: 9,
-      slowPeriod: 21,
-      rsiOversold: 32,
-      rsiOverbought: 70,
-      direction,
-    });
-  }
+  const finalConfig: StrategyConfig = winnerConfig ?? {
+    strategyId: "donchian_breakout",
+    capital: baseCapital,
+    leverage,
+    stopLossPct: 2.5,
+    takeProfitPct: 6.5,
+    feePct: 0.06,
+    slippagePct: 0.04,
+    fundingRatePct,
+    timeframe,
+    fastPeriod: 9,
+    slowPeriod: 21,
+    rsiOversold: 32,
+    rsiOverbought: 70,
+    direction,
+  };
 
-  return { best, testedCount };
+  const best = runStrategyBacktest(candles, finalConfig);
+  return { best, testedCount, strictZeroLeakage };
 }
 
 /**
- * Evaluates a coin across the 6-strategy tournament (default bi-directional 2x futures)
- * to rank active market signals, OOS robustness & derivatives funding squeeze across all assets.
+ * Evaluates a coin across the 36-setup Zero-Leakage Walk-Forward optimizer
+ * to rank active signals, blind 30% OOS performance & derivatives funding squeeze.
  */
 export function buildCoinRadarRow(
   symbol: string,
@@ -1073,9 +1163,17 @@ export function buildCoinRadarRow(
   change24hPct: number,
   proOnly = false,
   fundingRatePct = 0,
-  direction: TradeDirectionMode = "both"
+  direction: TradeDirectionMode = "both",
+  timeframe: TimeframeId = "4h"
 ): CoinRadarRow {
-  const { best } = optimizeStrategyConfig(candles, 10000, 2, direction);
+  const { best } = optimizeStrategyConfig(
+    candles,
+    10000,
+    2,
+    direction,
+    fundingRatePct,
+    timeframe
+  );
   const lastPrice = candles[candles.length - 1]?.close ?? 0;
   const squeeze = assessDerivativesSqueeze(fundingRatePct, 54, 1.04, best.currentSignal);
 
