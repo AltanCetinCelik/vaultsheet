@@ -604,11 +604,11 @@ export default function QuantCandlestickChart({
               <span className="hidden xl:inline">
                 L <strong className="text-slate-200">{formatAxisPrice(activeHud.low)}</strong>
               </span>
-              <span>
+              <span className="hidden lg:inline">
                 <strong className={isUpBar ? "text-emerald-400" : "text-rose-400"}>
                   {formatAxisPrice(activeHud.close)}
                 </strong>
-                <span className={`ml-1.5 ${isUpBar ? "text-emerald-400" : "text-rose-400"}`}>
+                <span className={`ml-1 ${isUpBar ? "text-emerald-400" : "text-rose-400"}`}>
                   ({barPctChange >= 0 ? "+" : ""}
                   {barPctChange.toFixed(2)}%)
                 </span>
@@ -616,7 +616,7 @@ export default function QuantCandlestickChart({
               <span className="hidden 2xl:inline">
                 Vol <strong className="text-slate-300">{formatCompactVol(activeHud.volume)}</strong>
               </span>
-              <span className="hidden md:inline text-slate-400">
+              <span className="text-slate-400">
                 {lang === "tr" ? "Kasa" : "Eq"}{" "}
                 <strong
                   className={
