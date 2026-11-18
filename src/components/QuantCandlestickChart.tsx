@@ -183,6 +183,7 @@ export default function QuantCandlestickChart({
     }
 
     const candleMarkers: SeriesMarker<Time>[] = [];
+    // Show concise directional entries (omit noisy repeating exit bubbles so price action stays legible)
     for (const tr of result.trades as TradeExecution[]) {
       const entrySec = Math.floor(tr.entryTime / 1000);
       if (lookup.has(entrySec)) {
@@ -190,25 +191,8 @@ export default function QuantCandlestickChart({
           time: entrySec as UTCTimestamp,
           position: tr.side === "LONG" ? "belowBar" : "aboveBar",
           shape: tr.side === "LONG" ? "arrowUp" : "arrowDown",
-          color: tr.side === "LONG" ? "#10b981" : "#c084fc",
+          color: tr.side === "LONG" ? "#2dd4bf" : "#c084fc",
           text: tr.side === "LONG" ? "L" : "S",
-        });
-      }
-
-      const exitSec = Math.floor(tr.exitTime / 1000);
-      if (lookup.has(exitSec) && tr.exitReason !== "OPEN") {
-        const exitColor =
-          tr.exitReason === "TP"
-            ? "#fbbf24"
-            : tr.exitReason === "SL"
-              ? "#f43f5e"
-              : "#94a3b8";
-        candleMarkers.push({
-          time: exitSec as UTCTimestamp,
-          position: tr.side === "LONG" ? "aboveBar" : "belowBar",
-          shape: tr.exitReason === "SIGNAL" ? "square" : "circle",
-          color: exitColor,
-          text: tr.exitReason === "TP" ? "TP" : tr.exitReason === "SL" ? "SL" : "",
         });
       }
     }
@@ -250,20 +234,20 @@ export default function QuantCandlestickChart({
       width: el.clientWidth,
       height: el.clientHeight,
       layout: {
-        background: { type: ColorType.Solid, color: "#090D14" },
-        textColor: "#94a3b8",
+        background: { type: ColorType.Solid, color: "#10151F" },
+        textColor: "#8b98a9",
         fontSize: 11,
-        fontFamily: "var(--font-mono), ui-monospace, monospace",
+        fontFamily: "var(--font-inter), ui-sans-serif, system-ui, sans-serif",
         panes: {
           enableResize: true,
-          separatorColor: "rgba(255, 255, 255, 0.08)",
-          separatorHoverColor: "rgba(16, 185, 129, 0.45)",
+          separatorColor: "rgba(255, 255, 255, 0.06)",
+          separatorHoverColor: "rgba(52, 211, 153, 0.45)",
         },
         attributionLogo: true,
       },
       grid: {
-        vertLines: { color: "rgba(255, 255, 255, 0.025)" },
-        horzLines: { color: "rgba(255, 255, 255, 0.025)" },
+        vertLines: { color: "rgba(255, 255, 255, 0.02)" },
+        horzLines: { color: "rgba(255, 255, 255, 0.02)" },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
@@ -306,10 +290,10 @@ export default function QuantCandlestickChart({
     const candleSeries = chart.addSeries(
       CandlestickSeries,
       {
-        upColor: "#10b981",
-        downColor: "#f43f5e",
-        wickUpColor: "#10b981",
-        wickDownColor: "#f43f5e",
+        upColor: "#22b07d",
+        downColor: "#e15261",
+        wickUpColor: "#22b07d",
+        wickDownColor: "#e15261",
         borderVisible: false,
       },
       0
@@ -326,13 +310,13 @@ export default function QuantCandlestickChart({
       0
     );
     chart.priceScale("vol", 0).applyOptions({
-      scaleMargins: { top: 0.84, bottom: 0 },
+      scaleMargins: { top: 0.85, bottom: 0 },
     });
 
     const upperSeries = chart.addSeries(
       LineSeries,
       {
-        color: "rgba(56, 189, 248, 0.4)",
+        color: "rgba(56, 189, 248, 0.28)",
         lineWidth: 1,
         lineStyle: LineStyle.Dashed,
         crosshairMarkerVisible: false,
@@ -345,7 +329,7 @@ export default function QuantCandlestickChart({
     const lowerSeries = chart.addSeries(
       LineSeries,
       {
-        color: "rgba(167, 139, 250, 0.4)",
+        color: "rgba(167, 139, 250, 0.28)",
         lineWidth: 1,
         lineStyle: LineStyle.Dashed,
         crosshairMarkerVisible: false,
@@ -592,49 +576,48 @@ export default function QuantCandlestickChart({
   const isUpBar = activeHud ? activeHud.close >= activeHud.open : true;
 
   return (
-    <div className="flex flex-col bg-[#090D14]">
-      {/* Single-Row Clean Chart Toolbar (Zero Orphaned Wrap) */}
-      <div className="flex items-center justify-between gap-2 border-b border-white/[0.06] bg-[#0B0F18] px-3 py-2">
-        <div className="flex items-center gap-2.5 min-w-0">
+    <div className="flex flex-col bg-[#10151F]">
+      {/* Calm Single-Row Chart Header (Zero Clipping) */}
+      <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-4 py-2.5">
+        <div className="flex items-center gap-3 min-w-0">
           <div className="flex items-center gap-1.5 shrink-0">
             <Activity className="h-3.5 w-3.5 text-emerald-400" />
-            <span className="text-xs font-bold text-white">
+            <span className="text-xs font-semibold text-white">
               {symbol.replace("USDT", "/USDT")}
             </span>
-            <span className="mono-nums rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-medium text-slate-300">
+            <span className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-medium text-slate-300">
               {timeframe.toUpperCase()}
             </span>
           </div>
 
           {activeHud ? (
-            <div className="mono-nums hidden sm:flex items-center gap-2 text-[11px] text-slate-400 truncate">
-              <span className="hidden xl:inline text-slate-500">
+            <div className="tabular-nums hidden sm:flex items-center gap-3 text-[11px] text-slate-400 truncate">
+              <span className="hidden 2xl:inline text-slate-500">
                 {formatHudUtc(activeHud.timeSec * 1000)}
               </span>
-              <span className="hidden lg:inline">
+              <span className="hidden xl:inline">
                 O <strong className="text-slate-200">{formatAxisPrice(activeHud.open)}</strong>
               </span>
-              <span className="hidden md:inline">
+              <span className="hidden xl:inline">
                 H <strong className="text-slate-200">{formatAxisPrice(activeHud.high)}</strong>
               </span>
-              <span className="hidden md:inline">
+              <span className="hidden xl:inline">
                 L <strong className="text-slate-200">{formatAxisPrice(activeHud.low)}</strong>
               </span>
               <span>
-                C{" "}
                 <strong className={isUpBar ? "text-emerald-400" : "text-rose-400"}>
                   {formatAxisPrice(activeHud.close)}
                 </strong>
+                <span className={`ml-1.5 ${isUpBar ? "text-emerald-400" : "text-rose-400"}`}>
+                  ({barPctChange >= 0 ? "+" : ""}
+                  {barPctChange.toFixed(2)}%)
+                </span>
               </span>
-              <span className={isUpBar ? "text-emerald-400" : "text-rose-400"}>
-                {barPctChange >= 0 ? "+" : ""}
-                {barPctChange.toFixed(2)}%
-              </span>
-              <span className="hidden xl:inline">
+              <span className="hidden 2xl:inline">
                 Vol <strong className="text-slate-300">{formatCompactVol(activeHud.volume)}</strong>
               </span>
-              <span>
-                Eq{" "}
+              <span className="hidden md:inline text-slate-400">
+                {lang === "tr" ? "Kasa" : "Eq"}{" "}
                 <strong
                   className={
                     activeHud.equity >= result.config.capital
@@ -653,16 +636,16 @@ export default function QuantCandlestickChart({
           )}
         </div>
 
-        {/* Layer Toggles + Visible Range Switcher (Never Wraps) */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        {/* Clean Controls */}
+        <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={() => setShowBands((v) => !v)}
             title={result.overlayLabel}
-            className={`hidden sm:inline-flex items-center gap-1 rounded border px-2 py-1 text-[10px] font-medium transition cursor-pointer ${
+            className={`hidden sm:inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition cursor-pointer ${
               showBands
-                ? "border-cyan-500/35 bg-cyan-500/10 text-cyan-300"
-                : "border-white/[0.08] bg-[#080B10] text-slate-400 hover:text-slate-200"
+                ? "bg-white/[0.08] text-slate-200"
+                : "text-slate-500 hover:text-slate-300"
             }`}
           >
             <Layers className="h-3 w-3" />
@@ -672,17 +655,17 @@ export default function QuantCandlestickChart({
           <button
             type="button"
             onClick={() => setShowSignals((v) => !v)}
-            className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[10px] font-medium transition cursor-pointer ${
+            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition cursor-pointer ${
               showSignals
-                ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-300"
-                : "border-white/[0.08] bg-[#080B10] text-slate-400 hover:text-slate-200"
+                ? "bg-white/[0.08] text-slate-200"
+                : "text-slate-500 hover:text-slate-300"
             }`}
           >
             <Tag className="h-3 w-3" />
-            <span>{lang === "tr" ? "Sinyal" : "Signals"}</span>
+            <span>{lang === "tr" ? "İşaret" : "Signals"}</span>
           </button>
 
-          <div className="flex items-center rounded border border-white/[0.08] bg-[#080B10] p-0.5 text-[10px] mono-nums">
+          <div className="flex items-center rounded-md bg-[#090C12] p-0.5 text-[10.5px] tabular-nums">
             {[120, 300, 500, 1000].map((cnt) => {
               const active = visibleCount === cnt;
               return (
@@ -690,9 +673,9 @@ export default function QuantCandlestickChart({
                   key={cnt}
                   type="button"
                   onClick={() => applyRangeCount(cnt)}
-                  className={`rounded-xs px-1.5 py-0.5 font-medium transition cursor-pointer ${
+                  className={`rounded px-2 py-0.5 font-medium transition cursor-pointer ${
                     active
-                      ? "bg-white/[0.14] text-white"
+                      ? "bg-white/[0.12] text-white"
                       : "text-slate-400 hover:text-slate-200"
                   }`}
                 >
@@ -704,7 +687,7 @@ export default function QuantCandlestickChart({
               type="button"
               onClick={() => applyRangeCount(1000)}
               title={lang === "tr" ? "Tüm seriyi sığdır" : "Fit full series"}
-              className="ml-0.5 rounded-xs p-0.5 text-slate-400 hover:bg-white/[0.08] hover:text-white cursor-pointer"
+              className="ml-0.5 rounded p-0.5 text-slate-400 hover:bg-white/[0.08] hover:text-white cursor-pointer"
             >
               <Maximize2 className="h-3 w-3" />
             </button>
@@ -713,26 +696,26 @@ export default function QuantCandlestickChart({
       </div>
 
       {/* Dual-Pane Interactive Canvas */}
-      <div className="relative h-[430px] sm:h-[490px] w-full bg-[#090D14]">
+      <div className="relative h-[440px] sm:h-[500px] w-full bg-[#10151F]">
         <div ref={containerRef} className="h-full w-full" />
 
-        {/* Sub-pane Equity Legend Positioned Safely in Top Headroom (zero curve collision) */}
-        <div className="pointer-events-none absolute left-2.5 bottom-[24%] z-10 flex items-center gap-2.5 rounded border border-white/[0.07] bg-[#090D14]/90 px-2 py-0.5 text-[10px] text-slate-400">
-          <span className="font-semibold text-slate-200">
-            {lang === "tr" ? "KASA EĞRİSİ" : "EQUITY"}
+        {/* Sub-pane Equity Label */}
+        <div className="pointer-events-none absolute left-3 bottom-[23.5%] z-10 flex items-center gap-3 text-[10.5px] text-slate-400">
+          <span className="font-medium text-slate-300">
+            {lang === "tr" ? "Kasa Eğrisi" : "Equity"}
           </span>
-          <span className="inline-flex items-center gap-1 text-slate-400">
-            <span className="inline-block h-[2px] w-2.5 border-t border-dashed border-slate-400" />
-            {lang === "tr" ? "Tut (B&H)" : "Hold"}
+          <span className="inline-flex items-center gap-1 text-slate-500">
+            <span className="inline-block h-[2px] w-2.5 border-t border-dashed border-slate-500" />
+            {lang === "tr" ? "Al-Tut" : "Hold"}
           </span>
-          <span className="inline-flex items-center gap-1 text-cyan-300">
-            ▲ {lang === "tr" ? "Kör OOS %30" : "Blind OOS 30%"}
+          <span className="inline-flex items-center gap-1 text-cyan-400/90">
+            ▲ {lang === "tr" ? "OOS %30 Sınırı" : "Blind OOS"}
           </span>
         </div>
 
-        {/* Clean Sync Skeleton */}
+        {/* Sync Skeleton */}
         {(isLoading || candles.length === 0) && (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-[#090D14]/95">
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-[#10151F]/95">
             <div className="flex items-end gap-1.5 opacity-45">
               {[28, 44, 34, 58, 48, 66, 40, 52, 72, 60, 46, 68].map((h, idx) => (
                 <div
@@ -744,10 +727,10 @@ export default function QuantCandlestickChart({
                 />
               ))}
             </div>
-            <p className="mt-3 mono-nums text-xs font-medium tracking-wide text-slate-300">
+            <p className="mt-3 text-xs font-medium text-slate-400">
               {lang === "tr"
-                ? `${symbol} · Canlı 1.000 Mum Yükleniyor...`
-                : `${symbol} · Syncing Live 1,000-Bar Book...`}
+                ? `${symbol} · Canlı piyasa verisi yükleniyor...`
+                : `${symbol} · Loading live market feed...`}
             </p>
           </div>
         )}

@@ -2,15 +2,12 @@
 
 @layer base {
   :root {
-    --bg-obsidian: #05070b;
-    --bg-panel: #0c1018;
-    --bg-elevated: #131924;
-    --border-hairline: rgba(255, 255, 255, 0.08);
-    --text-primary: #f8fafc;
-    --text-secondary: #94a3b8;
-    --accent-emerald: #10b981;
-    --accent-rose: #f43f5e;
-    --accent-cyan: #22d3ee;
+    --bg-obsidian: #090c12;
+    --bg-panel: #10151f;
+    --bg-elevated: #161d2b;
+    --border-hairline: rgba(255, 255, 255, 0.065);
+    --text-primary: #f1f5f9;
+    --text-secondary: #8b98a9;
   }
 
   html {
@@ -22,10 +19,7 @@
 
   body {
     font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
-    background:
-      radial-gradient(ellipse 90% 35% at 50% -8%, rgba(16, 185, 129, 0.055), transparent 70%),
-      radial-gradient(ellipse 60% 30% at 85% 0%, rgba(34, 211, 238, 0.035), transparent 70%),
-      var(--bg-obsidian);
+    background-color: var(--bg-obsidian);
     color: var(--text-primary);
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
@@ -33,13 +27,10 @@
   }
 }
 
-.obsidian-card {
-  background-color: #0c1018;
-  border: 1px solid rgba(255, 255, 255, 0.075);
-  border-radius: 0.75rem;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.045),
-    0 12px 32px -12px rgba(0, 0, 0, 0.65);
+.calm-surface {
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-hairline);
+  border-radius: 0.875rem;
 }
 
 .tabular-nums {
@@ -51,50 +42,49 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Precision dark terminal scrollbars */
+/* Precision dark scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #05070b;
+  background: #090c12;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.22);
+  background: rgba(148, 163, 184, 0.2);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.42);
+  background: rgba(148, 163, 184, 0.36);
 }
 
 .terminal-scroll {
   scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.24) #05070b;
+  scrollbar-color: rgba(148, 163, 184, 0.22) #090c12;
 }
 
-/* Slim institutional range input */
+/* Calm precision range input */
 .quant-range {
   -webkit-appearance: none;
   appearance: none;
   height: 4px;
   border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.1);
   outline: none;
 }
 
 .quant-range::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
   border-radius: 9999px;
-  background: #10b981;
-  border: 2px solid #05070b;
+  background: #34d399;
+  border: 2px solid #10151f;
   cursor: pointer;
-  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.5);
   transition: transform 0.12s ease;
 }
 
@@ -103,11 +93,11 @@
 }
 
 .quant-range::-moz-range-thumb {
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
   border-radius: 9999px;
-  background: #10b981;
-  border: 2px solid #05070b;
+  background: #34d399;
+  border: 2px solid #10151f;
   cursor: pointer;
 }
 
@@ -119,8 +109,8 @@ summary {
 }
 
 :focus-visible {
-  outline: 2px solid rgba(16, 185, 129, 0.65);
-  outline-offset: 1px;
+  outline: 2px solid rgba(52, 211, 153, 0.6);
+  outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {

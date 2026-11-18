@@ -61,36 +61,32 @@ export default function HomeLandingClient({
 
   return (
     <div className="min-h-screen flex flex-col text-slate-100">
-      {/* Solid Obsidian Terminal Header (48px) */}
-      <header className="sticky top-0 z-40 h-12 border-b border-white/[0.08] bg-[#080B12]/95 backdrop-blur-md">
-        <div className="mx-auto flex h-full max-w-[1680px] items-center justify-between gap-3 px-3 sm:px-4">
+      {/* Minimal Calm Navigation Header */}
+      <header className="sticky top-0 z-40 h-13 border-b border-white/[0.06] bg-[#090C12]/90 backdrop-blur-md">
+        <div className="mx-auto flex h-full max-w-[1380px] items-center justify-between gap-4 px-4 sm:px-6">
           <div className="flex items-center gap-3 min-w-0">
             <Link href="/" className="flex items-center gap-2 shrink-0 group">
-              <span className="flex h-7 w-7 items-center justify-center rounded border border-emerald-500/40 bg-emerald-500/15 text-emerald-400">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
                 <ShieldCheck className="h-3.5 w-3.5" />
               </span>
-              <span className="text-sm font-bold tracking-tight text-white">
-                VaultSheet{" "}
-                <span className="font-semibold text-emerald-400">Quant</span>
+              <span className="text-sm font-semibold tracking-tight text-white">
+                VaultSheet <span className="text-emerald-400">Quant</span>
               </span>
             </Link>
-
-            <span className="hidden h-4 w-px bg-white/[0.1] md:inline-block" />
-
-            <h1 className="hidden truncate text-[11px] font-medium text-slate-400 md:block">
+            <h1 className="sr-only">
               {lang === "tr"
-                ? "Çift Yönlü OOS Backtester · 12 Parite Canlı Vadeli Tarayıcı"
-                : "Bi-Directional OOS Backtester · 12-Pair Live Futures Terminal"}
+                ? "VaultSheet Quant — Çift Yönlü OOS Backtester ve Vadeli Tarayıcı"
+                : "VaultSheet Quant — Bi-Directional OOS Backtester & Futures Terminal"}
             </h1>
           </div>
 
-          <div className="flex items-center gap-4 shrink-0">
-            <nav className="hidden lg:flex items-center gap-5 text-xs font-medium text-slate-400">
+          <div className="flex items-center gap-5 shrink-0">
+            <nav className="hidden md:flex items-center gap-5 text-xs font-medium text-slate-400">
               <a href="#workbench" className="hover:text-white transition-colors">
                 {lang === "tr" ? "Terminal" : "Terminal"}
               </a>
               <a href="#pricing" className="hover:text-white transition-colors">
-                {lang === "tr" ? "Planlar ($12 / $29)" : "Pricing ($12 / $29)"}
+                {lang === "tr" ? "Planlar" : "Pricing"}
               </a>
               <a href="#faq" className="hover:text-white transition-colors">
                 {lang === "tr" ? "SSS" : "FAQ"}
@@ -102,8 +98,8 @@ export default function HomeLandingClient({
         </div>
       </header>
 
-      {/* Immediate Above-the-Fold 3-Pane Trading Cockpit */}
-      <main className="flex-1 w-full mx-auto max-w-[1680px]">
+      {/* Main Centered Calm Workspace */}
+      <main className="flex-1 w-full mx-auto max-w-[1380px]">
         <MarketRiskTerminal lang={lang} />
 
         {/* Aligned Hairline Pricing Strip (Zero Card Height Mismatch, Zero Contradictions) */}
