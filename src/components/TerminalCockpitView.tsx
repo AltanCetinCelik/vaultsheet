@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Activity,
   Award,
@@ -18,6 +18,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   Target,
+  X,
   Zap,
 } from "lucide-react";
 import QuantCandlestickChart from "@/components/QuantCandlestickChart";
@@ -92,7 +93,6 @@ export interface TerminalCockpitViewProps {
   onDispatchAlert: () => void;
   isSendingAlert: boolean;
   onExportTradesCsv: () => void;
-  // Sentinel & Cloud Props
   alertChannel: "discord" | "telegram" | "webhook";
   onChangeAlertChannel: (ch: "discord" | "telegram" | "webhook") => void;
   alertWebhookUrl: string;
@@ -130,9 +130,9 @@ const TIMEFRAMES: { id: TimeframeId; label: string; proOnly?: boolean }[] = [
 ];
 
 const DIRECTIONS: { id: TradeDirectionMode; labelTr: string; labelEn: string }[] = [
-  { id: "both", labelTr: "ÇİFT YÖN", labelEn: "BOTH" },
-  { id: "long", labelTr: "LONG", labelEn: "LONG" },
-  { id: "short", labelTr: "SHORT", labelEn: "SHORT" },
+  { id: "both", labelTr: "2 Yön", labelEn: "Both" },
+  { id: "long", labelTr: "Long", labelEn: "Long" },
+  { id: "short", labelTr: "Short", labelEn: "Short" },
 ];
 
 const SHORT_STRATEGY_LABELS: Record<StrategyId, { tr: string; en: string }> = {
@@ -147,12 +147,12 @@ const SHORT_STRATEGY_LABELS: Record<StrategyId, { tr: string; en: string }> = {
 function formatSourceShort(src: MarketDataSource, bars: number): string {
   const tag =
     src === "binance_vision"
-      ? "BINANCE VISION"
+      ? "BINANCE"
       : src === "binance_spot"
-        ? "BINANCE SPOT"
+        ? "SPOT"
         : src === "bybit_linear"
-          ? "BYBIT PERP"
-          : "SYNCING";
+          ? "BYBIT"
+          : "SYNC";
   return `${tag} · ${bars}B`;
 }
 
@@ -239,6 +239,9 @@ export default function TerminalCockpitView({
   );
   const [mobilePane, setMobilePane] = useState<"chart" | "markets" | "trade">("chart");
   const [pairSearch, setPairSearch] = useState<string>("");
+  const [assetMenuOpen, setAssetMenuOpen] = useState<boolean>(false);
+  const [showAllTrades, setShowAllTrades] = useState<boolean>(false);
+  const [dismissedOptMsg, setDismissedOptMsg] = useState<string | null>(null);
 
   const isBootingChart = candles.length === 0;
   const isBootingRadar = radarRows.length === 0 && isScanningRadar;
@@ -258,6 +261,28 @@ export default function TerminalCockpitView({
     firstCandleClose > 0 && lastPrice > 0
       ? ((lastPrice - firstCandleClose) / firstCandleClose) * 100
       : 0;
+
+  const winLossCounts = useMemo(() => {
+    let wins = 0;
+    let losses = 0;
+    for (const tr of activeResult.trades) {
+      if (tr.pnlUsd >= 0) wins++;
+      else losses++;
+    }
+    return { wins, losses };
+  }, [activeResult.trades]);
+
+  const reversedTrades = useMemo(
+    () => [...activeResult.trades].reverse(),
+    [activeResult.trades]
+  );
+  const visibleTrades = showAllTrades ? reversedTrades : reversedTrades.slice(0, 10);
+
+  const rrRatio = stopLossPct > 0 ? takeProfitPct / stopLossPct : 0;
+  const slSharePct =
+    stopLossPct + takeProfitPct > 0
+      ? Math.round((stopLossPct / (stopLossPct + takeProfitPct)) * 100)
+      : 30;
 
   const buildCopyText = () =>
     `${symbol} (${timeframe.toUpperCase()}) | Strategy: ${activeResult.nameEn}\n` +
@@ -323,168 +348,199 @@ export default function TerminalCockpitView({
           },
         ];
 
+  const showOptToast = Boolean(optMessage && optMessage !== dismissedOptMsg);
+
   return (
     <section
       id="workbench"
-      className="flex flex-col border-b border-white/[0.07] bg-[#080B10] text-slate-100"
+      className="flex flex-col gap-2.5 p-2.5 sm:p-3 text-slate-100"
     >
-      {/* Top Instrument & Command Strip */}
-      <div className="border-b border-white/[0.07] bg-[#0B0F17] px-3 py-2 sm:px-4">
-        <div className="flex flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-between">
-          {/* Active Symbol + Price + Derivatives Inline Matrix */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            {/* Ticker Identity */}
-            <div className="flex items-center gap-2.5 pr-2 sm:border-r sm:border-white/[0.08]">
-              <div className="flex flex-col">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-sm font-bold tracking-tight text-white">
-                    {activeAssetMeta?.label ?? symbol.replace("USDT", "")}/USDT
-                  </span>
-                  <span className="mono-nums rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-medium text-slate-300">
-                    PERP
-                  </span>
-                  {isLoadingFeed ? (
-                    <span className="inline-flex items-center gap-1 text-[10px] text-amber-300">
-                      <RefreshCw className="h-2.5 w-2.5 animate-spin" /> SYNC
+      {/* SINGLE UNIFIED COMMAND BAR (Replaces 4 stacked bars — Instant Pair Switcher + Controls) */}
+      <div className="obsidian-card relative px-3 py-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          {/* Left: Interactive Asset Selector Pill + Telemetry */}
+          <div className="flex flex-wrap items-center gap-3 min-w-0">
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setAssetMenuOpen((o) => !o)}
+                className="flex items-center gap-2.5 rounded-lg border border-white/[0.1] bg-[#080B10] px-3 py-1.5 text-left transition hover:border-emerald-500/45 cursor-pointer"
+              >
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-bold tracking-tight text-white">
+                      {activeAssetMeta?.label ?? symbol.replace("USDT", "")}/USDT
                     </span>
+                    <span className="mono-nums rounded bg-white/[0.06] px-1.5 py-0.5 text-[9.5px] font-semibold text-slate-300">
+                      PERP
+                    </span>
+                    <ChevronDown
+                      className={`h-3.5 w-3.5 text-slate-400 transition-transform ${
+                        assetMenuOpen ? "rotate-180 text-emerald-400" : ""
+                      }`}
+                    />
+                  </div>
+                  <span className="block text-[10px] text-slate-400">
+                    {lang === "tr" ? activeResult.nameTr : activeResult.nameEn}
+                  </span>
+                </div>
+
+                <div className="border-l border-white/[0.08] pl-2.5">
+                  {isBootingChart ? (
+                    <div className="h-5 w-20 animate-pulse rounded bg-white/[0.06]" />
                   ) : (
-                    <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-medium text-slate-400 mono-nums">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                      {formatSourceShort(feedSource, candles.length)}
-                    </span>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="mono-nums text-sm sm:text-base font-bold text-white">
+                        {formatPrice(lastPrice)}
+                      </span>
+                      <span
+                        className={`mono-nums text-[11px] font-semibold ${
+                          periodChangePct >= 0 ? "text-emerald-400" : "text-rose-400"
+                        }`}
+                      >
+                        {periodChangePct >= 0 ? "+" : ""}
+                        {periodChangePct.toFixed(2)}%
+                      </span>
+                    </div>
                   )}
                 </div>
-                <span className="text-[10.5px] text-slate-400">
-                  {lang === "tr" ? activeResult.nameTr : activeResult.nameEn}
-                </span>
-              </div>
+              </button>
 
-              <div className="pl-1">
-                {isBootingChart ? (
-                  <div className="h-6 w-24 animate-pulse rounded bg-white/[0.06]" />
-                ) : (
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="mono-nums text-base font-bold text-white">
-                      {formatPrice(lastPrice)}
-                    </span>
-                    <span
-                      className={`mono-nums text-[11px] font-semibold ${
-                        periodChangePct >= 0 ? "text-emerald-400" : "text-rose-400"
-                      }`}
-                    >
-                      {periodChangePct >= 0 ? "+" : ""}
-                      {periodChangePct.toFixed(2)}%
-                    </span>
+              {/* Floating Quick Pair Switcher Popover (Works on ALL widths: 390px, 900px, 1440px!) */}
+              {assetMenuOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-30"
+                    onClick={() => setAssetMenuOpen(false)}
+                  />
+                  <div className="absolute left-0 top-full z-40 mt-2 w-[310px] sm:w-[340px] rounded-xl border border-white/[0.12] bg-[#0B0F17]/95 p-2.5 shadow-2xl backdrop-blur-md">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <input
+                        type="text"
+                        value={pairSearch}
+                        onChange={(e) => setPairSearch(e.target.value)}
+                        placeholder={lang === "tr" ? "Parite ara..." : "Search pairs..."}
+                        className="w-full rounded-lg border border-white/[0.1] bg-[#05070B] px-2.5 py-1.5 text-xs text-white placeholder:text-slate-500 focus:border-emerald-400 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={onRefreshRadar}
+                        className="rounded-lg border border-white/[0.1] bg-[#05070B] p-1.5 text-slate-300 hover:text-white cursor-pointer"
+                      >
+                        <RefreshCw
+                          className={`h-3.5 w-3.5 ${isScanningRadar ? "animate-spin text-emerald-400" : ""}`}
+                        />
+                      </button>
+                    </div>
+
+                    <div className="max-h-72 space-y-1 overflow-y-auto terminal-scroll pr-1">
+                      {(radarRows.length > 0 ? displayedRadar : []).map((row) => {
+                        const active = row.symbol === symbol;
+                        const locked = Boolean(row.proOnly && !isPaid);
+                        const pos = row.outOfSampleReturnPct >= 0;
+                        return (
+                          <button
+                            key={`pop-${row.symbol}`}
+                            type="button"
+                            onClick={() => {
+                              onSelectAsset(row.symbol, row.base, row.proOnly);
+                              setAssetMenuOpen(false);
+                            }}
+                            className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs transition cursor-pointer ${
+                              active
+                                ? "bg-emerald-500/15 border border-emerald-500/35"
+                                : "border border-transparent hover:bg-white/[0.04]"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-white">{row.base}</span>
+                              {locked && <Lock className="h-3 w-3 text-slate-500" />}
+                              <span
+                                className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${
+                                  row.currentSignal === "LONG"
+                                    ? "bg-emerald-500/15 text-emerald-300"
+                                    : row.currentSignal === "SHORT"
+                                      ? "bg-purple-500/20 text-purple-300"
+                                      : "bg-white/[0.06] text-slate-400"
+                                }`}
+                              >
+                                {row.currentSignal}
+                              </span>
+                            </div>
+                            <div className="mono-nums flex items-center gap-2.5">
+                              <span className="text-slate-200">{formatPrice(row.price)}</span>
+                              <span
+                                className={`font-semibold ${
+                                  pos ? "text-emerald-400" : "text-rose-400"
+                                }`}
+                              >
+                                {pos ? "+" : ""}
+                                {row.outOfSampleReturnPct}%
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                )}
-              </div>
+                </>
+              )}
             </div>
 
-            {/* Derivatives Telemetry Strip */}
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px]">
-              <div className="flex flex-col">
-                <span className="text-[9.5px] uppercase tracking-wider text-slate-500">
+            {/* Clean Derivatives Snapshot (Desktop) */}
+            <div className="hidden xl:flex items-center gap-4 border-l border-white/[0.07] pl-3 text-[11px]">
+              <div>
+                <span className="block text-[9.5px] uppercase tracking-wider text-slate-500">
                   {lang === "tr" ? "Fonlama (8s)" : "Funding (8h)"}
                 </span>
-                {isBootingChart ? (
-                  <span className="mt-0.5 h-3.5 w-12 animate-pulse rounded bg-white/[0.06]" />
-                ) : (
-                  <span
-                    className={`mono-nums font-semibold ${
-                      derivativesPulse.fundingRatePct > 0.015
-                        ? "text-rose-400"
-                        : derivativesPulse.fundingRatePct < 0
-                          ? "text-emerald-400"
-                          : "text-slate-200"
-                    }`}
-                  >
-                    {derivativesPulse.fundingRatePct >= 0 ? "+" : ""}
-                    {derivativesPulse.fundingRatePct.toFixed(4)}%
-                  </span>
-                )}
-              </div>
-
-              <div className="flex flex-col">
-                <span className="text-[9.5px] uppercase tracking-wider text-slate-500">
-                  {lang === "tr" ? "Açık Poz. (OI)" : "Open Interest"}
-                </span>
-                {isBootingChart ? (
-                  <span className="mt-0.5 h-3.5 w-14 animate-pulse rounded bg-white/[0.06]" />
-                ) : (
-                  <span className="mono-nums font-semibold text-slate-200">
-                    {formatCompactUsd(derivativesPulse.openInterestUsd)}
-                  </span>
-                )}
-              </div>
-
-              <div className="hidden sm:flex flex-col">
-                <span className="text-[9.5px] uppercase tracking-wider text-slate-500">
-                  {lang === "tr" ? "Balina L / S" : "Whale L / S"}
-                </span>
-                {isBootingChart ? (
-                  <span className="mt-0.5 h-3.5 w-16 animate-pulse rounded bg-white/[0.06]" />
-                ) : (
-                  <span className="mono-nums font-semibold text-slate-200">
-                    <span className="text-emerald-400">{derivativesPulse.whaleLongPct}%</span>
-                    <span className="text-slate-500"> / </span>
-                    <span className="text-rose-400">{derivativesPulse.whaleShortPct}%</span>
-                  </span>
-                )}
-              </div>
-
-              {/* Squeeze Pill (2XL+ inline since full Squeeze Intel Dock sits on right rail) */}
-              {!isBootingChart && (
-                <div
-                  className={`hidden 2xl:inline-flex items-center gap-1.5 rounded border px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap ${
-                    derivativesPulse.squeezeState === "SHORT_SQUEEZE"
-                      ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-300"
-                      : derivativesPulse.squeezeState === "LONG_SQUEEZE"
-                        ? "border-rose-500/35 bg-rose-500/10 text-rose-300"
-                        : derivativesPulse.squeezeState === "WHALE_ACCUMULATION"
-                          ? "border-cyan-500/35 bg-cyan-500/10 text-cyan-300"
-                          : "border-white/[0.08] bg-white/[0.03] text-slate-300"
+                <span
+                  className={`mono-nums font-semibold ${
+                    derivativesPulse.fundingRatePct > 0.015
+                      ? "text-rose-400"
+                      : derivativesPulse.fundingRatePct < 0
+                        ? "text-emerald-400"
+                        : "text-slate-200"
                   }`}
                 >
-                  <Zap className="h-3 w-3 shrink-0" />
-                  <span>
-                    {lang === "tr"
-                      ? derivativesPulse.squeezeLabelTr
-                      : derivativesPulse.squeezeLabelEn}
-                  </span>
-                </div>
-              )}
-
-              {/* MTF Confluence Strip */}
-              <div className="hidden 2xl:flex items-center gap-1 border-l border-white/[0.08] pl-3">
-                {mtfEntries.map((m) => (
-                  <button
-                    key={m.timeframe}
-                    type="button"
-                    onClick={() => {
-                      const tfObj = TIMEFRAMES.find((t) => t.id === m.timeframe);
-                      if (tfObj) onSelectTimeframe(tfObj);
-                    }}
-                    className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold mono-nums whitespace-nowrap transition cursor-pointer ${
-                      m.currentSignal === "LONG"
-                        ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-300"
-                        : m.currentSignal === "SHORT"
-                          ? "border-rose-500/35 bg-rose-500/10 text-rose-300"
-                          : "border-white/[0.08] bg-white/[0.03] text-slate-400"
-                    }`}
-                  >
-                    <span>{m.timeframe.toUpperCase()}</span>
-                    <span>
-                      {m.currentSignal === "LONG" ? "▲" : m.currentSignal === "SHORT" ? "▼" : "•"}
-                    </span>
-                  </button>
-                ))}
+                  {derivativesPulse.fundingRatePct >= 0 ? "+" : ""}
+                  {derivativesPulse.fundingRatePct.toFixed(4)}%
+                </span>
               </div>
+
+              <div>
+                <span className="block text-[9.5px] uppercase tracking-wider text-slate-500">
+                  {lang === "tr" ? "Açık Poz." : "Open Int."}
+                </span>
+                <span className="mono-nums font-semibold text-slate-200">
+                  {formatCompactUsd(derivativesPulse.openInterestUsd)}
+                </span>
+              </div>
+
+              <div>
+                <span className="block text-[9.5px] uppercase tracking-wider text-slate-500">
+                  {lang === "tr" ? "Balina L/S" : "Whale L/S"}
+                </span>
+                <span className="mono-nums font-semibold">
+                  <span className="text-emerald-400">{derivativesPulse.whaleLongPct}%</span>
+                  <span className="text-slate-600"> / </span>
+                  <span className="text-rose-400">{derivativesPulse.whaleShortPct}%</span>
+                </span>
+              </div>
+
+              <span className="mono-nums inline-flex items-center gap-1 rounded border border-white/[0.08] bg-[#080B10] px-2 py-0.5 text-[10px] text-slate-400">
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    isLoadingFeed ? "bg-amber-400 animate-pulse" : "bg-emerald-400"
+                  }`}
+                />
+                {formatSourceShort(feedSource, candles.length)}
+              </span>
             </div>
           </div>
 
-          {/* Right Execution Mode + TF + OOS Auto-Optimize */}
+          {/* Right: Direction + Timeframe + Primary Optimize CTA */}
           <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <div className="inline-flex rounded border border-white/[0.08] bg-[#080B10] p-0.5 text-[10px] font-semibold">
+            <div className="inline-flex rounded-lg border border-white/[0.08] bg-[#080B10] p-0.5 text-[10.5px] font-semibold">
               {DIRECTIONS.map((d) => {
                 const active = directionMode === d.id;
                 return (
@@ -492,7 +548,7 @@ export default function TerminalCockpitView({
                     key={d.id}
                     type="button"
                     onClick={() => setDirectionMode(d.id)}
-                    className={`rounded-xs px-2 py-1 whitespace-nowrap transition cursor-pointer ${
+                    className={`rounded-md px-2 py-1 whitespace-nowrap transition cursor-pointer ${
                       active
                         ? "bg-white/[0.12] text-white"
                         : "text-slate-400 hover:text-slate-200"
@@ -504,7 +560,7 @@ export default function TerminalCockpitView({
               })}
             </div>
 
-            <div className="inline-flex rounded border border-white/[0.08] bg-[#080B10] p-0.5 text-[10px] font-semibold mono-nums">
+            <div className="inline-flex rounded-lg border border-white/[0.08] bg-[#080B10] p-0.5 text-[10.5px] font-semibold mono-nums">
               {TIMEFRAMES.map((tf) => {
                 const active = timeframe === tf.id;
                 const locked = Boolean(tf.proOnly && !isPaid);
@@ -513,7 +569,7 @@ export default function TerminalCockpitView({
                     key={tf.id}
                     type="button"
                     onClick={() => onSelectTimeframe(tf)}
-                    className={`inline-flex items-center gap-1 rounded-xs px-2 py-1 whitespace-nowrap transition cursor-pointer ${
+                    className={`inline-flex items-center gap-1 rounded-md px-2 py-1 whitespace-nowrap transition cursor-pointer ${
                       active
                         ? "bg-white/[0.14] text-white"
                         : locked
@@ -532,46 +588,52 @@ export default function TerminalCockpitView({
               type="button"
               onClick={onAutoOptimize}
               disabled={candles.length < 30}
-              className="inline-flex items-center gap-1.5 rounded bg-emerald-400 px-3 py-1.5 text-[11px] font-bold text-slate-950 whitespace-nowrap transition hover:bg-emerald-300 disabled:opacity-45 cursor-pointer"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-emerald-400 to-teal-300 px-3 py-1.5 text-[11px] font-bold text-slate-950 whitespace-nowrap shadow-[0_0_20px_-6px_rgba(16,185,129,0.75)] transition hover:brightness-110 disabled:opacity-45 cursor-pointer"
             >
               <Sparkles className="h-3.5 w-3.5 shrink-0" />
               <span>
-                {lang === "tr"
-                  ? "OOS Optimize (36 Test)"
-                  : "Auto-Optimize (36 Setups)"}
+                {lang === "tr" ? "OOS Optimize (36)" : "Optimize (36 Setups)"}
               </span>
               {!isPaid && (
-                <span className="ml-1 rounded bg-slate-950/20 px-1.5 py-0.5 text-[9px] font-bold tracking-normal">
-                  {consumedFreeOpt ? "PRO" : lang === "tr" ? "1 Ücretsiz" : "1 Free"}
+                <span className="ml-0.5 rounded bg-slate-950/20 px-1.5 py-0.5 text-[9px] font-extrabold">
+                  {consumedFreeOpt ? "PRO" : lang === "tr" ? "1 Hak" : "1 Free"}
                 </span>
               )}
             </button>
           </div>
         </div>
 
-        {optMessage && (
-          <div className="mt-2 flex items-center justify-between rounded border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[11px] text-emerald-200">
+        {/* Dismissible OOS Result Banner (only when user clicked Optimize) */}
+        {showOptToast && (
+          <div className="mt-2.5 flex items-center justify-between gap-2 rounded-lg border border-emerald-500/35 bg-emerald-500/10 px-3 py-1.5 text-[11px] text-emerald-200">
             <span>{optMessage}</span>
+            <button
+              type="button"
+              onClick={() => setDismissedOptMsg(optMessage)}
+              className="rounded p-0.5 text-emerald-300 hover:bg-emerald-500/20 hover:text-white cursor-pointer"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           </div>
         )}
       </div>
 
-      {/* Mobile Pane Switcher (<1024px) */}
-      <div className="grid grid-cols-3 border-b border-white/[0.07] bg-[#090C12] text-[11px] font-semibold lg:hidden">
+      {/* Mobile-ONLY Tab Switcher (<768px; md/lg laptops now show Chart + Order Ticket side-by-side!) */}
+      <div className="obsidian-card grid grid-cols-3 overflow-hidden text-[11px] font-semibold md:hidden">
         {(
           [
-            { id: "chart", tr: "Grafik & Analiz", en: "Chart & Tabs" },
+            { id: "chart", tr: "Grafik & İşlem", en: "Chart & Tabs" },
             { id: "markets", tr: "Piyasalar (12)", en: "Markets (12)" },
-            { id: "trade", tr: "Emir & Ayarlar", en: "Ticket & Params" },
+            { id: "trade", tr: "Emir & Ayar", en: "Order & Params" },
           ] as const
         ).map((m) => (
           <button
             key={m.id}
             type="button"
             onClick={() => setMobilePane(m.id)}
-            className={`py-2 text-center border-b-2 transition cursor-pointer ${
+            className={`py-2.5 text-center border-b-2 transition cursor-pointer ${
               mobilePane === m.id
-                ? "border-emerald-400 text-white bg-white/[0.03]"
+                ? "border-emerald-400 text-white bg-white/[0.04]"
                 : "border-transparent text-slate-400 hover:text-slate-200"
             }`}
           >
@@ -580,27 +642,29 @@ export default function TerminalCockpitView({
         ))}
       </div>
 
-      {/* Main 3-Pane Institutional Docking Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-[264px_minmax(0,1fr)_324px] lg:divide-x divide-white/[0.07]">
-        {/* LEFT RAIL: 12-Pair Live Screener */}
+      {/* MAIN WORKSPACE GRID:
+          - 1280px+ (xl): 3 cards [248px Screener | 1fr Chart+KPI+Tabs | 328px Ticket+Controls]
+          - 768px–1279px (md/lg laptop/split): 2 cards side-by-side [1fr Chart+Tabs | 304px Ticket+Controls]
+          - <768px mobile: tabbed panes */}
+      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-[minmax(0,1fr)_304px] xl:grid-cols-[248px_minmax(0,1fr)_328px]">
+        {/* LEFT RAIL (Desktop xl+ OR Mobile Markets Tab) */}
         <aside
           className={`${
-            mobilePane === "markets" ? "flex" : "hidden lg:flex"
-          } flex-col bg-[#090D14]`}
+            mobilePane === "markets" ? "flex" : "hidden xl:flex"
+          } obsidian-card flex-col overflow-hidden`}
         >
-          <div className="flex items-center justify-between border-b border-white/[0.07] px-3 py-2">
+          <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2.5">
             <div className="flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
               <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-200">
-                {lang === "tr" ? "Piyasa Tarayıcısı (12)" : "Market Screener (12)"}
+                {lang === "tr" ? "Piyasalar (12)" : "Markets (12)"}
               </h2>
             </div>
             <button
               type="button"
               onClick={onRefreshRadar}
               disabled={isScanningRadar}
-              title={lang === "tr" ? "Radarı Yenile" : "Refresh Radar"}
-              className="rounded border border-white/[0.08] bg-[#0D1118] p-1 text-slate-300 hover:text-white cursor-pointer disabled:opacity-50"
+              className="rounded-md border border-white/[0.08] bg-[#080B10] p-1 text-slate-300 hover:text-white cursor-pointer disabled:opacity-50"
             >
               <RefreshCw
                 className={`h-3 w-3 ${isScanningRadar ? "animate-spin text-emerald-400" : ""}`}
@@ -608,19 +672,18 @@ export default function TerminalCockpitView({
             </button>
           </div>
 
-          {/* Search + Filter Strip */}
           <div className="space-y-1.5 border-b border-white/[0.06] px-2.5 py-2">
             <input
               type="text"
               value={pairSearch}
               onChange={(e) => setPairSearch(e.target.value)}
-              placeholder={lang === "tr" ? "Parite ara (BTC, SOL, PAXG)..." : "Filter pairs (BTC, SOL...)"}
-              className="w-full rounded border border-white/[0.08] bg-[#080B10] px-2.5 py-1 text-[11px] text-white placeholder:text-slate-500 focus:border-emerald-400 focus:outline-none"
+              placeholder={lang === "tr" ? "Ara (BTC, SOL, PAXG)..." : "Filter pairs..."}
+              className="w-full rounded-md border border-white/[0.08] bg-[#06090F] px-2.5 py-1.5 text-[11px] text-white placeholder:text-slate-500 focus:border-emerald-400 focus:outline-none"
             />
-            <div className="grid grid-cols-3 gap-1 text-[10px] font-semibold">
+            <div className="grid grid-cols-3 gap-1 rounded-md bg-[#06090F] p-0.5 text-[10px] font-semibold">
               {(
                 [
-                  { id: "all", tr: "Tümü (12)", en: "All (12)" },
+                  { id: "all", tr: "Tümü", en: "All" },
                   { id: "active", tr: "Sinyal", en: "Signals" },
                   { id: "high_wr", tr: "WR ≥55%", en: "WR ≥55%" },
                 ] as const
@@ -629,7 +692,7 @@ export default function TerminalCockpitView({
                   key={f.id}
                   type="button"
                   onClick={() => setRadarFilter(f.id)}
-                  className={`rounded-xs py-1 transition cursor-pointer ${
+                  className={`rounded py-1 transition cursor-pointer ${
                     radarFilter === f.id
                       ? "bg-white/[0.12] text-white"
                       : "text-slate-400 hover:text-slate-200"
@@ -641,14 +704,12 @@ export default function TerminalCockpitView({
             </div>
           </div>
 
-          {/* Column Labels */}
-          <div className="flex items-center justify-between border-b border-white/[0.05] px-3 py-1 text-[9.5px] font-semibold uppercase tracking-wider text-slate-500">
-            <span>{lang === "tr" ? "Parite / Strateji" : "Pair / Alpha"}</span>
-            <span>{lang === "tr" ? "Fiyat · OOS (300B)" : "Price · OOS (300B)"}</span>
+          <div className="flex items-center justify-between border-b border-white/[0.05] px-3 py-1.5 text-[9.5px] font-semibold uppercase tracking-wider text-slate-500">
+            <span>{lang === "tr" ? "Parite" : "Pair"}</span>
+            <span>{lang === "tr" ? "Fiyat · OOS (300B)" : "Price · OOS"}</span>
           </div>
 
-          {/* Pair Rows */}
-          <div className="max-h-[680px] flex-1 divide-y divide-white/[0.05] overflow-y-auto terminal-scroll">
+          <div className="max-h-[780px] flex-1 divide-y divide-white/[0.045] overflow-y-auto terminal-scroll">
             {isBootingRadar
               ? QUANT_ASSETS.map((asset) => (
                   <div
@@ -656,16 +717,11 @@ export default function TerminalCockpitView({
                     className="flex items-center justify-between px-3 py-2.5"
                   >
                     <div className="space-y-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-slate-200">{asset.label}</span>
-                        {asset.proOnly && !isPaid && (
-                          <Lock className="h-2.5 w-2.5 text-slate-500" />
-                        )}
-                      </div>
+                      <span className="text-xs font-bold text-slate-200">{asset.label}</span>
                       <div className="h-2.5 w-20 animate-pulse rounded bg-white/[0.06]" />
                     </div>
                     <div className="flex flex-col items-end space-y-1">
-                      <div className="h-3.5 w-16 animate-pulse rounded bg-white/[0.06]" />
+                      <div className="h-3.5 w-14 animate-pulse rounded bg-white/[0.06]" />
                       <div className="h-2.5 w-10 animate-pulse rounded bg-white/[0.06]" />
                     </div>
                   </div>
@@ -688,12 +744,12 @@ export default function TerminalCockpitView({
                           : "border-l-transparent hover:bg-white/[0.025]"
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center justify-between gap-1.5">
                         <div className="flex items-center gap-1.5 min-w-0">
                           <span className="text-xs font-bold text-white">{row.base}</span>
                           {locked && <Lock className="h-2.5 w-2.5 shrink-0 text-slate-500" />}
                           <span
-                            className={`rounded-xs px-1 py-0.5 text-[9px] font-bold ${
+                            className={`rounded px-1 py-0.5 text-[9px] font-bold ${
                               row.currentSignal === "LONG"
                                 ? "bg-emerald-500/15 text-emerald-300"
                                 : row.currentSignal === "SHORT"
@@ -709,61 +765,39 @@ export default function TerminalCockpitView({
                         </span>
                       </div>
 
-                      <div className="mt-1 flex items-center justify-between gap-2 text-[10px]">
-                        <span className="truncate text-slate-400">
+                      <div className="mt-1 flex items-center justify-between gap-1.5 text-[10px]">
+                        <span className="truncate text-slate-500">
                           {lang === "tr" ? row.bestStrategyNameTr : row.bestStrategyNameEn}
                         </span>
-                        <div className="mono-nums flex items-center gap-2 shrink-0">
-                          <span
-                            className={`font-semibold ${
-                              oosPos ? "text-emerald-400" : "text-rose-400"
-                            }`}
-                          >
-                            {oosPos ? "+" : ""}
-                            {row.outOfSampleReturnPct}%
-                          </span>
-                          <span
-                            className={
-                              row.fundingRatePct < 0
-                                ? "text-cyan-400"
-                                : row.fundingRatePct > 0.015
-                                  ? "text-amber-400"
-                                  : "text-slate-500"
-                            }
-                          >
-                            {row.fundingRatePct >= 0 ? "+" : ""}
-                            {row.fundingRatePct.toFixed(3)}%
-                          </span>
-                        </div>
+                        <span
+                          className={`mono-nums font-semibold shrink-0 ${
+                            oosPos ? "text-emerald-400" : "text-rose-400"
+                          }`}
+                        >
+                          {oosPos ? "+" : ""}
+                          {row.outOfSampleReturnPct}%
+                        </span>
                       </div>
                     </button>
                   );
                 })}
-
-            {!isBootingRadar && displayedRadar.length === 0 && (
-              <div className="px-4 py-8 text-center text-[11px] text-slate-500">
-                {lang === "tr"
-                  ? "Bu filtreyle eşleşen parite bulunamadı."
-                  : "No pairs matched the active filter."}
-              </div>
-            )}
           </div>
         </aside>
 
-        {/* CENTER STAGE: KPI Hairline Bar + Chart Canvas + Bottom Analytical Tabs */}
+        {/* CENTER WORKSPACE: Elevated 4-KPI Cards + Chart Card + Analytical Bottom Card */}
         <div
           className={`${
-            mobilePane === "chart" ? "flex" : "hidden lg:flex"
-          } flex-col min-w-0 bg-[#080B10]`}
+            mobilePane === "chart" ? "flex" : "hidden md:flex"
+          } flex-col gap-2.5 min-w-0`}
         >
-          {/* Compact 4-Metric Hairline KPI Bar */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-white/[0.06] border-b border-white/[0.07] bg-[#0B0F17]">
-            <div className="px-3 py-2">
+          {/* 4 Elevated KPI Pills */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="obsidian-card px-3 py-2.5">
               <div className="flex items-center justify-between gap-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                <span>{lang === "tr" ? "Kör OOS (%30)" : "Blind OOS (30%)"}</span>
+                <span>{lang === "tr" ? "Kör OOS (%30)" : "Blind OOS"}</span>
                 {!isBootingChart && (
                   <span
-                    className={`rounded-xs px-1 py-0.2 text-[9px] font-bold ${
+                    className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${
                       activeResult.isRobustOos
                         ? "bg-emerald-500/15 text-emerald-300"
                         : "bg-amber-500/15 text-amber-300"
@@ -782,7 +816,7 @@ export default function TerminalCockpitView({
               {isBootingChart ? (
                 <div className="mt-1.5 h-5 w-20 animate-pulse rounded bg-white/[0.06]" />
               ) : (
-                <div className="mt-0.5 flex items-baseline gap-2">
+                <div className="mt-1 flex items-baseline gap-2">
                   <span
                     className={`mono-nums text-base font-bold ${
                       activeResult.outOfSampleReturnPct >= 0
@@ -794,21 +828,21 @@ export default function TerminalCockpitView({
                     {activeResult.outOfSampleReturnPct}%
                   </span>
                   <span className="mono-nums text-[10px] text-slate-500">
-                    IS: {activeResult.inSampleReturnPct >= 0 ? "+" : ""}
+                    IS {activeResult.inSampleReturnPct >= 0 ? "+" : ""}
                     {activeResult.inSampleReturnPct}%
                   </span>
                 </div>
               )}
             </div>
 
-            <div className="px-3 py-2">
+            <div className="obsidian-card px-3 py-2.5">
               <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                {lang === "tr" ? "Net Getiri & Alfa" : "Net Return & Alpha"}
+                {lang === "tr" ? "Net Getiri & Alfa" : "Net Return"}
               </span>
               {isBootingChart ? (
-                <div className="mt-1.5 h-5 w-24 animate-pulse rounded bg-white/[0.06]" />
+                <div className="mt-1.5 h-5 w-20 animate-pulse rounded bg-white/[0.06]" />
               ) : (
-                <div className="mt-0.5 flex items-baseline gap-2">
+                <div className="mt-1 flex items-baseline gap-2">
                   <span
                     className={`mono-nums text-base font-bold ${
                       activeResult.netProfitPct >= 0 ? "text-white" : "text-rose-400"
@@ -818,7 +852,7 @@ export default function TerminalCockpitView({
                     {activeResult.netProfitPct}%
                   </span>
                   <span className="mono-nums text-[10px] text-slate-400">
-                    {lang === "tr" ? "Alfa" : "Alpha"}:{" "}
+                    {lang === "tr" ? "Alfa" : "Alpha"}{" "}
                     <strong
                       className={
                         activeResult.alphaPct >= 0 ? "text-emerald-400" : "text-rose-400"
@@ -832,14 +866,14 @@ export default function TerminalCockpitView({
               )}
             </div>
 
-            <div className="px-3 py-2">
+            <div className="obsidian-card px-3 py-2.5">
               <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                {lang === "tr" ? "Kazanma & Beklenti" : "Win Rate & Expectancy"}
+                {lang === "tr" ? "Kazanma & Beklenti" : "Win Rate"}
               </span>
               {isBootingChart ? (
                 <div className="mt-1.5 h-5 w-20 animate-pulse rounded bg-white/[0.06]" />
               ) : (
-                <div className="mt-0.5 flex items-baseline gap-2">
+                <div className="mt-1 flex items-baseline gap-2">
                   <span className="mono-nums text-base font-bold text-white">
                     {activeResult.winRatePct}%
                   </span>
@@ -861,19 +895,19 @@ export default function TerminalCockpitView({
               )}
             </div>
 
-            <div className="px-3 py-2">
+            <div className="obsidian-card px-3 py-2.5">
               <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                {lang === "tr" ? "PF · Sharpe · Max DD" : "PF · Sharpe · Max DD"}
+                PF &middot; Sharpe &middot; DD
               </span>
               {isBootingChart ? (
-                <div className="mt-1.5 h-5 w-24 animate-pulse rounded bg-white/[0.06]" />
+                <div className="mt-1.5 h-5 w-20 animate-pulse rounded bg-white/[0.06]" />
               ) : (
-                <div className="mt-0.5 flex items-baseline gap-2 mono-nums">
+                <div className="mt-1 flex items-baseline gap-2 mono-nums">
                   <span className="text-base font-bold text-white">
                     {activeResult.profitFactor}
                   </span>
                   <span className="text-[10px] text-slate-400">
-                    SR {activeResult.sharpeRatio} ·{" "}
+                    SR {activeResult.sharpeRatio} &middot;{" "}
                     <strong className="text-rose-400">-{activeResult.maxDrawdownPct}%</strong>
                   </span>
                 </div>
@@ -881,20 +915,22 @@ export default function TerminalCockpitView({
             </div>
           </div>
 
-          {/* Interactive TradingView Multi-Pane Canvas */}
-          <QuantCandlestickChart
-            symbol={symbol}
-            timeframe={timeframe}
-            candles={candles}
-            result={activeResult}
-            lang={lang}
-            isLoading={isLoadingFeed && candles.length === 0}
-          />
+          {/* Interactive Dual-Pane Chart Card */}
+          <div className="obsidian-card overflow-hidden">
+            <QuantCandlestickChart
+              symbol={symbol}
+              timeframe={timeframe}
+              candles={candles}
+              result={activeResult}
+              lang={lang}
+              isLoading={isLoadingFeed && candles.length === 0}
+            />
+          </div>
 
-          {/* Bottom Tabbed Analytical Workspace */}
-          <div className="flex flex-col border-t border-white/[0.07] bg-[#0B0E14]">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] px-3">
-              <div className="flex items-center gap-1 overflow-x-auto text-[11px] font-semibold">
+          {/* Analytical Workspace Tabs Card */}
+          <div className="obsidian-card flex flex-col overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] px-3.5">
+              <div className="flex items-center gap-1 overflow-x-auto text-[11.5px] font-semibold">
                 {(
                   [
                     {
@@ -909,13 +945,13 @@ export default function TerminalCockpitView({
                     },
                     {
                       id: "sentinel",
-                      tr: "7/24 Bulut Sentinel & Webhook",
+                      tr: "7/24 Bulut Sentinel",
                       en: "24/7 Cloud Sentinel",
                     },
                     {
                       id: "audit",
-                      tr: "Motor Denetimi & SSS",
-                      en: "Engine Audit & FAQ",
+                      tr: "Motor & SSS",
+                      en: "Audit & FAQ",
                     },
                   ] as const
                 ).map((tab) => {
@@ -938,15 +974,28 @@ export default function TerminalCockpitView({
               </div>
 
               {bottomTab === "trades" && (
-                <button
-                  type="button"
-                  onClick={onExportTradesCsv}
-                  className="inline-flex items-center gap-1.5 rounded border border-white/[0.1] bg-[#121822] px-2.5 py-1 text-[11px] font-semibold text-slate-200 hover:border-white/[0.2] hover:text-white cursor-pointer"
-                >
-                  <Download className="h-3 w-3 text-emerald-400" />
-                  <span>{lang === "tr" ? "CSV İndir" : "Export CSV"}</span>
-                  {!isPaid && <Lock className="h-2.5 w-2.5 opacity-60" />}
-                </button>
+                <div className="flex items-center gap-2 py-1.5">
+                  {activeResult.trades.length > 0 && (
+                    <span className="hidden sm:inline-flex items-center gap-1.5 rounded bg-white/[0.04] px-2 py-0.5 text-[10.5px] mono-nums text-slate-300">
+                      <span className="text-emerald-400 font-semibold">
+                        {winLossCounts.wins} {lang === "tr" ? "Kâr" : "Win"}
+                      </span>
+                      <span className="text-slate-600">/</span>
+                      <span className="text-rose-400 font-semibold">
+                        {winLossCounts.losses} {lang === "tr" ? "Zarar" : "Loss"}
+                      </span>
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={onExportTradesCsv}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-white/[0.1] bg-[#080B10] px-2.5 py-1 text-[11px] font-semibold text-slate-200 hover:border-white/[0.2] hover:text-white cursor-pointer"
+                  >
+                    <Download className="h-3 w-3 text-emerald-400" />
+                    <span>{lang === "tr" ? "CSV İndir" : "Export CSV"}</span>
+                    {!isPaid && <Lock className="h-2.5 w-2.5 opacity-60" />}
+                  </button>
+                </div>
               )}
 
               {bottomTab === "sentinel" && (
@@ -969,38 +1018,42 @@ export default function TerminalCockpitView({
               )}
             </div>
 
-            {/* Tab 1: Executed Trades Table */}
+            {/* Tab 1: Executed Trades (Clean flow, no scroll-trapping sticky mini-box!) */}
             {bottomTab === "trades" && (
-              <div className="h-[300px] overflow-auto terminal-scroll">
-                <table className="w-full border-collapse text-left text-[11px]">
-                  <thead className="sticky top-0 z-10 border-b border-white/[0.06] bg-[#0D1118] text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-left text-[11.5px]">
+                  <thead className="border-b border-white/[0.06] bg-[#090D14] text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                     <tr>
-                      <th className="px-3 py-2">#</th>
-                      <th className="px-3 py-2">{lang === "tr" ? "Yön" : "Side"}</th>
-                      <th className="px-3 py-2">{lang === "tr" ? "Giriş" : "Entry Time"}</th>
-                      <th className="px-3 py-2 text-right">
-                        {lang === "tr" ? "Giriş Fiyatı" : "Entry Price"}
+                      <th className="px-3.5 py-2.5 whitespace-nowrap">#</th>
+                      <th className="px-3 py-2.5 whitespace-nowrap">
+                        {lang === "tr" ? "Yön" : "Side"}
                       </th>
-                      <th className="px-3 py-2 text-right">
-                        {lang === "tr" ? "Çıkış Fiyatı" : "Exit Price"}
+                      <th className="px-3 py-2.5 whitespace-nowrap">
+                        {lang === "tr" ? "Giriş Zamanı" : "Entry Time"}
                       </th>
-                      <th className="px-3 py-2 text-center">
+                      <th className="px-3 py-2.5 text-right whitespace-nowrap">
+                        {lang === "tr" ? "Giriş" : "Entry"}
+                      </th>
+                      <th className="px-3 py-2.5 text-right whitespace-nowrap">
                         {lang === "tr" ? "Çıkış" : "Exit"}
                       </th>
-                      <th className="px-3 py-2 text-right">Net %</th>
-                      <th className="px-3 py-2 text-right">PnL ($)</th>
-                      <th className="px-3 py-2 text-right">
+                      <th className="px-3 py-2.5 text-center whitespace-nowrap">
+                        {lang === "tr" ? "Durum" : "Exit"}
+                      </th>
+                      <th className="px-3 py-2.5 text-right whitespace-nowrap">Net %</th>
+                      <th className="px-3 py-2.5 text-right whitespace-nowrap">PnL ($)</th>
+                      <th className="px-3.5 py-2.5 text-right whitespace-nowrap">
                         {lang === "tr" ? "Kasa" : "Equity"}
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/[0.04]">
-                    {[...activeResult.trades].reverse().slice(0, 40).map((t) => (
+                  <tbody className="divide-y divide-white/[0.045]">
+                    {visibleTrades.map((t) => (
                       <tr key={t.id} className="hover:bg-white/[0.025]">
-                        <td className="mono-nums px-3 py-2 text-slate-500">#{t.id}</td>
-                        <td className="px-3 py-2">
+                        <td className="mono-nums px-3.5 py-2.5 text-slate-500">#{t.id}</td>
+                        <td className="px-3 py-2.5">
                           <span
-                            className={`inline-block rounded-xs px-1.5 py-0.5 text-[9.5px] font-bold ${
+                            className={`inline-block rounded px-1.5 py-0.5 text-[9.5px] font-bold ${
                               t.side === "SHORT"
                                 ? "bg-purple-500/20 text-purple-300"
                                 : "bg-emerald-500/15 text-emerald-300"
@@ -1009,18 +1062,18 @@ export default function TerminalCockpitView({
                             {t.side}
                           </span>
                         </td>
-                        <td className="mono-nums px-3 py-2 text-slate-300 whitespace-nowrap">
+                        <td className="mono-nums px-3 py-2.5 text-slate-300 whitespace-nowrap">
                           {formatShortDate(t.entryTime)} UTC
                         </td>
-                        <td className="mono-nums px-3 py-2 text-right text-slate-100">
+                        <td className="mono-nums px-3 py-2.5 text-right text-slate-100 whitespace-nowrap">
                           {formatPrice(t.entryPrice)}
                         </td>
-                        <td className="mono-nums px-3 py-2 text-right text-slate-300">
+                        <td className="mono-nums px-3 py-2.5 text-right text-slate-300 whitespace-nowrap">
                           {formatPrice(t.exitPrice)}
                         </td>
-                        <td className="px-3 py-2 text-center">
+                        <td className="px-3 py-2.5 text-center">
                           <span
-                            className={`inline-block rounded-xs px-1.5 py-0.5 text-[9.5px] font-bold ${
+                            className={`inline-block rounded px-1.5 py-0.5 text-[9.5px] font-bold ${
                               t.exitReason === "TP"
                                 ? "bg-amber-500/20 text-amber-300"
                                 : t.exitReason === "SL"
@@ -1034,7 +1087,7 @@ export default function TerminalCockpitView({
                           </span>
                         </td>
                         <td
-                          className={`mono-nums px-3 py-2 text-right font-semibold ${
+                          className={`mono-nums px-3 py-2.5 text-right font-semibold whitespace-nowrap ${
                             t.netReturnPct >= 0 ? "text-emerald-400" : "text-rose-400"
                           }`}
                         >
@@ -1042,61 +1095,79 @@ export default function TerminalCockpitView({
                           {t.netReturnPct}%
                         </td>
                         <td
-                          className={`mono-nums px-3 py-2 text-right font-semibold ${
+                          className={`mono-nums px-3 py-2.5 text-right font-semibold whitespace-nowrap ${
                             t.pnlUsd >= 0 ? "text-emerald-400" : "text-rose-400"
                           }`}
                         >
                           {t.pnlUsd >= 0 ? "+" : ""}
                           {formatUsd(t.pnlUsd)}
                         </td>
-                        <td className="mono-nums px-3 py-2 text-right font-semibold text-white">
+                        <td className="mono-nums px-3.5 py-2.5 text-right font-semibold text-white whitespace-nowrap">
                           {formatUsd(t.equityAfter)}
                         </td>
                       </tr>
                     ))}
                     {activeResult.trades.length === 0 && (
                       <tr>
-                        <td colSpan={9} className="px-4 py-12 text-center text-slate-500">
+                        <td colSpan={9} className="px-4 py-10 text-center text-slate-500">
                           {isBootingChart
                             ? lang === "tr"
-                              ? "Canlı 1.000 mum senkronize ediliyor..."
+                              ? "Canlı 1.000 mum yükleniyor..."
                               : "Syncing live 1,000-bar dataset..."
                             : lang === "tr"
                               ? "Bu ayarlarla gerçekleşen işlem yok. SL/TP veya periyodu ayarlayın."
-                              : "No trades triggered with current parameters. Adjust SL/TP or periods."}
+                              : "No trades triggered with current parameters."}
                         </td>
                       </tr>
                     )}
                   </tbody>
                 </table>
+
+                {reversedTrades.length > 10 && (
+                  <div className="border-t border-white/[0.06] bg-[#090D14] px-3.5 py-2 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setShowAllTrades((s) => !s)}
+                      className="text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 cursor-pointer"
+                    >
+                      {showAllTrades
+                        ? lang === "tr"
+                          ? "Daha Az Göster (İlk 10)"
+                          : "Show Latest 10 Trades"
+                        : lang === "tr"
+                          ? `Tüm İşlemleri Göster (${reversedTrades.length})`
+                          : `Show All ${reversedTrades.length} Trades`}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
             {/* Tab 2: 6-Strategy League */}
             {bottomTab === "tournament" && (
-              <div className="h-[300px] overflow-auto terminal-scroll">
-                <table className="w-full border-collapse text-left text-[11px]">
-                  <thead className="sticky top-0 z-10 border-b border-white/[0.06] bg-[#0D1118] text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-left text-[11.5px]">
+                  <thead className="border-b border-white/[0.06] bg-[#090D14] text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                     <tr>
-                      <th className="px-3 py-2 whitespace-nowrap">#</th>
-                      <th className="px-3 py-2 whitespace-nowrap">
-                        {lang === "tr" ? "Algoritma (Seçmek için Tıkla)" : "Algorithm (Click to Load)"}
+                      <th className="px-3.5 py-2.5 whitespace-nowrap">#</th>
+                      <th className="px-3 py-2.5 whitespace-nowrap">
+                        {lang === "tr" ? "Algoritma (Yüklemek için Tıkla)" : "Algorithm (Click to Load)"}
                       </th>
-                      <th className="px-3 py-2 text-right whitespace-nowrap">
+                      <th className="px-3 py-2.5 text-right whitespace-nowrap">
                         {lang === "tr" ? "Kör OOS %30" : "Blind OOS 30%"}
                       </th>
-                      <th className="px-3 py-2 text-right whitespace-nowrap">
+                      <th className="px-3 py-2.5 text-right whitespace-nowrap">
                         {lang === "tr" ? "Net Getiri" : "Net Return"}
                       </th>
-                      <th className="px-3 py-2 text-right whitespace-nowrap">Win %</th>
-                      <th className="px-3 py-2 text-right whitespace-nowrap">PF</th>
-                      <th className="px-3 py-2 text-right whitespace-nowrap">Max DD</th>
-                      <th className="px-3 py-2 text-center whitespace-nowrap">
+                      <th className="px-3 py-2.5 text-right whitespace-nowrap">Win %</th>
+                      <th className="px-3 py-2.5 text-right whitespace-nowrap">PF</th>
+                      <th className="px-3 py-2.5 text-right whitespace-nowrap">Max DD</th>
+                      <th className="px-3.5 py-2.5 text-center whitespace-nowrap">
                         {lang === "tr" ? "Sinyal" : "Signal"}
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/[0.04]">
+                  <tbody className="divide-y divide-white/[0.045]">
                     {tournament.map((strat, index) => {
                       const isSelected = strat.strategyId === activeStrategyId;
                       return (
@@ -1107,7 +1178,7 @@ export default function TerminalCockpitView({
                             isSelected ? "bg-emerald-500/10" : "hover:bg-white/[0.03]"
                           }`}
                         >
-                          <td className="mono-nums px-3 py-2.5 text-slate-400 whitespace-nowrap">
+                          <td className="mono-nums px-3.5 py-2.5 text-slate-400 whitespace-nowrap">
                             {index === 0 ? (
                               <span className="inline-flex items-center gap-1 font-bold text-amber-300">
                                 <Award className="h-3.5 w-3.5 text-amber-400 shrink-0" />
@@ -1152,9 +1223,9 @@ export default function TerminalCockpitView({
                           <td className="mono-nums px-3 py-2.5 text-right text-rose-400 whitespace-nowrap">
                             -{strat.maxDrawdownPct}%
                           </td>
-                          <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                          <td className="px-3.5 py-2.5 text-center whitespace-nowrap">
                             <span
-                              className={`inline-block rounded-xs px-1.5 py-0.5 text-[9.5px] font-bold ${
+                              className={`inline-block rounded px-1.5 py-0.5 text-[9.5px] font-bold ${
                                 strat.currentSignal === "LONG"
                                   ? "bg-emerald-500/15 text-emerald-300"
                                   : strat.currentSignal === "SHORT"
@@ -1173,11 +1244,10 @@ export default function TerminalCockpitView({
               </div>
             )}
 
-            {/* Tab 3: 24/7 Cloud Sentinel & Webhooks */}
+            {/* Tab 3: 24/7 Cloud Sentinel */}
             {bottomTab === "sentinel" && (
               <div className="p-4 space-y-4">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  {/* Left Col: Channel & Keys */}
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
@@ -1189,7 +1259,7 @@ export default function TerminalCockpitView({
                         className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-semibold cursor-pointer ${
                           sentinelEnabled
                             ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
-                            : "border-white/[0.1] bg-[#121822] text-slate-400 hover:text-white"
+                            : "border-white/[0.1] bg-[#080B10] text-slate-400 hover:text-white"
                         }`}
                       >
                         <BellRing className="h-3 w-3" />
@@ -1203,7 +1273,7 @@ export default function TerminalCockpitView({
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-3 rounded border border-white/[0.08] bg-[#080B10] p-0.5 text-[11px] font-semibold">
+                    <div className="grid grid-cols-3 rounded-lg border border-white/[0.08] bg-[#080B10] p-0.5 text-[11px] font-semibold">
                       {(
                         [
                           { id: "discord", label: "Discord" },
@@ -1215,7 +1285,7 @@ export default function TerminalCockpitView({
                           key={ch.id}
                           type="button"
                           onClick={() => onChangeAlertChannel(ch.id)}
-                          className={`rounded-xs py-1 transition cursor-pointer ${
+                          className={`rounded-md py-1 transition cursor-pointer ${
                             alertChannel === ch.id
                               ? "bg-white/[0.12] text-white"
                               : "text-slate-400 hover:text-slate-200"
@@ -1233,14 +1303,14 @@ export default function TerminalCockpitView({
                           value={telegramBotToken}
                           onChange={(e) => onChangeTelegramToken(e.target.value)}
                           placeholder="Telegram Bot Token (AES-256-GCM)"
-                          className="mono-nums rounded border border-white/[0.1] bg-[#080B10] px-2.5 py-2 text-[11px] text-white focus:border-emerald-400 focus:outline-none"
+                          className="mono-nums rounded-lg border border-white/[0.1] bg-[#080B10] px-2.5 py-2 text-[11px] text-white focus:border-emerald-400 focus:outline-none"
                         />
                         <input
                           type="text"
                           value={telegramChatId}
                           onChange={(e) => onChangeTelegramChatId(e.target.value)}
                           placeholder="Chat / Channel ID"
-                          className="mono-nums rounded border border-white/[0.1] bg-[#080B10] px-2.5 py-2 text-[11px] text-white focus:border-emerald-400 focus:outline-none"
+                          className="mono-nums rounded-lg border border-white/[0.1] bg-[#080B10] px-2.5 py-2 text-[11px] text-white focus:border-emerald-400 focus:outline-none"
                         />
                       </div>
                     ) : (
@@ -1253,12 +1323,11 @@ export default function TerminalCockpitView({
                             ? "https://discord.com/api/webhooks/..."
                             : "https://your-bot.domain/hooks/vaultsheet"
                         }
-                        className="mono-nums w-full rounded border border-white/[0.1] bg-[#080B10] px-2.5 py-2 text-[11px] text-white focus:border-emerald-400 focus:outline-none"
+                        className="mono-nums w-full rounded-lg border border-white/[0.1] bg-[#080B10] px-2.5 py-2 text-[11px] text-white focus:border-emerald-400 focus:outline-none"
                       />
                     )}
                   </div>
 
-                  {/* Right Col: Cloud Watchlist Selector */}
                   <div className="space-y-2.5">
                     <div className="flex items-center justify-between text-[11px]">
                       <span className="font-bold uppercase tracking-wider text-slate-300">
@@ -1281,7 +1350,7 @@ export default function TerminalCockpitView({
                             key={a.symbol}
                             type="button"
                             onClick={() => onToggleSentinelSymbol(a.symbol, a.label, a.proOnly)}
-                            className={`rounded border px-1.5 py-1 text-[10px] font-semibold transition cursor-pointer ${
+                            className={`rounded-md border px-1.5 py-1 text-[10px] font-semibold transition cursor-pointer ${
                               activeWatch
                                 ? "border-emerald-500/45 bg-emerald-500/15 text-emerald-200"
                                 : "border-white/[0.08] bg-[#080B10] text-slate-400 hover:text-white"
@@ -1295,14 +1364,13 @@ export default function TerminalCockpitView({
                   </div>
                 </div>
 
-                {/* Unified Action Bar (No awkward wide gap!) */}
-                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.07] pt-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.06] pt-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       disabled={isSyncingCloud}
                       onClick={() => onSaveCloudSentinel(true)}
-                      className="inline-flex items-center gap-1.5 rounded border border-emerald-500/40 bg-emerald-500/15 px-3 py-1.5 text-[11px] font-bold text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-50 cursor-pointer"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-1.5 text-[11px] font-bold text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-50 cursor-pointer"
                     >
                       <Cloud className="h-3.5 w-3.5" />
                       <span>
@@ -1322,7 +1390,7 @@ export default function TerminalCockpitView({
                           type="button"
                           disabled={isRunningCloudScan}
                           onClick={onTriggerCloudScan}
-                          className="inline-flex items-center gap-1.5 rounded border border-white/[0.1] bg-[#121822] px-3 py-1.5 text-[11px] font-semibold text-slate-200 hover:text-white disabled:opacity-50 cursor-pointer"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.1] bg-[#080B10] px-3 py-1.5 text-[11px] font-semibold text-slate-200 hover:text-white disabled:opacity-50 cursor-pointer"
                         >
                           <RefreshCw
                             className={`h-3 w-3 ${isRunningCloudScan ? "animate-spin" : ""}`}
@@ -1333,7 +1401,7 @@ export default function TerminalCockpitView({
                         <button
                           type="button"
                           onClick={() => onCopyCronUrl(sentinelTriggerUrl)}
-                          className="inline-flex items-center gap-1 rounded border border-white/[0.1] bg-[#080B10] px-2.5 py-1.5 text-[11px] font-medium text-slate-300 hover:text-white cursor-pointer"
+                          className="inline-flex items-center gap-1 rounded-lg border border-white/[0.1] bg-[#080B10] px-2.5 py-1.5 text-[11px] font-medium text-slate-300 hover:text-white cursor-pointer"
                         >
                           {copiedCronUrl ? (
                             <Check className="h-3 w-3 text-emerald-400" />
@@ -1350,7 +1418,7 @@ export default function TerminalCockpitView({
                     type="button"
                     disabled={isSendingAlert}
                     onClick={onDispatchAlert}
-                    className="inline-flex items-center gap-1.5 rounded bg-white px-3.5 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-slate-200 disabled:opacity-50 cursor-pointer"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3.5 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-slate-200 disabled:opacity-50 cursor-pointer"
                   >
                     <Send className="h-3 w-3" />
                     <span>
@@ -1367,7 +1435,7 @@ export default function TerminalCockpitView({
 
                 {alertStatus && (
                   <p
-                    className={`rounded border px-3 py-2 text-[11px] ${
+                    className={`rounded-lg border px-3 py-2 text-[11px] ${
                       alertStatus.ok
                         ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-200"
                         : "border-rose-500/35 bg-rose-500/10 text-rose-200"
@@ -1379,19 +1447,19 @@ export default function TerminalCockpitView({
               </div>
             )}
 
-            {/* Tab 4: Institutional Audit & Collapsible FAQ */}
+            {/* Tab 4: Institutional Audit & FAQ */}
             {bottomTab === "audit" && (
               <div className="p-4 space-y-4">
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 text-[11px]">
-                  <div className="rounded border border-white/[0.07] bg-[#080B10] p-2.5">
+                  <div className="rounded-lg border border-white/[0.07] bg-[#080B10] p-2.5">
                     <span className="mono-nums font-bold text-emerald-400">01 · WALK-FORWARD</span>
                     <p className="mt-1 text-slate-400">
                       {lang === "tr"
                         ? "İlk %70 eğitimde seçim, son %30 görünmemiş mumlarda sıfır-sızıntılı kör test."
-                        : "70% In-Sample parameter selection verified blindly on final 30% OOS candles."}
+                        : "70% In-Sample selection verified blindly on final 30% OOS candles."}
                     </p>
                   </div>
-                  <div className="rounded border border-white/[0.07] bg-[#080B10] p-2.5">
+                  <div className="rounded-lg border border-white/[0.07] bg-[#080B10] p-2.5">
                     <span className="mono-nums font-bold text-cyan-400">02 · REALISTIC COST</span>
                     <p className="mt-1 text-slate-400">
                       {lang === "tr"
@@ -1399,15 +1467,15 @@ export default function TerminalCockpitView({
                         : "0.06% taker fee/side, 0.04% slippage/side, and 8h perpetual funding drag deducted."}
                     </p>
                   </div>
-                  <div className="rounded border border-white/[0.07] bg-[#080B10] p-2.5">
+                  <div className="rounded-lg border border-white/[0.07] bg-[#080B10] p-2.5">
                     <span className="mono-nums font-bold text-purple-400">03 · BI-DIRECTIONAL</span>
                     <p className="mt-1 text-slate-400">
                       {lang === "tr"
-                        ? "Hem Long hem Short mum içi (intrabar) SL/TP & tahmini likidasyon fiyatlaması."
+                        ? "Hem Long hem Short mum içi SL/TP ve tahmini likidasyon fiyatlaması."
                         : "Long & Short intrabar high/low SL/TP execution with leverage liquidation price."}
                     </p>
                   </div>
-                  <div className="rounded border border-white/[0.07] bg-[#080B10] p-2.5">
+                  <div className="rounded-lg border border-white/[0.07] bg-[#080B10] p-2.5">
                     <span className="mono-nums font-bold text-amber-400">04 · CLOUD CRON</span>
                     <p className="mt-1 text-slate-400">
                       {lang === "tr"
@@ -1417,8 +1485,7 @@ export default function TerminalCockpitView({
                   </div>
                 </div>
 
-                {/* Compact Accordion FAQ */}
-                <div className="divide-y divide-white/[0.06] rounded border border-white/[0.07] bg-[#080B10]">
+                <div className="divide-y divide-white/[0.06] rounded-lg border border-white/[0.07] bg-[#080B10]">
                   {faqs.map((item) => (
                     <details key={item.q} className="group">
                       <summary className="flex items-center justify-between px-3.5 py-2.5 text-xs font-semibold text-slate-200 hover:text-white">
@@ -1436,24 +1503,24 @@ export default function TerminalCockpitView({
           </div>
         </div>
 
-        {/* RIGHT DOCK: Actionable Execution Ticket & Parameter Controls */}
+        {/* RIGHT DOCK (Visible Side-by-Side >=768px md+ & Mobile Trade Tab): Execution Card + Visual R:R + Params + Squeeze */}
         <aside
           className={`${
-            mobilePane === "trade" ? "flex" : "hidden lg:flex"
-          } flex-col divide-y divide-white/[0.07] bg-[#090D14]`}
+            mobilePane === "trade" ? "flex" : "hidden md:flex"
+          } flex-col gap-2.5`}
         >
-          {/* Execution Ticket */}
-          <div className="p-3.5 space-y-3">
+          {/* Card 1: Actionable Execution Ticket + Visual Risk-to-Reward Gauge */}
+          <div className="obsidian-card p-3.5 space-y-3">
             <div className="flex items-center justify-between">
               <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-200">
                 <Target className="h-3.5 w-3.5 text-emerald-400" />
-                {lang === "tr" ? "Emir & Kasa Planı" : "Execution Ticket"}
+                {lang === "tr" ? "Emir & Risk Planı" : "Execution Ticket"}
               </span>
               <span
-                className={`mono-nums rounded-xs px-1.5 py-0.5 text-[10px] font-bold ${
+                className={`mono-nums rounded-md px-2 py-0.5 text-[10px] font-bold ${
                   ticketSide === "SHORT"
-                    ? "bg-purple-500/20 text-purple-300"
-                    : "bg-emerald-500/15 text-emerald-300"
+                    ? "bg-purple-500/20 text-purple-300 border border-purple-500/35"
+                    : "bg-emerald-500/15 text-emerald-300 border border-emerald-500/35"
                 }`}
               >
                 {ticketSide} &middot; {leverage}x
@@ -1462,60 +1529,81 @@ export default function TerminalCockpitView({
 
             {isBootingChart ? (
               <div className="space-y-2 py-2">
-                {[1, 2, 3, 4, 5].map((i) => (
+                {[1, 2, 3, 4].map((i) => (
                   <div key={i} className="h-6 animate-pulse rounded bg-white/[0.05]" />
                 ))}
               </div>
             ) : (
-              <div className="divide-y divide-white/[0.05] rounded border border-white/[0.07] bg-[#080B10] text-[11px]">
-                <div className="flex items-center justify-between px-3 py-2">
-                  <span className="text-slate-400">{lang === "tr" ? "Giriş" : "Entry"}</span>
-                  <span className="mono-nums font-bold text-white">{formatPrice(ticketEntry)}</span>
+              <>
+                {/* Visual Risk-to-Reward Gauge */}
+                <div className="rounded-lg border border-white/[0.07] bg-[#080B10] p-2.5 space-y-2">
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="mono-nums font-bold text-rose-400">
+                      SL {formatPrice(activeResult.suggestedStopPrice)}
+                    </span>
+                    <span className="mono-nums rounded bg-white/[0.06] px-1.5 py-0.5 font-bold text-slate-200">
+                      1 : {rrRatio.toFixed(2)} R:R
+                    </span>
+                    <span className="mono-nums font-bold text-emerald-400">
+                      TP {formatPrice(activeResult.suggestedTargetPrice)}
+                    </span>
+                  </div>
+
+                  <div className="relative flex h-2 w-full overflow-hidden rounded-full bg-white/[0.06]">
+                    <div
+                      className="h-full bg-rose-500/75"
+                      style={{ width: `${Math.max(12, Math.min(75, slSharePct))}%` }}
+                    />
+                    <div className="h-full flex-1 bg-emerald-500/80" />
+                  </div>
+
+                  <div className="flex items-center justify-between mono-nums text-[10px] text-slate-400">
+                    <span className="text-rose-400">
+                      -{stopLossPct}% (-{formatUsd(ticketRiskUsd)})
+                    </span>
+                    <span className="text-white font-semibold">
+                      {formatPrice(ticketEntry)}
+                    </span>
+                    <span className="text-emerald-400">
+                      +{takeProfitPct}% (+{formatUsd(ticketRewardUsd)})
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between px-3 py-2">
-                  <span className="text-slate-400">
-                    {lang === "tr" ? "Pozisyon" : "Notional"}
-                  </span>
-                  <span className="mono-nums font-medium text-slate-200">
-                    {ticketUnits.toFixed(4)} ({formatUsd(ticketNotional)})
-                  </span>
+
+                {/* Crisp Execution Breakdown */}
+                <div className="divide-y divide-white/[0.05] rounded-lg border border-white/[0.07] bg-[#080B10] text-[11px]">
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-slate-400">
+                      {lang === "tr" ? "Pozisyon Büyüklüğü" : "Position Size"}
+                    </span>
+                    <span className="mono-nums font-semibold text-white">
+                      {ticketUnits.toFixed(4)} ({formatUsd(ticketNotional)})
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="inline-flex items-center gap-1 text-amber-300">
+                      <ShieldAlert className="h-3 w-3" />
+                      {lang === "tr" ? "Tahmini Likidasyon" : "Est. Liquidation"}
+                    </span>
+                    <span className="mono-nums font-bold text-amber-300">
+                      {activeResult.estimatedLiquidationPrice > 0
+                        ? `${formatPrice(activeResult.estimatedLiquidationPrice)}`
+                        : lang === "tr"
+                          ? "Yok (1x Spot)"
+                          : "None (1x Spot)"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-slate-400">
+                      {lang === "tr" ? "Half-Kelly & Kesinti" : "Kelly & Costs"}
+                    </span>
+                    <span className="mono-nums text-slate-300">
+                      {activeResult.kellyFractionPct}% &middot; -
+                      {formatUsd(activeResult.totalCostsUsd)}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between px-3 py-2">
-                  <span className="text-slate-400">SL (-{stopLossPct}%)</span>
-                  <span className="mono-nums font-bold text-rose-400">
-                    {formatPrice(activeResult.suggestedStopPrice)} &middot; -
-                    {formatUsd(ticketRiskUsd)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between px-3 py-2">
-                  <span className="text-slate-400">TP (+{takeProfitPct}%)</span>
-                  <span className="mono-nums font-bold text-emerald-400">
-                    {formatPrice(activeResult.suggestedTargetPrice)} &middot; +
-                    {formatUsd(ticketRewardUsd)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between px-3 py-2">
-                  <span className="inline-flex items-center gap-1 text-amber-300">
-                    <ShieldAlert className="h-3 w-3" />
-                    {lang === "tr" ? "Likidasyon" : "Est. Liq"}
-                  </span>
-                  <span className="mono-nums font-bold text-amber-300">
-                    {activeResult.estimatedLiquidationPrice > 0
-                      ? `${formatPrice(activeResult.estimatedLiquidationPrice)} (${leverage}x)`
-                      : lang === "tr"
-                        ? "Yok (1x Spot)"
-                        : "None (1x Spot)"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between px-3 py-2">
-                  <span className="text-slate-400">
-                    {lang === "tr" ? "Half-Kelly & Kesinti" : "Kelly & Costs"}
-                  </span>
-                  <span className="mono-nums text-slate-300">
-                    {activeResult.kellyFractionPct}% &middot; -{formatUsd(activeResult.totalCostsUsd)}
-                  </span>
-                </div>
-              </div>
+              </>
             )}
 
             <div className="grid grid-cols-2 gap-2">
@@ -1523,7 +1611,7 @@ export default function TerminalCockpitView({
                 type="button"
                 disabled={isBootingChart}
                 onClick={() => onCopyTicket(buildCopyText())}
-                className="inline-flex items-center justify-center gap-1.5 rounded border border-white/[0.1] bg-[#121822] py-2 text-[11px] font-semibold text-white transition hover:border-white/[0.2] disabled:opacity-50 cursor-pointer"
+                className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-white/[0.1] bg-[#121822] py-2 text-[11px] font-semibold text-white transition hover:border-white/[0.2] disabled:opacity-50 cursor-pointer"
               >
                 {copiedTicket ? (
                   <>
@@ -1542,7 +1630,7 @@ export default function TerminalCockpitView({
                 type="button"
                 disabled={isBootingChart || isSendingAlert}
                 onClick={onDispatchAlert}
-                className="inline-flex items-center justify-center gap-1.5 rounded border border-emerald-500/40 bg-emerald-500/15 py-2 text-[11px] font-bold text-emerald-300 transition hover:bg-emerald-500/25 disabled:opacity-50 cursor-pointer"
+                className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 py-2 text-[11px] font-bold text-emerald-300 transition hover:bg-emerald-500/25 disabled:opacity-50 cursor-pointer"
               >
                 <Send className="h-3.5 w-3.5" />
                 <span>{lang === "tr" ? "Sinyal At" : "Send Alert"}</span>
@@ -1550,17 +1638,16 @@ export default function TerminalCockpitView({
             </div>
           </div>
 
-          {/* Strategy Quick Selector + Precision Sliders */}
-          <div className="p-3.5 space-y-3.5">
+          {/* Card 2: Calm Strategy Switcher + Risk Sliders */}
+          <div className="obsidian-card p-3.5 space-y-3">
             <div className="flex items-center justify-between">
               <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-200">
                 <SlidersHorizontal className="h-3.5 w-3.5 text-cyan-400" />
-                {lang === "tr" ? "Strateji & Parametreler" : "Strategy & Parameters"}
+                {lang === "tr" ? "Strateji & Parametre" : "Strategy & Risk"}
               </span>
               <Activity className="h-3.5 w-3.5 text-slate-500" />
             </div>
 
-            {/* 6-Strategy Compact Selector Grid */}
             <div className="grid grid-cols-2 gap-1.5">
               {tournament.map((strat) => {
                 const active = strat.strategyId === activeStrategyId;
@@ -1571,10 +1658,10 @@ export default function TerminalCockpitView({
                     key={strat.strategyId}
                     type="button"
                     onClick={() => onSelectStrategy(strat.strategyId)}
-                    className={`flex items-center justify-between rounded border px-2 py-1.5 text-[10.5px] transition cursor-pointer ${
+                    className={`flex items-center justify-between rounded-lg border px-2 py-1.5 text-[10.5px] transition cursor-pointer ${
                       active
-                        ? "border-emerald-500/50 bg-emerald-500/10 text-white"
-                        : "border-white/[0.08] bg-[#080B10] text-slate-300 hover:border-white/[0.16]"
+                        ? "border-emerald-500/50 bg-emerald-500/12 text-white"
+                        : "border-white/[0.07] bg-[#080B10] text-slate-300 hover:border-white/[0.16]"
                     }`}
                   >
                     <span className="truncate font-semibold">
@@ -1593,26 +1680,44 @@ export default function TerminalCockpitView({
               })}
             </div>
 
-            {/* Precision Sliders */}
-            <div className="space-y-3 text-[11px]">
-              <div>
-                <div className="flex justify-between text-slate-300">
-                  <span>{lang === "tr" ? "Kasa Büyüklüğü" : "Account Capital"}</span>
-                  <span className="mono-nums font-bold text-white">{formatUsd(capital)}</span>
+            <div className="space-y-2.5 text-[11px]">
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <div className="flex justify-between text-slate-300">
+                    <span>{lang === "tr" ? "Kasa" : "Capital"}</span>
+                    <span className="mono-nums font-bold text-white">{formatUsd(capital)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={1000}
+                    max={100000}
+                    step={1000}
+                    value={capital}
+                    onChange={(e) => setCapital(Number(e.target.value))}
+                    aria-label="Account capital"
+                    className="quant-range mt-1.5 w-full"
+                  />
                 </div>
-                <input
-                  type="range"
-                  min={1000}
-                  max={100000}
-                  step={1000}
-                  value={capital}
-                  onChange={(e) => setCapital(Number(e.target.value))}
-                  aria-label="Account capital"
-                  className="quant-range mt-1.5 w-full"
-                />
+
+                <div>
+                  <div className="flex justify-between text-slate-300">
+                    <span>{lang === "tr" ? "Kaldıraç" : "Leverage"}</span>
+                    <span className="mono-nums font-bold text-white">{leverage}x</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={1}
+                    max={10}
+                    step={1}
+                    value={leverage}
+                    onChange={(e) => setLeverage(Number(e.target.value))}
+                    aria-label="Leverage multiplier"
+                    className="quant-range mt-1.5 w-full"
+                  />
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2.5">
                 <div>
                   <div className="flex justify-between text-slate-300">
                     <span>Stop-Loss</span>
@@ -1648,132 +1753,95 @@ export default function TerminalCockpitView({
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <div className="flex justify-between text-[10px] text-slate-400">
-                    <span>{lang === "tr" ? "Kaldıraç" : "Lev"}</span>
-                    <span className="mono-nums font-bold text-white">{leverage}x</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={1}
-                    max={10}
-                    step={1}
-                    value={leverage}
-                    onChange={(e) => setLeverage(Number(e.target.value))}
-                    aria-label="Leverage multiplier"
-                    className="quant-range mt-1.5 w-full"
-                  />
-                </div>
-
-                <div>
-                  <div className="flex justify-between text-[10px] text-slate-400">
-                    <span>Fast</span>
-                    <span className="mono-nums font-bold text-white">{fastPeriod}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={5}
-                    max={20}
-                    step={1}
-                    value={fastPeriod}
-                    onChange={(e) => setFastPeriod(Number(e.target.value))}
-                    aria-label="Fast indicator period"
-                    className="quant-range mt-1.5 w-full"
-                  />
-                </div>
-
-                <div>
-                  <div className="flex justify-between text-[10px] text-slate-400">
-                    <span>Slow</span>
-                    <span className="mono-nums font-bold text-white">{slowPeriod}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={15}
-                    max={50}
-                    step={1}
-                    value={slowPeriod}
-                    onChange={(e) => setSlowPeriod(Number(e.target.value))}
-                    aria-label="Slow indicator period"
-                    className="quant-range mt-1.5 w-full"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {!isPaid && (
-              <button
-                type="button"
-                onClick={() =>
-                  onOpenUpgrade(
-                    lang === "tr"
-                      ? "Tüm 12 parite, 15m/1D dilimler, limitsiz OOS optimize ve 7/24 bulut uyarılarını aç."
-                      : "Unlock all 12 pairs, 15m/1D timeframes, unlimited OOS sweeps & 24/7 cloud alerts."
-                  )
-                }
-                className="flex w-full items-center justify-between rounded border border-emerald-500/35 bg-emerald-500/10 px-3 py-2 text-left text-[11px] transition hover:bg-emerald-500/15 cursor-pointer"
-              >
-                <div>
-                  <span className="font-bold text-emerald-300">
-                    {lang === "tr" ? "Quant Pro'ya Geç" : "Unlock Quant Pro"}
-                  </span>
-                  <span className="block text-[10px] text-slate-300">
+              {/* Progressive Disclosure for Fast / Slow Indicator Tuning */}
+              <details className="rounded-lg border border-white/[0.06] bg-[#080B10] px-2.5 py-1.5 group">
+                <summary className="flex items-center justify-between text-[10.5px] font-semibold text-slate-400 hover:text-slate-200">
+                  <span>
                     {lang === "tr"
-                      ? "12 parite · 7/24 Bulut Cron · CSV"
-                      : "12 pairs · 24/7 Cloud Cron · CSV"}
+                      ? `İndikatör Periyodu (${fastPeriod} / ${slowPeriod})`
+                      : `Indicator Periods (${fastPeriod} / ${slowPeriod})`}
                   </span>
+                  <ChevronDown className="h-3.5 w-3.5 transition group-open:rotate-180" />
+                </summary>
+                <div className="grid grid-cols-2 gap-2.5 pt-2.5 pb-1">
+                  <div>
+                    <div className="flex justify-between text-[10px] text-slate-400">
+                      <span>Fast</span>
+                      <span className="mono-nums font-bold text-white">{fastPeriod}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={5}
+                      max={20}
+                      step={1}
+                      value={fastPeriod}
+                      onChange={(e) => setFastPeriod(Number(e.target.value))}
+                      aria-label="Fast indicator period"
+                      className="quant-range mt-1 w-full"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-[10px] text-slate-400">
+                      <span>Slow</span>
+                      <span className="mono-nums font-bold text-white">{slowPeriod}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={15}
+                      max={50}
+                      step={1}
+                      value={slowPeriod}
+                      onChange={(e) => setSlowPeriod(Number(e.target.value))}
+                      aria-label="Slow indicator period"
+                      className="quant-range mt-1 w-full"
+                    />
+                  </div>
                 </div>
-                <span className="mono-nums rounded bg-emerald-400 px-2 py-0.5 text-[10px] font-extrabold text-slate-950">
-                  $12 / $29
-                </span>
-              </button>
-            )}
+              </details>
+            </div>
           </div>
 
-          {/* Derivatives Squeeze & Sentinel Quick Dock (Fills Right Rail Naturally) */}
-          <div className="p-3.5 space-y-2.5 text-[11px] mt-auto bg-[#080B10]/50">
+          {/* Card 3: Derivatives Squeeze + 4-TF Matrix + Sentinel Dock */}
+          <div className="obsidian-card p-3.5 space-y-2.5 text-[11px]">
             <div className="flex items-center justify-between">
               <span className="inline-flex items-center gap-1.5 font-bold uppercase tracking-wider text-slate-300">
                 <Zap className="h-3.5 w-3.5 text-amber-400" />
-                {lang === "tr" ? "Vadeli Akış & Squeeze" : "Derivatives Squeeze Intel"}
+                {lang === "tr" ? "Vadeli Akış & MTF" : "Squeeze & MTF Pulse"}
               </span>
-              <span className="mono-nums text-[10px] text-slate-500">
-                {derivativesPulse.squeezeScore}/100
+              <span className="mono-nums text-[10px] text-slate-400">
+                {derivativesPulse.squeezeScore}/100 &middot; Taker {derivativesPulse.takerBuySellRatio}x
               </span>
             </div>
 
-            <div className="rounded border border-white/[0.07] bg-[#0B0F17] p-2.5 space-y-1.5">
-              <div className="flex items-center justify-between">
+            <div className="rounded-lg border border-white/[0.06] bg-[#080B10] p-2.5 space-y-2">
+              <div className="flex items-center justify-between text-[10.5px]">
                 <span className="font-semibold text-white">
                   {lang === "tr"
                     ? derivativesPulse.squeezeLabelTr
                     : derivativesPulse.squeezeLabelEn}
                 </span>
-                <span className="mono-nums text-[10px] text-cyan-400">
-                  Taker {derivativesPulse.takerBuySellRatio}x
+                <span className="mono-nums text-emerald-400">
+                  F: {derivativesPulse.fundingRatePct >= 0 ? "+" : ""}
+                  {derivativesPulse.fundingRatePct.toFixed(4)}%
                 </span>
               </div>
-              <p className="text-[10.5px] leading-relaxed text-slate-400">
-                {lang === "tr"
-                  ? derivativesPulse.squeezeDetailTr
-                  : derivativesPulse.squeezeDetailEn}
-              </p>
-              {/* Whale L/S Distribution Bar */}
-              <div className="pt-1">
+
+              <div>
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-rose-500/35">
                   <div
                     className="h-full bg-emerald-400"
-                    style={{ width: `${Math.min(100, Math.max(5, derivativesPulse.whaleLongPct))}%` }}
+                    style={{
+                      width: `${Math.min(100, Math.max(5, derivativesPulse.whaleLongPct))}%`,
+                    }}
                   />
                 </div>
                 <div className="mt-1 flex justify-between mono-nums text-[9.5px] text-slate-400">
                   <span>Long {derivativesPulse.whaleLongPct}%</span>
+                  <span>OI {formatCompactUsd(derivativesPulse.openInterestUsd)}</span>
                   <span>Short {derivativesPulse.whaleShortPct}%</span>
                 </div>
               </div>
 
-              {/* Multi-Timeframe Confluence Strip (visible all viewports >=lg & mobile Trade tab) */}
               <div className="grid grid-cols-4 gap-1 border-t border-white/[0.06] pt-2">
                 {mtfEntries.map((m) => (
                   <button
@@ -1783,12 +1851,12 @@ export default function TerminalCockpitView({
                       const tfObj = TIMEFRAMES.find((t) => t.id === m.timeframe);
                       if (tfObj) onSelectTimeframe(tfObj);
                     }}
-                    className={`rounded border px-1 py-1 text-center text-[9.5px] font-semibold mono-nums transition cursor-pointer ${
+                    className={`rounded-md border px-1 py-1 text-center text-[9.5px] font-semibold mono-nums transition cursor-pointer ${
                       m.currentSignal === "LONG"
                         ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-300"
                         : m.currentSignal === "SHORT"
                           ? "border-rose-500/35 bg-rose-500/10 text-rose-300"
-                          : "border-white/[0.08] bg-[#080B10] text-slate-400 hover:text-slate-200"
+                          : "border-white/[0.08] bg-[#06090F] text-slate-400 hover:text-slate-200"
                     }`}
                   >
                     {m.timeframe.toUpperCase()}{" "}
@@ -1798,22 +1866,40 @@ export default function TerminalCockpitView({
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                setBottomTab("sentinel");
-                setMobilePane("chart");
-              }}
-              className="flex w-full items-center justify-between rounded border border-white/[0.08] bg-[#0D1118] px-3 py-2 text-[10.5px] font-semibold text-slate-300 hover:border-white/[0.16] hover:text-white transition cursor-pointer"
-            >
-              <span className="inline-flex items-center gap-1.5">
-                <Cloud className="h-3.5 w-3.5 text-cyan-400" />
-                {lang === "tr"
-                  ? `7/24 Bulut Sentinel (${sentinelSymbols.length} Parite)`
-                  : `24/7 Cloud Sentinel (${sentinelSymbols.length} Pairs)`}
-              </span>
-              <span className="text-emerald-400">&rarr;</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setBottomTab("sentinel");
+                  setMobilePane("chart");
+                }}
+                className="flex flex-1 items-center justify-between rounded-lg border border-white/[0.08] bg-[#080B10] px-3 py-2 text-[10.5px] font-semibold text-slate-300 hover:border-white/[0.16] hover:text-white transition cursor-pointer"
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  <Cloud className="h-3.5 w-3.5 text-cyan-400" />
+                  {lang === "tr"
+                    ? `7/24 Sentinel (${sentinelSymbols.length})`
+                    : `Cloud Sentinel (${sentinelSymbols.length})`}
+                </span>
+                <span className="text-emerald-400">&rarr;</span>
+              </button>
+
+              {!isPaid && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onOpenUpgrade(
+                      lang === "tr"
+                        ? "Tüm 12 parite, 15m/1D dilimler, limitsiz OOS optimize ve 7/24 bulut uyarılarını aç."
+                        : "Unlock all 12 pairs, 15m/1D timeframes, unlimited OOS sweeps & 24/7 cloud alerts."
+                    )
+                  }
+                  className="mono-nums rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-2 text-[10.5px] font-bold text-emerald-300 hover:bg-emerald-500/25 cursor-pointer"
+                >
+                  Pro $12
+                </button>
+              )}
+            </div>
           </div>
         </aside>
       </div>

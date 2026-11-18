@@ -2,10 +2,10 @@
 
 @layer base {
   :root {
-    --bg-obsidian: #080b10;
-    --bg-panel: #0d1118;
-    --bg-elevated: #121822;
-    --border-hairline: rgba(255, 255, 255, 0.075);
+    --bg-obsidian: #05070b;
+    --bg-panel: #0c1018;
+    --bg-elevated: #131924;
+    --border-hairline: rgba(255, 255, 255, 0.08);
     --text-primary: #f8fafc;
     --text-secondary: #94a3b8;
     --accent-emerald: #10b981;
@@ -22,12 +22,24 @@
 
   body {
     font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
-    background-color: var(--bg-obsidian);
+    background:
+      radial-gradient(ellipse 90% 35% at 50% -8%, rgba(16, 185, 129, 0.055), transparent 70%),
+      radial-gradient(ellipse 60% 30% at 85% 0%, rgba(34, 211, 238, 0.035), transparent 70%),
+      var(--bg-obsidian);
     color: var(--text-primary);
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+}
+
+.obsidian-card {
+  background-color: #0c1018;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 0.75rem;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 12px 32px -12px rgba(0, 0, 0, 0.65);
 }
 
 .tabular-nums {
@@ -39,14 +51,14 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Precision dark terminal scrollbars (no light-mode native bar bleed) */
+/* Precision dark terminal scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #080b10;
+  background: #05070b;
 }
 
 ::-webkit-scrollbar-thumb {
@@ -55,12 +67,12 @@
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.4);
+  background: rgba(148, 163, 184, 0.42);
 }
 
 .terminal-scroll {
   scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.24) #080b10;
+  scrollbar-color: rgba(148, 163, 184, 0.24) #05070b;
 }
 
 /* Slim institutional range input */
@@ -69,20 +81,20 @@
   appearance: none;
   height: 4px;
   border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.12);
   outline: none;
 }
 
 .quant-range::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 12px;
-  height: 12px;
+  width: 13px;
+  height: 13px;
   border-radius: 9999px;
   background: #10b981;
-  border: 2px solid #080b10;
+  border: 2px solid #05070b;
   cursor: pointer;
-  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.45);
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.5);
   transition: transform 0.12s ease;
 }
 
@@ -91,11 +103,11 @@
 }
 
 .quant-range::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
+  width: 13px;
+  height: 13px;
   border-radius: 9999px;
   background: #10b981;
-  border: 2px solid #080b10;
+  border: 2px solid #05070b;
   cursor: pointer;
 }
 

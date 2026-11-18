@@ -1213,7 +1213,7 @@ export default function MarketRiskTerminal({
   );
 
   return (
-    <div className="w-full bg-[#080B10] text-slate-100">
+    <div className="w-full text-slate-100">
       <TerminalCockpitView
         lang={lang}
         isPaid={isPaid}

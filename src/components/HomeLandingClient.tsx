@@ -60,9 +60,9 @@ export default function HomeLandingClient({
   const faqs = lang === "tr" ? FAQS_TR : faqsEn;
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#080B10] text-slate-100">
-      {/* Solid Institutional Terminal Header (48px, Zero Bleed, Zero Nav Collision) */}
-      <header className="sticky top-0 z-40 h-12 border-b border-white/[0.08] bg-[#0B0F17]">
+    <div className="min-h-screen flex flex-col text-slate-100">
+      {/* Solid Obsidian Terminal Header (48px) */}
+      <header className="sticky top-0 z-40 h-12 border-b border-white/[0.08] bg-[#080B12]/95 backdrop-blur-md">
         <div className="mx-auto flex h-full max-w-[1680px] items-center justify-between gap-3 px-3 sm:px-4">
           <div className="flex items-center gap-3 min-w-0">
             <Link href="/" className="flex items-center gap-2 shrink-0 group">
